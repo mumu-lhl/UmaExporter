@@ -15,5 +15,6 @@ dependencies = [
 [dependency-groups]
 dev = [
     "cython>=3.2.4",
+    "nuitka>=4.0.3",
     "setuptools>=82.0.0",
 ]

@@ -24,15 +24,25 @@ package: build-cython check-as-cli
     {{cp-cmd}} as_cli dist/UmaExporter/as_cli
     @echo "Build complete! Check the 'dist/UmaExporter' directory."
 
+os-nuitka-flags := if os-name == "windows" { "--mingw64" } else { "" }
+
 # Package the application using Nuitka via uv
 package-nuitka: build-cython check-as-cli
     @echo "Packaging with Nuitka (Standalone)..."
-    uv run --with nuitka python -m nuitka \
+    uv run python -m nuitka \
         --standalone \
         --show-progress \
         --follow-imports \
         --assume-yes-for-downloads \
+        {{os-nuitka-flags}} \
         --jobs=1 \
+        --low-memory \
+        --plugin-enable=numpy \
+        --plugin-enable=multiprocessing \
+        --include-package-data=dearpygui \
+        --include-package-data=f3d \
+        --include-package-data=UnityPy \
+        --include-package-data=fmod_toolkit \
         --output-dir=dist-nuitka \
         --no-pyi-file \
         --include-package=dearpygui \
