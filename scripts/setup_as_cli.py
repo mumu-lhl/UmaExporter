@@ -32,7 +32,15 @@ def main():
 
     print(f"Fetching latest release info from {API_URL}...")
     try:
-        with urllib.request.urlopen(API_URL) as response:
+        req = urllib.request.Request(API_URL)
+        req.add_header('User-Agent', 'UmaExporter-Setup-Script')
+        
+        token = os.environ.get('GITHUB_TOKEN') or os.environ.get('GH_TOKEN')
+        if token:
+            print("Using GitHub Token for authentication...")
+            req.add_header('Authorization', f'token {token}')
+
+        with urllib.request.urlopen(req) as response:
             data = json.loads(response.read().decode())
             assets = data.get('assets', [])
             download_url = next((a['browser_download_url'] for a in assets if a['name'] == asset_name), None)
@@ -51,7 +59,14 @@ def main():
 
             print(f"Downloading {asset_name} from {download_url}...")
             zip_path = os.path.join(DEST_DIR, asset_name)
-            urllib.request.urlretrieve(download_url, zip_path)
+            
+            download_req = urllib.request.Request(download_url)
+            download_req.add_header('User-Agent', 'UmaExporter-Setup-Script')
+            if token:
+                download_req.add_header('Authorization', f'token {token}')
+                
+            with urllib.request.urlopen(download_req) as dl_response, open(zip_path, 'wb') as out_file:
+                shutil.copyfileobj(dl_response, out_file)
 
             print(f"Extracting to {DEST_DIR}...")
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:

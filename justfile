@@ -2,7 +2,7 @@
 os-name := os()
 data-sep := if os-name == "windows" { ";" } else { ":" }
 cli-bin := if os-name == "windows" { "as_cli/AssetStudioModCLI.exe" } else { "as_cli/AssetStudioModCLI" }
-cp-cmd := if os-name == "windows" { "xcopy /E /I /Y" } else { "cp -r" }
+cp-cmd := "uv run python scripts/copy_dir.py"
 
 # Install/Update Asset Studio CLI using uv
 as-cli-setup:
@@ -31,6 +31,7 @@ package-nuitka: build-cython check-as-cli
         --standalone \
         --show-progress \
         --follow-imports \
+        --accept-downloads \
         --output-dir=dist-nuitka \
         --no-pyi-file \
         --include-package=dearpygui \
