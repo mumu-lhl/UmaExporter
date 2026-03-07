@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Asset Studio
+as_cli/
+
+# Config
+config.json
+
+# Cython
+uma_decryptor.c
+*.so
+
+# Gemini
+.gemini/

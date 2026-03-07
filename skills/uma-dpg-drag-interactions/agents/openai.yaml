@@ -1,0 +1,3 @@
+interface:
+  display_name: "Uma Dpg Drag Interactions"
+  short_description: "Stabilize Dear PyGui drag interactions"

@@ -1,0 +1,3 @@
+interface:
+  display_name: "Uma Dpg Scene Auto Preview Debug"
+  short_description: "Fix Scene Animator auto-preview"
