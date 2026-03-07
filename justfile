@@ -32,8 +32,6 @@ package-nuitka: build-cython check-as-cli
         --show-progress \
         --follow-imports \
         --assume-yes-for-downloads \
-        --jobs=1 \
-        --low-memory \
         --plugin-enable=numpy \
         --plugin-enable=multiprocessing \
         --include-package-data=dearpygui \
