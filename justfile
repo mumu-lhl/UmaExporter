@@ -23,7 +23,6 @@ package: build-cython check-as-cli
     @echo "Placing as_cli next to the binary..."
     {{cp-cmd}} as_cli dist/UmaExporter/as_cli
     @echo "Build complete! Check the 'dist/UmaExporter' directory."
-
 # Package the application using Nuitka via uv
 package-nuitka: build-cython check-as-cli
     @echo "Packaging with Nuitka (Standalone)..."
@@ -32,6 +31,7 @@ package-nuitka: build-cython check-as-cli
         --show-progress \
         --follow-imports \
         --assume-yes-for-downloads \
+        --output-filename=UmaExporter \
         --plugin-enable=numpy \
         --plugin-enable=multiprocessing \
         --include-package-data=dearpygui \
@@ -52,8 +52,8 @@ package-nuitka: build-cython check-as-cli
         --nofollow-import-to=unittest \
         main.py
     @echo "Placing as_cli next to the binary..."
-    {{cp-cmd}} as_cli dist-nuitka/main.dist/as_cli
-    @echo "Build complete! Check the 'dist-nuitka/main.dist' directory."
+    {{cp-cmd}} as_cli dist-nuitka/UmaExporter.dist/as_cli
+    @echo "Build complete! Check the 'dist-nuitka/UmaExporter.dist' directory."
 
 # Run Asset Studio CLI
 as-cli *args:
