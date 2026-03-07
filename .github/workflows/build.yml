@@ -45,6 +45,18 @@ jobs:
     - name: Sync Dependencies
       run: uv sync --group dev
 
+    - name: Cache Nuitka
+      if: matrix.packager == 'nuitka'
+      uses: actions/cache@v5
+      with:
+        path: |
+          .nuitka-cache
+          dist-nuitka/main.build
+        key: ${{ runner.os }}-nuitka-${{ hashFiles('**/uv.lock') }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-nuitka-${{ hashFiles('**/uv.lock') }}-
+          ${{ runner.os }}-nuitka-
+
     - name: Package
       run: |
         if [ "${{ matrix.packager }}" == "pyinstaller" ]; then
@@ -55,19 +67,22 @@ jobs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        NUITKA_CACHE_DIR: ${{ github.workspace }}/.nuitka-cache
 
-    - name: Upload Artifact (PyInstaller)
-      if: matrix.packager == 'pyinstaller'
+    - name: Stage Artifacts
+      run: |
+        mkdir -p staging/UmaExporter
+        if [ "${{ matrix.packager }}" == "pyinstaller" ]; then
+          cp -r dist/UmaExporter/* staging/UmaExporter/
+        else
+          cp -r dist-nuitka/main.dist/* staging/UmaExporter/
+        fi
+      shell: bash
+
+    - name: Upload Artifact
       uses: actions/upload-artifact@v7
       with:
-        name: UmaExporter-pyinstaller-${{ runner.os }}
-        path: dist/UmaExporter/
+        name: UmaExporter-${{ matrix.packager }}-${{ runner.os }}
+        path: staging/
         if-no-files-found: error
 
-    - name: Upload Artifact (Nuitka)
-      if: matrix.packager == 'nuitka'
-      uses: actions/upload-artifact@v7
-      with:
-        name: UmaExporter-nuitka-${{ runner.os }}
-        path: dist-nuitka/main.dist/
-        if-no-files-found: error
