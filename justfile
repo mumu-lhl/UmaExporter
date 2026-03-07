@@ -31,7 +31,7 @@ package-nuitka: build-cython check-as-cli
         --standalone \
         --show-progress \
         --follow-imports \
-        --accept-downloads \
+        --assume-yes-for-downloads \
         --output-dir=dist-nuitka \
         --no-pyi-file \
         --include-package=dearpygui \

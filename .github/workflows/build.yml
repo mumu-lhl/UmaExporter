@@ -56,11 +56,18 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Upload Artifact
+    - name: Upload Artifact (PyInstaller)
+      if: matrix.packager == 'pyinstaller'
       uses: actions/upload-artifact@v7
       with:
-        name: UmaExporter-${{ matrix.packager }}-${{ runner.os }}
-        path: |
-          dist/UmaExporter/
-          dist-nuitka/main.dist/
-        if-no-files-found: warn
+        name: UmaExporter-pyinstaller-${{ runner.os }}
+        path: dist/UmaExporter/
+        if-no-files-found: error
+
+    - name: Upload Artifact (Nuitka)
+      if: matrix.packager == 'nuitka'
+      uses: actions/upload-artifact@v7
+      with:
+        name: UmaExporter-nuitka-${{ runner.os }}
+        path: dist-nuitka/main.dist/
+        if-no-files-found: error
