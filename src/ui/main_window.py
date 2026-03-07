@@ -164,9 +164,12 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         system = platform.system()
 
         if system == "Windows":
+            windir = os.environ.get("WINDIR", "C:/Windows")
+            fonts_dir = os.path.join(windir, "Fonts")
             if is_chinese:
-                font_paths.append("C:/Windows/Fonts/msyh.ttc")
-            font_paths.append("C:/Windows/Fonts/segoeui.ttf")
+                font_paths.append(os.path.join(fonts_dir, "msyh.ttc"))
+                font_paths.append(os.path.join(fonts_dir, "simsun.ttc"))
+            font_paths.append(os.path.join(fonts_dir, "segoeui.ttf"))
         elif system == "Darwin":  # macOS
             if is_chinese:
                 font_paths.append("/System/Library/Fonts/PingFang.ttc")
@@ -482,10 +485,10 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             dpg.add_text(f"{i18n('label_author')}Mumulhl (沐沐13号)")
             dpg.add_text(f"{i18n('label_license')}GPL-3.0")
             dpg.add_spacer(height=10)
-            
+
             dpg.add_text("GitHub: ")
             dpg.add_button(
-                label="https://github.com/mumu-lhl/UmaExporter", 
+                label="https://github.com/mumu-lhl/UmaExporter",
                 callback=lambda: webbrowser.open("https://github.com/mumu-lhl/UmaExporter"),
                 small=True
             )
@@ -1219,7 +1222,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             msg = i18n("msg_settings_applied")
             if new_path and not path_valid:
                 msg += f" ({i18n('label_data_root')} {i18n('error_invalid')})"
-            
+
             dpg.set_value(status_tag, msg)
             dpg.configure_item(status_tag, color=[255, 255, 0] if (new_path and not path_valid) else [0, 255, 0])
 
