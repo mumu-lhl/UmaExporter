@@ -76,7 +76,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=True, 
-    upx=True,
+    upx=False,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -91,6 +91,17 @@ coll = COLLECT(
     a.datas,
     strip=True,
     upx=True,
-    upx_exclude=[],
+    upx_exclude=[
+        'python314.dll', 
+        'python3.dll', 
+        'vcruntime140.dll', 
+        'vcruntime140_1.dll',
+        'msvcp140.dll', 
+        'msvcp140_1.dll',
+        'msvcp140_2.dll',
+        'ucrtbase.dll', 
+        'libf3d.dll',
+        '_dearpygui.pyd'
+    ],
     name='UmaExporter',
 )
