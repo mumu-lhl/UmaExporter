@@ -215,7 +215,6 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         dpg.setup_dearpygui()
         dpg.show_viewport()
 
-        # FINAL SYNC after viewport is shown to ensure 'enabled' takes effect
         self._update_nav_buttons()
 
         if not Config.BASE_PATH:
@@ -226,7 +225,6 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             self._drain_ui_tasks()
             dpg.render_dearpygui_frame()
 
-        # Shutdown cleanup
         if self.f3d_queue:
             self.f3d_queue.put("STOP")
         if self.f3d_process and self.f3d_process.is_alive():
@@ -294,7 +292,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         except Exception:
             active_tab_alias = ""
 
-        # Focus by active tab first; fallback to visible fields only if tab resolution fails.
+        # Focus by active tab first; fallback to visible fields only.
         if active_tab_alias == "scene_tab" and dpg.does_item_exist("scene_search_input"):
             dpg.focus_item("scene_search_input")
         elif active_tab_alias == "prop_tab" and dpg.does_item_exist("prop_search_input"):
@@ -894,8 +892,6 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
 
 
     def on_file_click(self, sender, app_data, user_data):
-        # Clear focus from search inputs so keyboard navigation works (j/k)
-        # We focus the sender (the selectable) itself to steal focus from the input
         for input_tag in ["search_input", "scene_search_input", "prop_search_input"]:
             if dpg.does_item_exist(input_tag) and dpg.is_item_focused(input_tag):
                 if sender and dpg.does_item_exist(sender):
@@ -941,22 +937,18 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         else:
             self.prop_auto_preview_request = None
 
-        # Handle history logic
         if not self.is_navigating:
             current_data = self.current_asset_data
             if current_data and current_data["id"] != user_data["id"]:
                 self.history_back.append(self._snapshot_asset_data(current_data))
                 self.history_forward.clear()
 
-        # Update current state
         self.last_unity_selected = {"": None, "scene_": None, "prop_": None}
         self.current_asset_id = user_data["id"]
         self.current_asset_data = user_data
 
-        # Update buttons AFTER state is updated
         self._update_nav_buttons()
 
-        # Visual Selection Logic: deselect old, select new if it exists
         if self.last_selected and dpg.does_item_exist(self.last_selected):
             try:
                 dpg.set_value(self.last_selected, False)
@@ -967,10 +959,8 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             dpg.set_value(sender, True)
             self.last_selected = sender
         else:
-            # If navigating, highlight current asset if visible in Home/Scene result lists.
             self.last_selected = self._select_existing_result_item(user_data["id"])
 
-        # Update Detail Panel content
         for prefix in self._detail_prefixes():
             self._update_asset_properties_panel(prefix, user_data)
             if not is_drag_preview:
@@ -1173,11 +1163,10 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         new_region_label = dpg.get_value("settings_region")
         new_region = region_options.get(new_region_label, "jp")
 
-        if not Config.is_valid_path(new_path):
-            print(f"Error: Invalid data root path {new_path}")
-            return
+        path_valid = Config.is_valid_path(new_path)
+        if new_path and not path_valid:
+            print(f"Warning: Invalid data root path {new_path}")
 
-        # 1. Record state to restore
         active_tab = dpg.get_value("main_tabs")
         active_tab_alias = ""
         if active_tab:
@@ -1190,50 +1179,52 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         lang_changed = Config.LANGUAGE != new_lang
         region_changed = Config.REGION != new_region
 
-        # 2. Update config
         Config.set_base_path(new_path)
         Config.LANGUAGE = new_lang
         Config.REGION = new_region
         Config.save()
 
-        # 3. Setup fonts for new language
         self._setup_fonts()
 
-        # 4. Conditional database restart
-        if path_changed or region_changed:
+        if (path_changed or region_changed) and path_valid:
             print(f"Re-initializing database for path: {new_path}, region: {new_region}")
             if self.db:
                 self.db.close()
-            self.db = UmaDatabase(Config.get_db_path())
-            UnityLogic.set_key_provider(self.db.get_key_by_hash)
-            self.cached_deps.clear()
-            self.cached_rev_deps.clear()
-            self.cached_recursive_hashes.clear()
-            self.node_map.clear()
-            self.tree_data = self.db.load_index()
+            try:
+                self.db = UmaDatabase(Config.get_db_path())
+                UnityLogic.set_key_provider(self.db.get_key_by_hash)
+                self.cached_deps.clear()
+                self.cached_rev_deps.clear()
+                self.cached_recursive_hashes.clear()
+                self.node_map.clear()
+                self.tree_data = self.db.load_index()
+            except Exception as e:
+                print(f"Failed to initialize database: {e}")
+                self.db = None
+                self.tree_data = {}
 
-        # 5. Full UI Refresh (always needed for I18N/Font changes)
         self._create_main_layout()
         self._update_nav_buttons()
 
-        # 6. Restore UI state
         if active_tab_alias and dpg.does_item_exist(active_tab_alias):
             dpg.set_value("main_tabs", active_tab_alias)
 
-        if path_changed:
+        if path_changed and path_valid:
             self.clear_search()
             self.clear_scene_search()
             self.clear_prop_search()
 
-        # 7. Show success message
         status_tag = "settings_status_msg"
         if dpg.does_item_exist(status_tag):
-            dpg.set_value(status_tag, i18n("msg_settings_applied"))
-            dpg.configure_item(status_tag, color=[0, 255, 0])
+            msg = i18n("msg_settings_applied")
+            if new_path and not path_valid:
+                msg += f" ({i18n('label_data_root')} {i18n('error_invalid')})"
+            
+            dpg.set_value(status_tag, msg)
+            dpg.configure_item(status_tag, color=[255, 255, 0] if (new_path and not path_valid) else [0, 255, 0])
 
             def clear_msg():
                 if dpg.does_item_exist(status_tag):
                     dpg.set_value(status_tag, "")
 
-            # Use Timer for auto-dismiss
             threading.Timer(3.0, clear_msg).start()
