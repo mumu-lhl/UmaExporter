@@ -19,7 +19,7 @@ The system follows a multi-threaded, multi-process architecture to ensure UI res
 1.  **Presentation Layer (`src/ui/main_window.py`)**:
     - `UmaExporterApp`: The core controller. Manages the DPG event loop, navigation history, and UI state.
     - **Concurrency**: Uses a `ThreadPoolExecutor` for background I/O and a thread-safe `Queue` (`ui_tasks`) to schedule UI updates on the main thread.
-    - **3D Preview**: Spawns a dedicated `multiprocessing.Process` to run `f3d`, preventing rendering overhead from blocking the main UI.
+    - **3D Preview**: Spawns a dedicated `subprocess.Popen` instance of the application with a `--f3d-viewer` flag. Communication (e.g., loading new meshes) is handled via `stdin` to ensure stability in packaged environments (Nuitka/PyInstaller) and prevent UI deadlocks.
 
 2.  **Logic Layer (`src/unity_logic.py`)**:
     - `UnityLogic`: Handles bridge logic. It extracts `Texture2D` directly for live preview and delegates complex FBX/Animator exports to the `as_cli/` binaries.

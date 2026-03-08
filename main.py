@@ -1,4 +1,3 @@
-import multiprocessing
 import os
 import sys
 
@@ -12,41 +11,42 @@ if is_nuitka():
     if os.path.exists(_archspec_data):
         os.environ["ARCHSPEC_CPU_DIR"] = _archspec_data
 
-# Packaged environment fixes - Supports both PyInstaller (sys.frozen) and Nuitka (__compiled__)
-is_frozen = getattr(sys, "frozen", False) or is_nuitka()
+def main():
+    # 1. HARD GUARD: Check for our custom viewer flag first.
+    # This is 100% reliable for child processes in all packaged environments.
+    if "--f3d-viewer" in sys.argv:
+        from src.ui.f3d_worker import launch_f3d_viewer_stdin
+        launch_f3d_viewer_stdin()
+        return
 
-if is_frozen:
-    try:
-        _executable_dir = os.path.dirname(sys.executable)
-        os.chdir(_executable_dir)
-        # Append mode for logs
-        sys.stderr = open("error.log", "a", encoding="utf-8", buffering=1)
-        sys.stdout = open("output.log", "a", encoding="utf-8", buffering=1)
-    except Exception:
-        pass
+    # 2. Packaged environment fixes - Supports both PyInstaller (sys.frozen) and Nuitka
+    is_frozen = getattr(sys, "frozen", False) or is_nuitka()
 
-if __name__ == "__main__":
-    # Essential for Windows standalone builds (Windows always uses 'spawn')
-    multiprocessing.freeze_support()
+    if is_frozen:
+        try:
+            # Change to executable directory for relative paths (e.g., as_cli)
+            _executable_dir = os.path.dirname(sys.executable)
+            os.chdir(_executable_dir)
+            # Redirect logs in frozen builds
+            sys.stderr = open("error.log", "a", encoding="utf-8", buffering=1)
+            sys.stdout = open("output.log", "a", encoding="utf-8", buffering=1)
+        except Exception:
+            pass
 
-    # Use 'spawn' to ensure sub-processes behave consistently across platforms (and with Nuitka)
-    try:
-        multiprocessing.set_start_method("spawn", force=True)
-    except RuntimeError:
-        pass
-
-    # Import App here to ensure sub-processes (especially on Windows)
-    # don't import the full UI logic unless they are the main process.
+    # Final guard before importing and running the App
     from src.ui.main_window import UmaExporterApp
 
     try:
         app = UmaExporterApp()
         app.run()
     except KeyboardInterrupt:
-        print("\nExiting...")
+        pass
     except Exception as e:
         print(f"Main App Error: {e}")
         if is_frozen:
             import traceback
 
             traceback.print_exc()
+
+if __name__ == "__main__":
+    main()

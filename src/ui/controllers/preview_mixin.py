@@ -422,7 +422,11 @@ class PreviewMixin:
             dpg.delete_item(preview_loading_tag)
         if tmp_mesh_path:
             self._ensure_f3d_viewer()
-            self.f3d_queue.put(tmp_mesh_path)
+            try:
+                self.f3d_process.stdin.write(f"{tmp_mesh_path}\n")
+                self.f3d_process.stdin.flush()
+            except Exception as e:
+                print(f"Failed to send mesh to F3D: {e}")
             return
         dpg.add_text(
             "Failed to prepare mesh.",
@@ -492,7 +496,11 @@ class PreviewMixin:
             dpg.delete_item(preview_loading_tag)
         if tmp_fbx_path:
             self._ensure_f3d_viewer()
-            self.f3d_queue.put(tmp_fbx_path)
+            try:
+                self.f3d_process.stdin.write(f"{tmp_fbx_path}\n")
+                self.f3d_process.stdin.flush()
+            except Exception as e:
+                print(f"Failed to send FBX to F3D: {e}")
             return
         dpg.add_text(
             "Failed to export FBX for preview.",

@@ -1,9 +1,10 @@
 import webbrowser
-import multiprocessing
+import subprocess
 import os
 import threading
 import time
 import platform
+import sys
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from queue import Empty, Queue
@@ -15,84 +16,6 @@ from src.database import UmaDatabase
 from src.unity_logic import UnityLogic
 from src.ui.controllers import DragMixin, NavigationMixin, PreviewMixin
 from src.ui.i18n import i18n
-
-
-def _launch_f3d_viewer(queue):
-    """Worker function for f3d viewer as a singleton process"""
-    import f3d
-    import os
-
-    current_mesh = None
-    try:
-        eng = f3d.Engine.create()
-        scene = eng.scene
-        interactor = eng.interactor
-        window = eng.window
-
-        eng.options.update(
-            {
-                "model.scivis.cells": True,
-                "model.scivis.enable": True,
-                "model.scivis.array_name": "Colors",
-                "model.scivis.component": 0,
-                "ui.axis": True,
-                # "ui.fps": True,
-                "render.grid.enable": True,
-                "render.light.intensity": 2.5,
-                "render.hdri.ambient": True,
-                "render.effect.tone_mapping": True,
-                # "render.effect.ambient_occlusion": True,
-            }
-        )
-
-        def update_scene(path):
-            nonlocal current_mesh
-            if current_mesh and os.path.exists(current_mesh):
-                try:
-                    os.remove(current_mesh)
-                except:
-                    pass
-            current_mesh = path
-            scene.clear()
-            scene.add(path)
-            window.render()
-            print(f"[F3D] Loaded mesh: {path}")
-
-        def timer_callback(t=None):
-            # Check for new mesh in queue without blocking
-            try:
-                if not queue.empty():
-                    new_path = queue.get_nowait()
-                    if new_path == "STOP":
-                        return False  # Stop interactor
-                    update_scene(new_path)
-            except Exception as e:
-                print(f"[F3D] Callback error: {e}")
-            return True  # Continue interactor
-
-        # Initial wait for first mesh (blocking)
-        print("[F3D] Waiting for first mesh...")
-        first_path = queue.get()
-        if first_path == "STOP":
-            return
-
-        update_scene(first_path)
-
-        # Start interactor with a timer callback (100ms interval)
-        print("[F3D] Starting interactor...")
-        interactor.start(0.1, timer_callback)
-
-    except KeyboardInterrupt:
-        print("[F3D] Viewer interrupted by user (Ctrl+C).")
-    except Exception as e:
-        print(f"F3D Viewer Error: {e}")
-    finally:
-        if current_mesh and os.path.exists(current_mesh):
-            try:
-                os.remove(current_mesh)
-            except:
-                pass
-        print("[F3D] Viewer process exiting.")
 
 
 class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
@@ -149,7 +72,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
 
         # F3D singleton process management
         self.f3d_process = None
-        self.f3d_queue = None
+        self.f3d_lock = threading.Lock()
 
         # Navigation history
         self.history_back = []
@@ -231,13 +154,14 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 self._drain_ui_tasks()
                 dpg.render_dearpygui_frame()
         finally:
-            if self.f3d_queue:
+            if self.f3d_process and self.f3d_process.poll() is None:
                 try:
-                    self.f3d_queue.put("STOP")
+                    self.f3d_process.stdin.write("STOP\n")
+                    self.f3d_process.stdin.flush()
+                    self.f3d_process.wait(timeout=1)
                 except:
-                    pass
-            if self.f3d_process and self.f3d_process.is_alive():
-                self.f3d_process.terminate()
+                    self.f3d_process.terminate()
+            
             self.executor.shutdown(wait=False, cancel_futures=True)
 
             dpg.destroy_context()
@@ -1061,13 +985,31 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         self._load_rev_deps_async(asset_id, request_id)
 
     def _ensure_f3d_viewer(self):
-        """Ensure the f3d viewer process is running"""
-        if self.f3d_process is None or not self.f3d_process.is_alive():
-            self.f3d_queue = multiprocessing.Queue()
-            self.f3d_process = multiprocessing.Process(
-                target=_launch_f3d_viewer, args=(self.f3d_queue,)
-            )
-            self.f3d_process.start()
+        """Ensure the f3d viewer process is running via subprocess"""
+        with self.f3d_lock:
+            if self.f3d_process is None or self.f3d_process.poll() is not None:
+                # Get the path to the current executable (works for Nuitka, PyInstaller, and raw Python)
+                executable = sys.executable
+                
+                args = [executable]
+                # If running from source, main.py is the second argument
+                if not (getattr(sys, "frozen", False) or "__compiled__" in globals()):
+                    # We assume main.py is in the current directory or executable path
+                    main_py = os.path.abspath(sys.argv[0])
+                    args = [executable, main_py]
+
+                args.append("--f3d-viewer")
+
+                self.f3d_process = subprocess.Popen(
+                    args,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1, # Line buffered
+                    # On Windows, hide the console window
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+                )
 
     def on_search(self, sender, app_data, user_data, *args):
         if not self.db:
