@@ -72,21 +72,23 @@ class DragMixin:
         if self.pending_drag_preview:
             pending_item, pending_data = self.pending_drag_preview
             self.pending_drag_preview = None
-            if (
-                dpg.does_item_exist(pending_item)
-                and self.current_asset_id != pending_data.get("id")
-            ):
-                if time.monotonic() - self.last_drag_preview_time >= self.drag_preview_interval:
+            if dpg.does_item_exist(
+                pending_item
+            ) and self.current_asset_id != pending_data.get("id"):
+                if (
+                    time.monotonic() - self.last_drag_preview_time
+                    >= self.drag_preview_interval
+                ):
                     self._trigger_drag_preview(pending_item, pending_data)
 
     def _on_middle_mouse_down(self, *args):
         if self.middle_drag_active:
             return
-            
+
         target = self._pick_scroll_target_under_mouse()
         if not target:
             return
-            
+
         self.middle_drag_active = True
         self.middle_drag_target = target
         self.middle_drag_start_mouse_y = dpg.get_mouse_pos(local=False)[1]
@@ -98,28 +100,32 @@ class DragMixin:
     def _on_middle_mouse_drag(self, *args):
         if not self.middle_drag_active or not self.middle_drag_target:
             return
-        
+
         # Guard against uninitialized start values if events arrive out of order
         mouse_y = dpg.get_mouse_pos(local=False)[1]
         if self.middle_drag_start_mouse_y is None:
             self.middle_drag_start_mouse_y = mouse_y
             try:
-                self.middle_drag_start_scroll_y = dpg.get_y_scroll(self.middle_drag_target)
+                self.middle_drag_start_scroll_y = dpg.get_y_scroll(
+                    self.middle_drag_target
+                )
             except Exception:
                 self.middle_drag_start_scroll_y = 0
             return
 
         total_dy = mouse_y - self.middle_drag_start_mouse_y
-        
+
         target = self.middle_drag_target
         if not dpg.does_item_exist(target) or not dpg.is_item_shown(target):
             return
-            
+
         try:
             max_scroll = dpg.get_y_scroll_max(target)
             # UX rule: drag up => results move down, drag down => results move up.
             scroll_delta = -total_dy * self.middle_drag_speed
-            new_scroll = max(0.0, min(max_scroll, self.middle_drag_start_scroll_y + scroll_delta))
+            new_scroll = max(
+                0.0, min(max_scroll, self.middle_drag_start_scroll_y + scroll_delta)
+            )
             dpg.set_y_scroll(target, new_scroll)
         except Exception:
             pass
@@ -150,7 +156,9 @@ class DragMixin:
                 final_item = pending_item
         else:
             hovered_item = self._pick_file_item_under_mouse()
-            hovered_data = self.file_item_data.get(hovered_item) if hovered_item else None
+            hovered_data = (
+                self.file_item_data.get(hovered_item) if hovered_item else None
+            )
             if hovered_data:
                 final_data = hovered_data
                 final_item = hovered_item
@@ -164,7 +172,8 @@ class DragMixin:
             if (
                 final_item
                 and dpg.does_item_exist(final_item)
-                and self.file_item_data.get(final_item, {}).get("id") == final_data.get("id")
+                and self.file_item_data.get(final_item, {}).get("id")
+                == final_data.get("id")
             ):
                 sender_item = final_item
             self.on_file_click(sender_item, None, final_data)
@@ -174,7 +183,7 @@ class DragMixin:
 
     def _pick_scroll_target_under_mouse(self):
         mouse_pos = dpg.get_mouse_pos(local=False)
-        
+
         # 1. Determine active tab tag robustly
         active_tab = dpg.get_value("main_tabs")
         if active_tab and not isinstance(active_tab, str):
@@ -185,11 +194,11 @@ class DragMixin:
                     active_tab = alias
             except:
                 pass
-        
+
         if not active_tab and dpg.does_alias_exist("main_tabs"):
             # Fallback if value is None
-            active_tab = "home_tab" # Default
-        
+            active_tab = "home_tab"  # Default
+
         # 2. Determine priority candidates based on the active tab and state
         candidates = []
         if active_tab == "home_tab":
@@ -201,7 +210,7 @@ class DragMixin:
             candidates = ["scene_results_parent", "scene_details_scroll"]
         elif active_tab == "prop_tab":
             candidates = ["prop_results_parent", "prop_details_scroll"]
-            
+
         # 3. Precise rect-based hit testing
         for tag in candidates:
             if dpg.does_item_exist(tag) and dpg.is_item_shown(tag):
@@ -209,11 +218,14 @@ class DragMixin:
                     # Use a small buffer to ensure we're strictly inside
                     mi = dpg.get_item_rect_min(tag)
                     ma = dpg.get_item_rect_max(tag)
-                    if mi[0] <= mouse_pos[0] <= ma[0] and mi[1] <= mouse_pos[1] <= ma[1]:
+                    if (
+                        mi[0] <= mouse_pos[0] <= ma[0]
+                        and mi[1] <= mouse_pos[1] <= ma[1]
+                    ):
                         return tag
                 except Exception:
                     continue
-        
+
         # 4. Fallback: If precise hit-test fails but we're in a known tab,
         # use the left-most visible container as the most likely target.
         if active_tab == "home_tab":
@@ -224,7 +236,7 @@ class DragMixin:
             return "scene_results_parent"
         elif active_tab == "prop_tab":
             return "prop_results_parent"
-            
+
         return None
 
     def _handle_tab_drag_switch(self):
@@ -260,17 +272,23 @@ class DragMixin:
 
     def _pick_file_item_under_mouse(self):
         mouse_x, mouse_y = dpg.get_mouse_pos(local=False)
-        active_tab = dpg.get_value("main_tabs") if dpg.does_alias_exist("main_tabs") else None
-        
+        active_tab = (
+            dpg.get_value("main_tabs") if dpg.does_alias_exist("main_tabs") else None
+        )
+
         # 1. Determine the active container to narrow search scope
         container = None
         if active_tab == "home_tab":
-            container = "search_results" if dpg.is_item_shown("search_group") else "browse_group"
+            container = (
+                "search_results"
+                if dpg.is_item_shown("search_group")
+                else "browse_group"
+            )
         elif active_tab == "scene_tab":
             container = "scene_results_parent"
         elif active_tab == "prop_tab":
             container = "prop_results_parent"
-        
+
         # 2. Gather items ONLY from the active container
         # If we can't determine the container, fallback to scanning all but it will be slower
         if container and dpg.does_item_exist(container):
@@ -281,7 +299,7 @@ class DragMixin:
                 items_to_scan = list(self.file_item_data.keys())
         else:
             items_to_scan = list(self.file_item_data.keys())
-        
+
         found_item = None
         for item in reversed(items_to_scan):
             if item not in self.file_item_data:
@@ -298,12 +316,12 @@ class DragMixin:
 
                 if not dpg.is_item_visible(item):
                     continue
-                
+
                 found_item = item
                 break
             except Exception:
                 continue
-            
+
         return found_item
 
     def _find_scroll_target_for_item(self, item):

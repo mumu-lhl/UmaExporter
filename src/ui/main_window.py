@@ -177,8 +177,12 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         elif system == "Linux":
             if is_chinese:
                 font_paths.append("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc")
-                font_paths.append("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc")
-                font_paths.append("/usr/share/fonts/google-noto-sans-cjk-fonts/NotoSansCJK-Regular.ttc") # RHEL
+                font_paths.append(
+                    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+                )
+                font_paths.append(
+                    "/usr/share/fonts/google-noto-sans-cjk-fonts/NotoSansCJK-Regular.ttc"
+                )  # RHEL
             font_paths.append("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
             font_paths.append("/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf")
 
@@ -202,7 +206,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     if is_chinese:
                         dpg.add_font_range_hint(dpg.mvFontRangeHint_Chinese_Full)
                         # Explicitly add common CJK range to ensure visibility
-                        dpg.add_font_range(0x4e00, 0x9fff)
+                        dpg.add_font_range(0x4E00, 0x9FFF)
 
                     dpg.bind_font(default_font)
 
@@ -261,7 +265,9 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             dpg.add_key_press_handler(key=dpg.mvKey_J, callback=self._on_key_press)
             dpg.add_key_press_handler(key=dpg.mvKey_K, callback=self._on_key_press)
             dpg.add_key_release_handler(key=dpg.mvKey_Up, callback=self._on_key_release)
-            dpg.add_key_release_handler(key=dpg.mvKey_Down, callback=self._on_key_release)
+            dpg.add_key_release_handler(
+                key=dpg.mvKey_Down, callback=self._on_key_release
+            )
             dpg.add_key_release_handler(key=dpg.mvKey_J, callback=self._on_key_release)
             dpg.add_key_release_handler(key=dpg.mvKey_K, callback=self._on_key_release)
             dpg.add_mouse_move_handler(callback=self._on_mouse_move)
@@ -279,13 +285,17 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             )
 
     def _is_ctrl_pressed(self):
-        return dpg.is_key_down(dpg.mvKey_LControl) or dpg.is_key_down(dpg.mvKey_RControl)
+        return dpg.is_key_down(dpg.mvKey_LControl) or dpg.is_key_down(
+            dpg.mvKey_RControl
+        )
 
     def _on_ctrl_f(self, sender, app_data, user_data, *args):
         if not self._is_ctrl_pressed():
             return
 
-        active_tab = dpg.get_value("main_tabs") if dpg.does_alias_exist("main_tabs") else None
+        active_tab = (
+            dpg.get_value("main_tabs") if dpg.does_alias_exist("main_tabs") else None
+        )
         active_tab_alias = ""
         try:
             if active_tab and not isinstance(active_tab, str):
@@ -296,21 +306,33 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             active_tab_alias = ""
 
         # Focus by active tab first; fallback to visible fields only.
-        if active_tab_alias == "scene_tab" and dpg.does_item_exist("scene_search_input"):
+        if active_tab_alias == "scene_tab" and dpg.does_item_exist(
+            "scene_search_input"
+        ):
             dpg.focus_item("scene_search_input")
-        elif active_tab_alias == "prop_tab" and dpg.does_item_exist("prop_search_input"):
+        elif active_tab_alias == "prop_tab" and dpg.does_item_exist(
+            "prop_search_input"
+        ):
             dpg.focus_item("prop_search_input")
         elif active_tab_alias == "home_tab" and dpg.does_item_exist("search_input"):
             dpg.focus_item("search_input")
-        elif active_tab_alias == "settings_tab" and dpg.does_item_exist("settings_base_path"):
+        elif active_tab_alias == "settings_tab" and dpg.does_item_exist(
+            "settings_base_path"
+        ):
             dpg.focus_item("settings_base_path")
         elif dpg.does_item_exist("search_input") and dpg.is_item_shown("search_input"):
             dpg.focus_item("search_input")
-        elif dpg.does_item_exist("scene_search_input") and dpg.is_item_shown("scene_search_input"):
+        elif dpg.does_item_exist("scene_search_input") and dpg.is_item_shown(
+            "scene_search_input"
+        ):
             dpg.focus_item("scene_search_input")
-        elif dpg.does_item_exist("prop_search_input") and dpg.is_item_shown("prop_search_input"):
+        elif dpg.does_item_exist("prop_search_input") and dpg.is_item_shown(
+            "prop_search_input"
+        ):
             dpg.focus_item("prop_search_input")
-        elif dpg.does_item_exist("settings_base_path") and dpg.is_item_shown("settings_base_path"):
+        elif dpg.does_item_exist("settings_base_path") and dpg.is_item_shown(
+            "settings_base_path"
+        ):
             dpg.focus_item("settings_base_path")
 
     def _on_ctrl_q(self, sender, app_data, user_data, *args):
@@ -319,18 +341,31 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
 
     def _on_key_press(self, sender, key_code, user_data, *args):
         # 1. Prevent keyboard navigation if an input field is focused (except for Up/Down)
-        for input_tag in ["search_input", "scene_search_input", "prop_search_input", "settings_base_path"]:
+        for input_tag in [
+            "search_input",
+            "scene_search_input",
+            "prop_search_input",
+            "settings_base_path",
+        ]:
             if dpg.does_item_exist(input_tag) and dpg.is_item_focused(input_tag):
                 if key_code not in (dpg.mvKey_Up, dpg.mvKey_Down):
                     return
 
         # 2. Ensure we have a valid selection to start from
         # If no valid selection exists, try to find the first visible selectable in the active container
-        if not self.last_selected or not dpg.does_item_exist(self.last_selected) or not dpg.is_item_shown(self.last_selected):
+        if (
+            not self.last_selected
+            or not dpg.does_item_exist(self.last_selected)
+            or not dpg.is_item_shown(self.last_selected)
+        ):
             active_tab = dpg.get_value("main_tabs")
             parent = None
             if active_tab == "home_tab":
-                parent = "search_results" if dpg.is_item_shown("search_group") else "browse_group"
+                parent = (
+                    "search_results"
+                    if dpg.is_item_shown("search_group")
+                    else "browse_group"
+                )
             elif active_tab == "scene_tab":
                 parent = "scene_results_parent"
             elif active_tab == "prop_tab":
@@ -372,10 +407,16 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         # 6. Find current index and calculate new index
         # We also normalize self.last_selected comparison
         current_idx = -1
-        last_selected_alias = dpg.get_item_alias(self.last_selected) or self.last_selected
+        last_selected_alias = (
+            dpg.get_item_alias(self.last_selected) or self.last_selected
+        )
         for i, s in enumerate(selectables):
             s_alias = dpg.get_item_alias(s) or s
-            if s == self.last_selected or s_alias == self.last_selected or s == last_selected_alias:
+            if (
+                s == self.last_selected
+                or s_alias == self.last_selected
+                or s == last_selected_alias
+            ):
                 current_idx = i
                 break
 
@@ -399,7 +440,11 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 active_tab = dpg.get_value("main_tabs")
                 scroll_container = None
                 if active_tab == "home_tab":
-                    scroll_container = "search_results" if dpg.is_item_shown("search_group") else "home_browse_scroll"
+                    scroll_container = (
+                        "search_results"
+                        if dpg.is_item_shown("search_group")
+                        else "home_browse_scroll"
+                    )
                 elif active_tab == "scene_tab":
                     scroll_container = "scene_results_parent"
                 elif active_tab == "prop_tab":
@@ -416,8 +461,12 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         # Finalize selection when navigation keys are released
         if key_code in (dpg.mvKey_Up, dpg.mvKey_Down, dpg.mvKey_J, dpg.mvKey_K):
             # Only finalize if no other navigation keys are held
-            if not (dpg.is_key_down(dpg.mvKey_Up) or dpg.is_key_down(dpg.mvKey_Down) or
-                    dpg.is_key_down(dpg.mvKey_J) or dpg.is_key_down(dpg.mvKey_K)):
+            if not (
+                dpg.is_key_down(dpg.mvKey_Up)
+                or dpg.is_key_down(dpg.mvKey_Down)
+                or dpg.is_key_down(dpg.mvKey_J)
+                or dpg.is_key_down(dpg.mvKey_K)
+            ):
                 self.drag_preview_active = False
                 if self.last_selected:
                     data = self.file_item_data.get(self.last_selected)
@@ -426,7 +475,12 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                         self.on_file_click(self.last_selected, None, data)
 
     def _scroll_to_item(self, container, item):
-        if not container or not item or not dpg.does_item_exist(container) or not dpg.does_item_exist(item):
+        if (
+            not container
+            or not item
+            or not dpg.does_item_exist(container)
+            or not dpg.does_item_exist(item)
+        ):
             return
 
         # 1. Try built-in focus (most reliable way to trigger ImGui's internal scroll-to-item)
@@ -444,7 +498,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             cont_max = dpg.get_item_rect_max(container)
 
             if item_min[1] == 0 and item_max[1] == 0:
-                return # Item might not be rendered yet
+                return  # Item might not be rendered yet
 
             iy_min, iy_max = item_min[1], item_max[1]
             cy_min, cy_max = cont_min[1], cont_max[1]
@@ -489,8 +543,10 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             dpg.add_text("GitHub: ")
             dpg.add_button(
                 label="https://github.com/mumu-lhl/UmaExporter",
-                callback=lambda: webbrowser.open("https://github.com/mumu-lhl/UmaExporter"),
-                small=True
+                callback=lambda: webbrowser.open(
+                    "https://github.com/mumu-lhl/UmaExporter"
+                ),
+                small=True,
             )
 
     def _create_file_dialog(self):
@@ -568,7 +624,9 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                             self._build_browser_tree()
 
                     # Right Column: Details
-                    with dpg.child_window(tag="home_details_scroll", width=-1, border=True):
+                    with dpg.child_window(
+                        tag="home_details_scroll", width=-1, border=True
+                    ):
                         self._build_details_panel()
 
             with dpg.tab(label=i18n("tab_scene"), tag="scene_tab"):
@@ -582,13 +640,13 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                             scroll_targets=["scene_results_parent"],
                         )
                         dpg.add_separator()
-                        with dpg.child_window(
-                            tag="scene_results_parent", border=False
-                        ):
+                        with dpg.child_window(tag="scene_results_parent", border=False):
                             self._render_scene_results("")
 
                     # Right Column: Details (same structure as Home)
-                    with dpg.child_window(tag="scene_details_scroll", width=-1, border=True):
+                    with dpg.child_window(
+                        tag="scene_details_scroll", width=-1, border=True
+                    ):
                         self._build_details_panel(prefix="scene_")
 
             with dpg.tab(label=i18n("tab_prop"), tag="prop_tab"):
@@ -602,13 +660,13 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                             scroll_targets=["prop_results_parent"],
                         )
                         dpg.add_separator()
-                        with dpg.child_window(
-                            tag="prop_results_parent", border=False
-                        ):
+                        with dpg.child_window(tag="prop_results_parent", border=False):
                             self._render_prop_results("")
 
                     # Right Column: Details
-                    with dpg.child_window(tag="prop_details_scroll", width=-1, border=True):
+                    with dpg.child_window(
+                        tag="prop_details_scroll", width=-1, border=True
+                    ):
                         self._build_details_panel(prefix="prop_")
 
             with dpg.tab(label=i18n("tab_settings"), tag="settings_tab"):
@@ -634,14 +692,16 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     dpg.add_text(i18n("label_region"))
                     region_options = {
                         i18n("region_jp"): "jp",
-                        i18n("region_global"): "global"
+                        i18n("region_global"): "global",
                     }
                     reverse_region_map = {v: k for k, v in region_options.items()}
                     dpg.add_combo(
                         items=list(region_options.keys()),
-                        default_value=reverse_region_map.get(Config.REGION, i18n("region_jp")),
+                        default_value=reverse_region_map.get(
+                            Config.REGION, i18n("region_jp")
+                        ),
                         tag="settings_region",
-                        width=200
+                        width=200,
                     )
 
                     dpg.add_spacer(height=10)
@@ -650,9 +710,8 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                         items=["Auto", "English", "Chinese"],
                         tag="settings_language",
                         default_value=Config.LANGUAGE,
-                        width=200
+                        width=200,
                     )
-
 
                     dpg.add_spacer(height=20)
                     with dpg.group(horizontal=True):
@@ -682,7 +741,9 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         # Ensure navigation buttons start in the correct state
         self._update_nav_buttons()
 
-    def _build_search_bar(self, tag, search_callback, clear_callback, scroll_targets=None):
+    def _build_search_bar(
+        self, tag, search_callback, clear_callback, scroll_targets=None
+    ):
         def scroll_to_top():
             if not scroll_targets:
                 return
@@ -711,18 +772,24 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 )
 
                 # Search Button
-                search_btn = dpg.add_button(label=i18n("btn_search"), callback=search_callback)
+                search_btn = dpg.add_button(
+                    label=i18n("btn_search"), callback=search_callback
+                )
                 with dpg.tooltip(search_btn):
                     dpg.add_text(i18n("tooltip_search"))
 
                 # Clear Button
-                clear_btn = dpg.add_button(label=i18n("btn_clear"), callback=clear_callback)
+                clear_btn = dpg.add_button(
+                    label=i18n("btn_clear"), callback=clear_callback
+                )
                 with dpg.tooltip(clear_btn):
                     dpg.add_text(i18n("tooltip_clear"))
 
                 # Top Button
                 if scroll_targets:
-                    top_btn = dpg.add_button(label=i18n("btn_top"), callback=scroll_to_top)
+                    top_btn = dpg.add_button(
+                        label=i18n("btn_top"), callback=scroll_to_top
+                    )
                     with dpg.tooltip(top_btn):
                         dpg.add_text(i18n("tooltip_top"))
                 # Apply theme if available, otherwise use inline styling via item colors (simpler for DPG)
@@ -876,7 +943,9 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 parent=node,
             )
 
-    def _add_file_selectable(self, label, user_data, parent=None, tag=None, span_columns=False):
+    def _add_file_selectable(
+        self, label, user_data, parent=None, tag=None, span_columns=False
+    ):
         kwargs = {
             "label": label,
             "callback": self.on_file_click,
@@ -893,7 +962,6 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         self.file_item_data[item] = user_data
         return item
 
-
     def on_file_click(self, sender, app_data, user_data, *args):
         for input_tag in ["search_input", "scene_search_input", "prop_search_input"]:
             if dpg.does_item_exist(input_tag) and dpg.is_item_focused(input_tag):
@@ -908,7 +976,9 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         self._set_dependency_sections_visible(not is_drag_preview)
         self.selection_request_id += 1
         request_id = self.selection_request_id
-        active_tab = dpg.get_value("main_tabs") if dpg.does_alias_exist("main_tabs") else None
+        active_tab = (
+            dpg.get_value("main_tabs") if dpg.does_alias_exist("main_tabs") else None
+        )
         sender_tag = sender if isinstance(sender, str) else ""
         active_tab_alias = ""
         try:
@@ -979,7 +1049,9 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         bundle_key = user_data.get("key")
 
         if is_drag_preview:
-            self._preview_drag_texture_async(phys_path, asset_id, request_id, bundle_key=bundle_key)
+            self._preview_drag_texture_async(
+                phys_path, asset_id, request_id, bundle_key=bundle_key
+            )
             return
 
         self._load_unity_async(phys_path, asset_id, request_id, bundle_key=bundle_key)
@@ -1013,7 +1085,13 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         else:
             first_item = None
             for i_id, name, size, f_hash, key_val in rows:
-                u_data = {"id": i_id, "full_path": name, "size": size, "hash": f_hash, "key": key_val}
+                u_data = {
+                    "id": i_id,
+                    "full_path": name,
+                    "size": size,
+                    "hash": f_hash,
+                    "key": key_val,
+                }
                 item = self._add_file_selectable(
                     label=name,
                     tag=f"search_item_{i_id}",
@@ -1048,7 +1126,13 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
 
         first_item = None
         for i_id, name, size, f_hash, key_val in rows:
-            u_data = {"id": i_id, "full_path": name, "size": size, "hash": f_hash, "key": key_val}
+            u_data = {
+                "id": i_id,
+                "full_path": name,
+                "size": size,
+                "hash": f_hash,
+                "key": key_val,
+            }
             display_name = self._scene_display_name(name)
             item = self._add_file_selectable(
                 label=display_name,
@@ -1103,7 +1187,13 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
 
         first_item = None
         for i_id, name, size, f_hash, key_val in rows:
-            u_data = {"id": i_id, "full_path": name, "size": size, "hash": f_hash, "key": key_val}
+            u_data = {
+                "id": i_id,
+                "full_path": name,
+                "size": size,
+                "hash": f_hash,
+                "key": key_val,
+            }
             display_name = self._prop_display_name(name)
             item = self._add_file_selectable(
                 label=display_name,
@@ -1148,7 +1238,9 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 paths.append(p)
                 bundle_keys.append(k)
 
-        self.executor.submit(UnityLogic.export_unity_assets, paths, target_dir, bundle_keys=bundle_keys)
+        self.executor.submit(
+            UnityLogic.export_unity_assets, paths, target_dir, bundle_keys=bundle_keys
+        )
 
     def on_settings_dir_selected(self, sender, app_data, user_data, *args):
         new_path = app_data.get("file_path_name", "")
@@ -1159,10 +1251,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         new_path = dpg.get_value("settings_base_path").strip()
         new_lang = dpg.get_value("settings_language")
 
-        region_options = {
-            i18n("region_jp"): "jp",
-            i18n("region_global"): "global"
-        }
+        region_options = {i18n("region_jp"): "jp", i18n("region_global"): "global"}
         new_region_label = dpg.get_value("settings_region")
         new_region = region_options.get(new_region_label, "jp")
 
@@ -1190,7 +1279,9 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         self._setup_fonts()
 
         if (path_changed or region_changed) and path_valid:
-            print(f"Re-initializing database for path: {new_path}, region: {new_region}")
+            print(
+                f"Re-initializing database for path: {new_path}, region: {new_region}"
+            )
             if self.db:
                 self.db.close()
             try:
@@ -1224,7 +1315,10 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 msg += f" ({i18n('label_data_root')} {i18n('error_invalid')})"
 
             dpg.set_value(status_tag, msg)
-            dpg.configure_item(status_tag, color=[255, 255, 0] if (new_path and not path_valid) else [0, 255, 0])
+            dpg.configure_item(
+                status_tag,
+                color=[255, 255, 0] if (new_path and not path_valid) else [0, 255, 0],
+            )
 
             def clear_msg():
                 if dpg.does_item_exist(status_tag):

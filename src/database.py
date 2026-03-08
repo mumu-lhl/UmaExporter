@@ -36,7 +36,9 @@ class UmaDatabase:
             return conn
         except (sqlite3.OperationalError, sqlite3.DatabaseError):
             # If standard fails, try encrypted with apsw
-            print(f"Standard SQLite failed for {db_path}, trying encrypted with apsw...")
+            print(
+                f"Standard SQLite failed for {db_path}, trying encrypted with apsw..."
+            )
             conn = self._connect_encrypted(db_path)
             Config.DB_ENCRYPTED = True
             return conn
@@ -46,21 +48,21 @@ class UmaDatabase:
         try:
             hex_key = get_db_hex_key(Config.REGION)
             conn = apsw.Connection(db_path)
-            
+
             # Prioritize chacha20 as it's the most common for recent UMA versions
             configs = [
                 {"cipher": "chacha20", "page_size": 4096},
-                {"cipher": "sqlcipher", "legacy": 4, "page_size": 4096}, # SQLCipher v4
-                {"cipher": "sqlcipher", "legacy": 1, "page_size": 1024}, # SQLCipher v1
-                {"cipher": "sqlcipher", "legacy": 2, "page_size": 1024}, # SQLCipher v2
-                {"cipher": "sqlcipher", "legacy": 3, "page_size": 1024}, # SQLCipher v3
+                {"cipher": "sqlcipher", "legacy": 4, "page_size": 4096},  # SQLCipher v4
+                {"cipher": "sqlcipher", "legacy": 1, "page_size": 1024},  # SQLCipher v1
+                {"cipher": "sqlcipher", "legacy": 2, "page_size": 1024},  # SQLCipher v2
+                {"cipher": "sqlcipher", "legacy": 3, "page_size": 1024},  # SQLCipher v3
                 {"cipher": "aes256cbc", "page_size": 4096},
                 {"cipher": "aes256cbc", "page_size": 1024},
             ]
-            
+
             cursor = conn.cursor()
             success = False
-            
+
             for cfg in configs:
                 try:
                     # Apply config
@@ -69,7 +71,7 @@ class UmaDatabase:
                         conn.pragma("legacy", str(cfg["legacy"]))
                     conn.pragma("page_size", str(cfg["page_size"]))
                     conn.pragma("hexkey", hex_key)
-                    
+
                     # Test connection
                     cursor.execute("SELECT name FROM sqlite_master LIMIT 1")
                     success = True
@@ -78,17 +80,19 @@ class UmaDatabase:
                     continue
 
             if not success:
-                raise ValueError(f"Failed to decrypt database {db_path} with any known configurations.")
-            
+                raise ValueError(
+                    f"Failed to decrypt database {db_path} with any known configurations."
+                )
+
             return conn
-            
+
         except Exception as e:
             print(f"Encrypted connection error: {e}")
             raise
 
     def _apply_read_pragmas(self):
         cursor = self.conn.cursor()
-        # apsw.Connection doesn't have a direct cursor().execute() in the same way? 
+        # apsw.Connection doesn't have a direct cursor().execute() in the same way?
         # Actually it does, but we can also use conn.cursor().execute().
         pragmas = [
             "PRAGMA query_only=ON",
@@ -109,7 +113,7 @@ class UmaDatabase:
         """Parse database path structure with IDs"""
         print("Parsing database index...")
         cursor = self.conn.cursor()
-        
+
         # Dynamically include 'e' (key) column only if the DB is encrypted
         cols = "i, n, l, h, e" if Config.DB_ENCRYPTED else "i, n, l, h, NULL as e"
         cursor.execute(f"SELECT {cols} FROM a WHERE n IS NOT NULL AND n != ''")
@@ -199,7 +203,7 @@ class UmaDatabase:
         row = cursor.fetchone()
         if row:
             if not Config.DB_ENCRYPTED:
-                row = (*row, None) # Add None as key_val
+                row = (*row, None)  # Add None as key_val
             self._asset_info_by_id[key] = row
         return row
 
@@ -244,7 +248,7 @@ class UmaDatabase:
         start = str(asset_id)
         visited = set()
         stack = [start]
-        results = [] # List of (hash, key)
+        results = []  # List of (hash, key)
 
         while stack:
             current = stack.pop()
@@ -288,7 +292,7 @@ class UmaDatabase:
             "n LIKE '3d/chara/richprop/%'",
         ]
         path_filter = f"({' OR '.join(conditions)})"
-        
+
         if limit is None:
             cursor.execute(
                 f"SELECT {cols} FROM a WHERE n LIKE ? AND {path_filter}",
@@ -308,9 +312,9 @@ class UmaDatabase:
         """Quick look up for decryption key by file hash."""
         if not Config.DB_ENCRYPTED:
             return None
-        
+
         # Check cache first
-        # Note: _asset_info_by_id is keyed by ID, not hash. 
+        # Note: _asset_info_by_id is keyed by ID, not hash.
         # But we can use a separate small cache or just query.
         cursor = self.conn.cursor()
         cursor.execute("SELECT e FROM a WHERE h = ? LIMIT 1", (f_hash,))

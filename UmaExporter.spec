@@ -90,7 +90,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=True,
-    upx=False,
+    upx=True,
     upx_exclude=[
         'python314.dll', 
         'python3.dll', 

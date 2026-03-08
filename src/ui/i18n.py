@@ -120,8 +120,9 @@ TRANSLATIONS = {
         "msg_exporting_fbx": "正在导出 FBX 预览 (可能需要较长时间)...",
         "msg_loading": "加载中...",
         "msg_no_unity_objs": "未发现 Unity 对象，或文件尚未下载。",
-    }
+    },
 }
+
 
 def i18n(key):
     lang = Config.get_effective_language()

@@ -14,6 +14,7 @@ from src.constants import Config
 # Store original load_file to wrap it
 _orig_load_file = UnityPy.Environment.load_file
 
+
 def _custom_load_file(self, file, is_dependency=False, name=None):
     """Custom load_file for UnityPy that handles UMA decryption."""
     if Config.DB_ENCRYPTED and isinstance(file, str):
@@ -30,9 +31,15 @@ def _custom_load_file(self, file, is_dependency=False, name=None):
                 decrypted_data = UnityLogic._load_bundle_data(phys_path, bundle_key=key)
                 if decrypted_data:
                     # Pass the decrypted bytes directly to original load_file
-                    return _orig_load_file(self, decrypted_data, is_dependency=is_dependency, name=name or os.path.basename(file))
+                    return _orig_load_file(
+                        self,
+                        decrypted_data,
+                        is_dependency=is_dependency,
+                        name=name or os.path.basename(file),
+                    )
 
     return _orig_load_file(self, file, is_dependency=is_dependency, name=name)
+
 
 # Apply monkey patch to the class
 UnityPy.Environment.load_file = _custom_load_file
@@ -53,6 +60,7 @@ class UnityLogic:
             f_hash = os.path.basename(physical_path)
             return UnityLogic._key_provider(f_hash)
         return None
+
     @staticmethod
     def _sanitize_export_name(name):
         if not name:
@@ -83,7 +91,9 @@ class UnityLogic:
                 with open(physical_path, "rb") as f:
                     data = bytearray(f.read())
 
-                decrypted = decrypt_bundle(data, region=Config.REGION, key=decryption_key)
+                decrypted = decrypt_bundle(
+                    data, region=Config.REGION, key=decryption_key
+                )
 
                 # Convert to bytes because bytearray is unhashable and causes UnityPy to fail in some Python versions
                 return bytes(decrypted)
@@ -149,6 +159,7 @@ class UnityLogic:
         except Exception as e:
             print(f"Error getting unity assets for {physical_path}: {e}")
             import traceback
+
             traceback.print_exc()
             return ()
 
@@ -230,6 +241,7 @@ class UnityLogic:
             return data_np.ravel(), width, height
         except Exception as e:
             import traceback
+
             traceback.print_exc()
             raise e
 
@@ -290,7 +302,9 @@ class UnityLogic:
                         data = obj.parse_as_object()
                         name = getattr(data, "m_Name", f"Unnamed_{obj.path_id}")
 
-                        if obj.type.name in ["Texture2D", "Sprite"] and hasattr(data, "image"):
+                        if obj.type.name in ["Texture2D", "Sprite"] and hasattr(
+                            data, "image"
+                        ):
                             UnityLogic._save_asset(
                                 export_dir, obj.type.name, f"{name}.png", data.image
                             )
@@ -308,7 +322,9 @@ class UnityLogic:
                             count += 1
                         elif obj.type.name == "AudioClip" and hasattr(data, "samples"):
                             for sample in data.samples:
-                                UnityLogic._save_asset(export_dir, "AudioClip", f"{name}.wav", sample)
+                                UnityLogic._save_asset(
+                                    export_dir, "AudioClip", f"{name}.wav", sample
+                                )
                     except:
                         continue
             print(f"Export completed. Total {count} items saved to {export_dir}")
@@ -344,7 +360,9 @@ class UnityLogic:
 
                 try:
                     if Config.DB_ENCRYPTED:
-                        data = UnityLogic._load_bundle_data(p, bundle_key=key_map.get(p))
+                        data = UnityLogic._load_bundle_data(
+                            p, bundle_key=key_map.get(p)
+                        )
                         if data:
                             with open(target, "wb") as f:
                                 f.write(data)
@@ -395,6 +413,13 @@ class UnityLogic:
                 "auto",  # Fix: value is required
             ]
 
+            if os.name == "nt":
+                # Ensure paths use backslashes for Windows/Wine CLI
+                cmd = [
+                    p.replace("/", "\\") if isinstance(p, str) and "/" in p else p
+                    for p in cmd
+                ]
+
             try:
                 print(f"Running CLI command: {' '.join(cmd)}")
                 # Scan BEFORE to compare
@@ -403,7 +428,14 @@ class UnityLogic:
                     for f in files:
                         pre_files.add(os.path.join(root, f))
 
-                result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+                # Use shell=True on Windows/Wine can sometimes help with .exe discovery/dotnet loading
+                result = subprocess.run(
+                    cmd,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    shell=(os.name == "nt"),
+                )
 
                 # Scan AFTER to count new files
                 for root, dirs, files in os.walk(export_dir):

@@ -24,8 +24,13 @@ class PreviewMixin:
     def _update_asset_properties_panel(self, prefix, user_data):
         dpg.configure_item(f"{prefix}details_group", show=True)
         # Keep the top-level path display but also update the detailed label inside the group
-        dpg.set_value(f"{prefix}ui_path", f"{i18n('prop_logical_path')}{user_data['full_path']}")
-        dpg.set_value(f"{prefix}ui_path_label", f"{i18n('prop_logical_path')}{user_data['full_path']}")
+        dpg.set_value(
+            f"{prefix}ui_path", f"{i18n('prop_logical_path')}{user_data['full_path']}"
+        )
+        dpg.set_value(
+            f"{prefix}ui_path_label",
+            f"{i18n('prop_logical_path')}{user_data['full_path']}",
+        )
         # Only set the hash value to the copyable field
         dpg.set_value(f"{prefix}ui_hash", user_data["hash"])
         formatted_size = self._format_size(user_data["size"])
@@ -55,7 +60,9 @@ class PreviewMixin:
             dpg.configure_item(f"{prefix}ui_dep_section", show=visible)
             dpg.configure_item(f"{prefix}ui_rev_dep_section", show=visible)
 
-    def _load_unity_async(self, phys_path, current_asset_id, request_id, bundle_key=None):
+    def _load_unity_async(
+        self, phys_path, current_asset_id, request_id, bundle_key=None
+    ):
         def worker():
             return UnityLogic.get_unity_assets(phys_path, bundle_key=bundle_key)
 
@@ -74,7 +81,9 @@ class PreviewMixin:
 
         future.add_done_callback(done_callback)
 
-    def _apply_unity_objects_result(self, phys_path, current_asset_id, request_id, objs, bundle_key=None):
+    def _apply_unity_objects_result(
+        self, phys_path, current_asset_id, request_id, objs, bundle_key=None
+    ):
         if request_id != self.selection_request_id:
             return
         if not self._is_still_selected(current_asset_id):
@@ -96,7 +105,14 @@ class PreviewMixin:
                 self.on_unity_obj_click(
                     sender,
                     None,
-                    (phys_path, path_id, "Animator", "scene_", animator_name, bundle_key),
+                    (
+                        phys_path,
+                        path_id,
+                        "Animator",
+                        "scene_",
+                        animator_name,
+                        bundle_key,
+                    ),
                 )
                 self.scene_auto_preview_request = None
                 return
@@ -114,7 +130,14 @@ class PreviewMixin:
                 self.on_unity_obj_click(
                     sender,
                     None,
-                    (phys_path, path_id, "Animator", "prop_", animator_name, bundle_key),
+                    (
+                        phys_path,
+                        path_id,
+                        "Animator",
+                        "prop_",
+                        animator_name,
+                        bundle_key,
+                    ),
                 )
                 self.prop_auto_preview_request = None
                 return
@@ -131,7 +154,9 @@ class PreviewMixin:
                     (phys_path, path_id, u_type, prefix, None, bundle_key),
                 )
 
-    def _preview_drag_texture_async(self, phys_path, current_asset_id, request_id, bundle_key=None):
+    def _preview_drag_texture_async(
+        self, phys_path, current_asset_id, request_id, bundle_key=None
+    ):
         def worker():
             return UnityLogic.get_unity_assets(phys_path, bundle_key=bundle_key)
 
@@ -145,14 +170,25 @@ class PreviewMixin:
             texture_path_id = self._find_single_texture_path_id(objs)
             self._queue_ui_task(
                 lambda: self._apply_drag_texture_candidate(
-                    phys_path, current_asset_id, request_id, texture_path_id, objs, bundle_key=bundle_key
+                    phys_path,
+                    current_asset_id,
+                    request_id,
+                    texture_path_id,
+                    objs,
+                    bundle_key=bundle_key,
                 )
             )
 
         future.add_done_callback(done_callback)
 
     def _apply_drag_texture_candidate(
-        self, phys_path, current_asset_id, request_id, texture_path_id, objs, bundle_key=None
+        self,
+        phys_path,
+        current_asset_id,
+        request_id,
+        texture_path_id,
+        objs,
+        bundle_key=None,
     ):
         if request_id != self.selection_request_id:
             return
@@ -197,7 +233,9 @@ class PreviewMixin:
             )
 
     def _find_single_texture_path_id(self, objs):
-        texture_ids = [path_id for u_type, _u_name, path_id in objs if u_type == "Texture2D"]
+        texture_ids = [
+            path_id for u_type, _u_name, path_id in objs if u_type == "Texture2D"
+        ]
         if len(texture_ids) == 1:
             return texture_ids[0]
         return None
@@ -226,7 +264,14 @@ class PreviewMixin:
                         label=u_name,
                         tag=tag,
                         callback=self.on_unity_obj_click,
-                        user_data=(phys_path, path_id, u_type, prefix, u_name, bundle_key),
+                        user_data=(
+                            phys_path,
+                            path_id,
+                            u_type,
+                            prefix,
+                            u_name,
+                            bundle_key,
+                        ),
                         span_columns=True,
                     )
 
@@ -277,7 +322,12 @@ class PreviewMixin:
                 )
             dpg.configure_item(image_container_tag, show=True)
             self._load_texture_preview_async(
-                phys_path, path_id, prefix, self.current_asset_id, self.selection_request_id, bundle_key=bundle_key
+                phys_path,
+                path_id,
+                prefix,
+                self.current_asset_id,
+                self.selection_request_id,
+                bundle_key=bundle_key,
             )
         elif u_type == "Mesh":
             dpg.add_spacer(height=5, parent=image_container_tag)
@@ -300,7 +350,9 @@ class PreviewMixin:
             dpg.configure_item(image_container_tag, show=True)
 
             # Auto launch/update on click (Async)
-            self.on_mesh_preview_click(None, None, (phys_path, path_id, prefix, bundle_key))
+            self.on_mesh_preview_click(
+                None, None, (phys_path, path_id, prefix, bundle_key)
+            )
         elif u_type == "Animator":
             dpg.add_spacer(height=5, parent=image_container_tag)
             dpg.add_text(
@@ -335,7 +387,9 @@ class PreviewMixin:
         image_container_tag = f"{prefix}ui_unity_image_container"
         asset_id = self.current_asset_id
         request_id = self.selection_request_id
-        future = self.executor.submit(UnityLogic.save_mesh_to_tmp, phys_path, path_id, bundle_key=bundle_key)
+        future = self.executor.submit(
+            UnityLogic.save_mesh_to_tmp, phys_path, path_id, bundle_key=bundle_key
+        )
 
         def done_callback(f):
             try:
@@ -355,7 +409,12 @@ class PreviewMixin:
         future.add_done_callback(done_callback)
 
     def _apply_mesh_preview_result(
-        self, tmp_mesh_path, preview_loading_tag, image_container_tag, asset_id, request_id
+        self,
+        tmp_mesh_path,
+        preview_loading_tag,
+        image_container_tag,
+        asset_id,
+        request_id,
     ):
         if request_id != self.selection_request_id or asset_id != self.current_asset_id:
             return
@@ -378,7 +437,9 @@ class PreviewMixin:
         image_container_tag = f"{prefix}ui_unity_image_container"
         asset_id = self.current_asset_id
         request_id = self.selection_request_id
-        future = self.executor.submit(self._build_animator_preview, asset_id, object_name)
+        future = self.executor.submit(
+            self._build_animator_preview, asset_id, object_name
+        )
 
         def done_callback(f):
             try:
@@ -406,17 +467,24 @@ class PreviewMixin:
             if os.path.exists(p):
                 paths.append(p)
                 bundle_keys.append(k)
-        return UnityLogic.save_animator_to_tmp(paths, object_name, bundle_keys=bundle_keys)
+        return UnityLogic.save_animator_to_tmp(
+            paths, object_name, bundle_keys=bundle_keys
+        )
 
     def _get_recursive_hashes(self, asset_id):
         if asset_id not in self.cached_recursive_hashes:
-            self.cached_recursive_hashes[asset_id] = self.db.get_all_recursive_dependencies(
-                asset_id
+            self.cached_recursive_hashes[asset_id] = (
+                self.db.get_all_recursive_dependencies(asset_id)
             )
         return self.cached_recursive_hashes[asset_id]
 
     def _apply_animator_preview_result(
-        self, tmp_fbx_path, preview_loading_tag, image_container_tag, asset_id, request_id
+        self,
+        tmp_fbx_path,
+        preview_loading_tag,
+        image_container_tag,
+        asset_id,
+        request_id,
     ):
         if request_id != self.selection_request_id or asset_id != self.current_asset_id:
             return
@@ -433,7 +501,13 @@ class PreviewMixin:
         )
 
     def _load_texture_preview_async(
-        self, phys_path, path_id, prefix="", asset_id=None, request_id=None, bundle_key=None
+        self,
+        phys_path,
+        path_id,
+        prefix="",
+        asset_id=None,
+        request_id=None,
+        bundle_key=None,
     ):
         self.texture_request_ids[prefix] = self.texture_request_ids.get(prefix, 0) + 1
         texture_request_id = self.texture_request_ids[prefix]
@@ -441,7 +515,9 @@ class PreviewMixin:
             asset_id = self.current_asset_id
         if request_id is None:
             request_id = self.selection_request_id
-        future = self.executor.submit(UnityLogic.get_texture_data, phys_path, path_id, bundle_key=bundle_key)
+        future = self.executor.submit(
+            UnityLogic.get_texture_data, phys_path, path_id, bundle_key=bundle_key
+        )
 
         def done_callback(f):
             try:
@@ -615,7 +691,9 @@ class PreviewMixin:
             )
             return
 
-        future = self.executor.submit(self.db.get_reverse_dependencies, current_asset_id)
+        future = self.executor.submit(
+            self.db.get_reverse_dependencies, current_asset_id
+        )
 
         def done_callback(f):
             try:
@@ -692,7 +770,7 @@ class PreviewMixin:
 
     def _get_recursive_hashes(self, asset_id):
         if asset_id not in self.cached_recursive_hashes:
-            self.cached_recursive_hashes[asset_id] = self.db.get_all_recursive_dependencies(
-                asset_id
+            self.cached_recursive_hashes[asset_id] = (
+                self.db.get_all_recursive_dependencies(asset_id)
             )
         return self.cached_recursive_hashes[asset_id]
