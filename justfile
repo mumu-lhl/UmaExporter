@@ -3,7 +3,7 @@ os-name := os()
 nuitka-win-flags := if os-name == "windows" { "--clang" } else { "" }
 data-sep := if os-name == "windows" { ";" } else { ":" }
 cli-bin := if os-name == "windows" { "as_cli/AssetStudioModCLI.exe" } else { "as_cli/AssetStudioModCLI" }
-cp-cmd := "uv run python scripts/copy_dir.py"
+cp-cmd := "uv run scripts/copy_dir.py"
 
 # Install/Update Asset Studio CLI using uv
 as-cli-setup:
@@ -19,14 +19,16 @@ build-cython:
 
 # Package the application using PyInstaller via uv
 package: build-cython check-as-cli
-    @echo "Packaging with PyInstaller (Optimized)..."
+    @echo "Packaging with PyInstaller..."
     uv run --with pyinstaller pyinstaller --noconfirm UmaExporter.spec
     @echo "Placing as_cli next to the binary..."
     {{cp-cmd}} as_cli dist/UmaExporter/as_cli
+    {{cp-cmd}} README.md dist/UmaExporter/使用说明.txt
     @echo "Build complete! Check the 'dist/UmaExporter' directory."
+
 # Package the application using Nuitka via uv
 package-nuitka: build-cython check-as-cli
-    @echo "Packaging with Nuitka (Standalone)..."
+    @echo "Packaging with Nuitka..."
     uv run python -m nuitka \
         --standalone \
         --show-progress \
@@ -55,7 +57,9 @@ package-nuitka: build-cython check-as-cli
         main.py
     @echo "Placing as_cli next to the binary..."
     {{cp-cmd}} as_cli dist-nuitka/UmaExporter.dist/as_cli
+    {{cp-cmd}} README.md dist-nuitka/UmaExporter.dist/使用说明.txt
     @echo "Build complete! Check the 'dist-nuitka/UmaExporter.dist' directory."
+
 
 # Run Asset Studio CLI
 as-cli *args:
