@@ -49,7 +49,10 @@ package-nuitka: build-cython check-as-cli
         --include-package=fmod_toolkit \
         --include-package=pyfmodex \
         --include-package=ctypes \
-        --include-module=PIL \
+        --include-module=ctypes._layout \
+        --include-package=PIL \
+        --include-package=numpy \
+        --include-package=apsw \
         --include-module=src.uma_decryptor \
         --windows-disable-console \
         --nofollow-import-to=tkinter \
