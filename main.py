@@ -19,6 +19,12 @@ if __name__ == "__main__":
     # Essential for Windows standalone builds (Windows always uses 'spawn')
     multiprocessing.freeze_support()
 
+    # Use 'spawn' to ensure sub-processes behave consistently across platforms (and with Nuitka)
+    try:
+        multiprocessing.set_start_method("spawn", force=True)
+    except RuntimeError:
+        pass
+
     # Import App here to ensure sub-processes (especially on Windows)
     # don't import the full UI logic unless they are the main process.
     from src.ui.main_window import UmaExporterApp

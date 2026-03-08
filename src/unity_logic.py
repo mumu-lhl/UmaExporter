@@ -1,4 +1,5 @@
 import os
+import sys
 import shutil
 import subprocess
 import tempfile
@@ -44,6 +45,16 @@ def _custom_load_file(self, file, is_dependency=False, name=None):
 # Apply monkey patch to the class
 UnityPy.Environment.load_file = _custom_load_file
 UnityPy.environment.Environment.load_file = _custom_load_file
+
+
+# Fix archspec JSON discovery in Nuitka standalone builds.
+# Nuitka compiles archspec into an extension module, which breaks its internal 
+# relative path logic for finding JSON data. PyInstaller doesn't need this.
+if hasattr(sys, "python_compiled"):
+    _base_path = os.path.dirname(os.path.abspath(sys.argv[0]))
+    _archspec_data = os.path.join(_base_path, "archspec", "json", "cpu")
+    if os.path.exists(_archspec_data):
+        os.environ["ARCHSPEC_CPU_DIR"] = _archspec_data
 
 
 class UnityLogic:

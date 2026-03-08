@@ -5,6 +5,7 @@ nuitka-upx-flag := if os-name == "macos" { "" } else { "--enable-plugin=upx" }
 data-sep := if os-name == "windows" { ";" } else { ":" }
 cli-bin := if os-name == "windows" { "as_cli/AssetStudioModCLI.exe" } else { "as_cli/AssetStudioModCLI" }
 cp-cmd := "uv run scripts/copy_dir.py"
+archspec-path := `uv run python -c "import archspec, os; print(os.path.dirname(archspec.__file__))"`
 
 # Install/Update Asset Studio CLI using uv
 as-cli-setup:
@@ -14,9 +15,9 @@ as-cli-setup:
 check-as-cli:
     @uv run python -c "import os, sys; d='as_cli'; sys.exit(0 if os.path.exists(d) and os.listdir(d) else 1)" || just as-cli-setup
 
-# Build Cython extension using uv environment
+# Build Cython extension using uv environment (skip if exists)
 build-cython:
-    uv run python setup.py build_ext --inplace
+    @uv run python -c "import glob, os; exit(0 if glob.glob('src/uma_decryptor*.so') or glob.glob('src/uma_decryptor*.pyd') else 1)" || uv run python setup.py build_ext --inplace
 
 # Package the application using PyInstaller via uv
 package: build-cython check-as-cli
@@ -26,6 +27,48 @@ package: build-cython check-as-cli
     {{cp-cmd}} as_cli dist/UmaExporter/as_cli
     {{cp-cmd}} README.md dist/UmaExporter/使用说明.txt
     @echo "Build complete! Check the 'dist/UmaExporter' directory."
+
+# Debug package using Nuitka (FASTEST)
+debug-nuitka: build-cython check-as-cli
+    @echo "Packaging with Nuitka (DEBUG/FAST)..."
+    uv run python -m nuitka \
+        --standalone \
+        --show-progress \
+        --clang \
+        --follow-imports \
+        --assume-yes-for-downloads \
+        --output-filename=UmaExporter \
+        --enable-plugin=multiprocessing \
+        --lto=no \
+        --include-package-data=dearpygui \
+        --include-package-data=f3d \
+        --include-package-data=UnityPy \
+        --include-package-data=fmod_toolkit \
+        --include-data-dir="{{archspec-path}}/json"=archspec/json \
+        --output-dir=dist-debug \
+        --no-pyi-file \
+        --include-package=dearpygui \
+        --include-package=f3d \
+        --include-package=UnityPy \
+        --include-package=fmod_toolkit \
+        --include-package=archspec \
+        --include-package=astc_encoder \
+        --include-package=texture2ddecoder \
+        --include-package=etcpak \
+        --include-package=pyfmodex \
+        --include-package=PIL \
+        --include-package=numpy \
+        --include-package=apsw \
+        --include-module=src.uma_decryptor \
+        --nofollow-import-to=tkinter \
+        --nofollow-import-to=matplotlib \
+        --nofollow-import-to=unittest \
+        {{nuitka-win-flags}} \
+        main.py
+    @echo "Placing as_cli next to the binary..."
+    {{cp-cmd}} as_cli dist-debug/main.dist/as_cli
+    {{cp-cmd}} README.md dist-debug/main.dist/README.txt
+    @echo "Debug build complete! Run: ./dist-debug/main.dist/UmaExporter"
 
 # Package the application using Nuitka via uv
 package-nuitka: build-cython check-as-cli
@@ -43,7 +86,7 @@ package-nuitka: build-cython check-as-cli
         --include-package-data=f3d \
         --include-package-data=UnityPy \
         --include-package-data=fmod_toolkit \
-        --include-package-data=archspec \
+        --include-data-dir="{{archspec-path}}/json"=archspec/json \
         --output-dir=dist-nuitka \
         --no-pyi-file \
         --include-package=dearpygui \
@@ -51,6 +94,9 @@ package-nuitka: build-cython check-as-cli
         --include-package=UnityPy \
         --include-package=fmod_toolkit \
         --include-package=archspec \
+        --include-package=astc_encoder \
+        --include-package=texture2ddecoder \
+        --include-package=etcpak \
         --include-package=pyfmodex \
         --include-package=ctypes \
         --include-module=ctypes._layout \

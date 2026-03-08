@@ -4,6 +4,7 @@ __pycache__/
 build/
 dist/
 dist-nuitka/
+dist-debug/
 wheels/
 *.egg-info
 
