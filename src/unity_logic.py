@@ -413,13 +413,6 @@ class UnityLogic:
                 "auto",  # Fix: value is required
             ]
 
-            if os.name == "nt":
-                # Ensure paths use backslashes for Windows/Wine CLI
-                cmd = [
-                    p.replace("/", "\\") if isinstance(p, str) and "/" in p else p
-                    for p in cmd
-                ]
-
             try:
                 print(f"Running CLI command: {' '.join(cmd)}")
                 # Scan BEFORE to compare
@@ -428,14 +421,7 @@ class UnityLogic:
                     for f in files:
                         pre_files.add(os.path.join(root, f))
 
-                # Use shell=True on Windows/Wine can sometimes help with .exe discovery/dotnet loading
-                result = subprocess.run(
-                    cmd,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    shell=(os.name == "nt"),
-                )
+                result = subprocess.run(cmd, check=True, capture_output=True, text=True)
 
                 # Scan AFTER to count new files
                 for root, dirs, files in os.walk(export_dir):
