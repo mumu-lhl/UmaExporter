@@ -74,7 +74,7 @@ jobs:
       with:
         path: |
           .nuitka-cache
-          dist-nuitka/UmaExporter.build
+          dist-nuitka/main.build
         key: ${{ runner.os }}-nuitka-${{ hashFiles('**/uv.lock') }}-${{ github.sha }}
         restore-keys: |
           ${{ runner.os }}-nuitka-${{ hashFiles('**/uv.lock') }}-

@@ -4,11 +4,11 @@ import dearpygui.dearpygui as dpg
 
 
 class DragMixin:
-    def _on_mouse_move(self, sender, app_data, user_data):
+    def _on_mouse_move(self, *args):
         # Fallback initialization for middle-drag
         if dpg.is_mouse_button_down(dpg.mvMouseButton_Middle):
             if not self.middle_drag_active:
-                self._on_middle_mouse_down(None, None, None)
+                self._on_middle_mouse_down()
 
         if not dpg.is_mouse_button_down(dpg.mvMouseButton_Left):
             self.last_drag_preview_item = None
@@ -79,7 +79,7 @@ class DragMixin:
                 if time.monotonic() - self.last_drag_preview_time >= self.drag_preview_interval:
                     self._trigger_drag_preview(pending_item, pending_data)
 
-    def _on_middle_mouse_down(self, sender, app_data, user_data):
+    def _on_middle_mouse_down(self, *args):
         if self.middle_drag_active:
             return
             
@@ -95,7 +95,7 @@ class DragMixin:
         except Exception:
             self.middle_drag_start_scroll_y = 0
 
-    def _on_middle_mouse_drag(self, sender, app_data, user_data):
+    def _on_middle_mouse_drag(self, *args):
         if not self.middle_drag_active or not self.middle_drag_target:
             return
         
@@ -124,13 +124,13 @@ class DragMixin:
         except Exception:
             pass
 
-    def _on_middle_mouse_release(self, sender, app_data, user_data):
+    def _on_middle_mouse_release(self, *args):
         self.middle_drag_active = False
         self.middle_drag_target = None
         self.middle_drag_start_mouse_y = None
         self.middle_drag_start_scroll_y = None
 
-    def _on_left_mouse_release(self, sender, app_data, user_data):
+    def _on_left_mouse_release(self, *args):
         self._finalize_drag_preview_selection()
         self.last_drag_preview_item = None
         self.pending_drag_preview = None

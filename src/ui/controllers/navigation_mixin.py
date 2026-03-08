@@ -2,7 +2,7 @@ import dearpygui.dearpygui as dpg
 
 
 class NavigationMixin:
-    def go_back(self):
+    def go_back(self, *args):
         if not self._has_navigable_history(self.history_back):
             return
 
@@ -20,7 +20,7 @@ class NavigationMixin:
         self.is_navigating = False
         self._update_nav_buttons()
 
-    def go_forward(self):
+    def go_forward(self, *args):
         if not self._has_navigable_history(self.history_forward):
             return
 

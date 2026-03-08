@@ -281,7 +281,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
     def _is_ctrl_pressed(self):
         return dpg.is_key_down(dpg.mvKey_LControl) or dpg.is_key_down(dpg.mvKey_RControl)
 
-    def _on_ctrl_f(self, sender, app_data, user_data):
+    def _on_ctrl_f(self, sender, app_data, user_data, *args):
         if not self._is_ctrl_pressed():
             return
 
@@ -313,11 +313,11 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         elif dpg.does_item_exist("settings_base_path") and dpg.is_item_shown("settings_base_path"):
             dpg.focus_item("settings_base_path")
 
-    def _on_ctrl_q(self, sender, app_data, user_data):
+    def _on_ctrl_q(self, sender, app_data, user_data, *args):
         if self._is_ctrl_pressed():
             dpg.stop_dearpygui()
 
-    def _on_key_press(self, sender, key_code, user_data):
+    def _on_key_press(self, sender, key_code, user_data, *args):
         # 1. Prevent keyboard navigation if an input field is focused (except for Up/Down)
         for input_tag in ["search_input", "scene_search_input", "prop_search_input", "settings_base_path"]:
             if dpg.does_item_exist(input_tag) and dpg.is_item_focused(input_tag):
@@ -412,7 +412,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 if scroll_container:
                     self._scroll_to_item(scroll_container, target_item)
 
-    def _on_key_release(self, sender, key_code, user_data):
+    def _on_key_release(self, sender, key_code, user_data, *args):
         # Finalize selection when navigation keys are released
         if key_code in (dpg.mvKey_Up, dpg.mvKey_Down, dpg.mvKey_J, dpg.mvKey_K):
             # Only finalize if no other navigation keys are held
@@ -466,7 +466,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         except:
             pass
 
-    def _show_about(self):
+    def _show_about(self, *args):
         if dpg.does_item_exist("about_window"):
             dpg.show_item("about_window")
             dpg.focus_item("about_window")
@@ -842,7 +842,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 dpg.add_item_clicked_handler(callback=self.on_tree_click)
             dpg.bind_item_handler_registry(node, handler)
 
-    def on_tree_click(self, sender, app_data, user_data):
+    def on_tree_click(self, sender, app_data, user_data, *args):
         node = app_data[1]
         if node not in self.node_map:
             return
@@ -894,7 +894,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         return item
 
 
-    def on_file_click(self, sender, app_data, user_data):
+    def on_file_click(self, sender, app_data, user_data, *args):
         for input_tag in ["search_input", "scene_search_input", "prop_search_input"]:
             if dpg.does_item_exist(input_tag) and dpg.is_item_focused(input_tag):
                 if sender and dpg.does_item_exist(sender):
@@ -995,7 +995,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             )
             self.f3d_process.start()
 
-    def on_search(self, sender, app_data, user_data):
+    def on_search(self, sender, app_data, user_data, *args):
         if not self.db:
             return
         query = dpg.get_value("search_input").strip()
@@ -1027,7 +1027,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             if first_item:
                 self.on_file_click(first_item[0], None, first_item[1])
 
-    def on_scene_search(self, sender, app_data, user_data):
+    def on_scene_search(self, sender, app_data, user_data, *args):
         query = dpg.get_value("scene_search_input").strip()
         self._render_scene_results(query)
 
@@ -1070,16 +1070,16 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             return normalized[len(prefix) :]
         return full_path
 
-    def clear_search(self):
+    def clear_search(self, *args):
         dpg.set_value("search_input", "")
         dpg.configure_item("browse_group", show=True)
         dpg.configure_item("search_group", show=False)
 
-    def clear_scene_search(self):
+    def clear_scene_search(self, *args):
         dpg.set_value("scene_search_input", "")
         self._render_scene_results("")
 
-    def on_prop_search(self, sender, app_data, user_data):
+    def on_prop_search(self, sender, app_data, user_data, *args):
         query = dpg.get_value("prop_search_input").strip()
         self._render_prop_results(query)
 
@@ -1126,11 +1126,11 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 return normalized[len(prefix) :]
         return full_path
 
-    def clear_prop_search(self):
+    def clear_prop_search(self, *args):
         dpg.set_value("prop_search_input", "")
         self._render_prop_results("")
 
-    def on_export_selected(self, sender, app_data, user_data):
+    def on_export_selected(self, sender, app_data, user_data, *args):
         target_dir = app_data.get("file_path_name", "")
         if not target_dir or not self.last_selected or not self.db:
             return
@@ -1150,12 +1150,12 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
 
         self.executor.submit(UnityLogic.export_unity_assets, paths, target_dir, bundle_keys=bundle_keys)
 
-    def on_settings_dir_selected(self, sender, app_data, user_data):
+    def on_settings_dir_selected(self, sender, app_data, user_data, *args):
         new_path = app_data.get("file_path_name", "")
         if new_path:
             dpg.set_value("settings_base_path", new_path)
 
-    def apply_settings(self, sender, app_data, user_data):
+    def apply_settings(self, sender, app_data, user_data, *args):
         new_path = dpg.get_value("settings_base_path").strip()
         new_lang = dpg.get_value("settings_language")
 

@@ -230,7 +230,7 @@ class PreviewMixin:
                         span_columns=True,
                     )
 
-    def on_unity_obj_click(self, sender, app_data, user_data):
+    def on_unity_obj_click(self, sender, app_data, user_data, *args):
         phys_path, path_id, u_type, prefix = user_data[:4]
         object_name = user_data[4] if len(user_data) > 4 else None
         bundle_key = user_data[5] if len(user_data) > 5 else None
@@ -327,7 +327,7 @@ class PreviewMixin:
                 None, None, (phys_path, path_id, prefix, object_name, bundle_key)
             )
 
-    def on_mesh_preview_click(self, sender, app_data, user_data):
+    def on_mesh_preview_click(self, sender, app_data, user_data, *args):
         phys_path, path_id = user_data[:2]
         prefix = user_data[2] if len(user_data) > 2 else ""
         bundle_key = user_data[3] if len(user_data) > 3 else None
@@ -371,7 +371,7 @@ class PreviewMixin:
             color=[255, 0, 0],
         )
 
-    def on_animator_preview_click(self, sender, app_data, user_data):
+    def on_animator_preview_click(self, sender, app_data, user_data, *args):
         prefix = user_data[2] if len(user_data) > 2 else ""
         object_name = user_data[3] if len(user_data) > 3 else None
         preview_loading_tag = f"{prefix}ui_preview_loading"
