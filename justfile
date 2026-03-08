@@ -1,7 +1,7 @@
 # Set cross-platform variables
 os-name := os()
 nuitka-win-flags := if os-name == "windows" { "--clang" } else { "" }
-nuitka-upx-flag := if os-name == "macos" { "" } else { "--enable-plugin=upx" }
+nuitka-upx-flag := if os-name == "windows" { "--enable-plugin=upx" } else { "" }
 data-sep := if os-name == "windows" { ";" } else { ":" }
 cli-bin := if os-name == "windows" { "as_cli/AssetStudioModCLI.exe" } else { "as_cli/AssetStudioModCLI" }
 cp-cmd := "uv run scripts/copy_dir.py"
@@ -47,6 +47,8 @@ package-nuitka: build-cython check-as-cli
         --include-package=f3d \
         --include-package=UnityPy \
         --include-package=fmod_toolkit \
+        --include-package=pyfmodex \
+        --include-package=ctypes \
         --include-module=PIL \
         --include-module=src.uma_decryptor \
         --windows-disable-console \
