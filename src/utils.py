@@ -1,4 +1,5 @@
 import sys
+import os
 
 
 def is_nuitka() -> bool:
