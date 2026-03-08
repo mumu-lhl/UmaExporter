@@ -91,7 +91,7 @@ jobs:
         if [ "${{ matrix.packager }}" == "pyinstaller" ]; then
           cp -r dist/UmaExporter/* staging/UmaExporter/
         else
-          cp -r dist-nuitka/UmaExporter.dist/* staging/UmaExporter/
+          cp -r dist-nuitka/main.dist/* staging/UmaExporter/
         fi
       shell: bash
 

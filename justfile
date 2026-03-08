@@ -56,9 +56,9 @@ package-nuitka: build-cython check-as-cli
         {{nuitka-win-flags}} \
         main.py
     @echo "Placing as_cli next to the binary..."
-    {{cp-cmd}} as_cli dist-nuitka/UmaExporter.dist/as_cli
-    {{cp-cmd}} README.md dist-nuitka/UmaExporter.dist/使用说明.txt
-    @echo "Build complete! Check the 'dist-nuitka/UmaExporter.dist' directory."
+    {{cp-cmd}} as_cli dist-nuitka/main.dist/as_cli
+    {{cp-cmd}} README.md dist-nuitka/main.dist/使用说明.txt
+    @echo "Build complete! Check the 'dist-nuitka/main.dist' directory."
 
 
 # Run Asset Studio CLI
