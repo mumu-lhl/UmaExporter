@@ -4,6 +4,10 @@ from src.ui.main_window import UmaExporterApp
 
 def main():
     multiprocessing.freeze_support()
+    try:
+        multiprocessing.set_start_method('spawn', force=True)
+    except RuntimeError:
+        pass
 
     import os
     import sys
