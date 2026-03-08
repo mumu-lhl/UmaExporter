@@ -2,8 +2,18 @@ import multiprocessing
 import os
 import sys
 
+from src.utils import is_nuitka
+
+# Fix archspec JSON discovery in Nuitka standalone builds.
+# Must be set BEFORE importing any module that uses archspec.
+if is_nuitka():
+    _base_path = os.path.dirname(os.path.abspath(sys.argv[0]))
+    _archspec_data = os.path.join(_base_path, "archspec", "json", "cpu")
+    if os.path.exists(_archspec_data):
+        os.environ["ARCHSPEC_CPU_DIR"] = _archspec_data
+
 # Packaged environment fixes - Supports both PyInstaller (sys.frozen) and Nuitka (__compiled__)
-is_frozen = getattr(sys, "frozen", False) or "__compiled__" in globals()
+is_frozen = getattr(sys, "frozen", False) or is_nuitka()
 
 if is_frozen:
     try:

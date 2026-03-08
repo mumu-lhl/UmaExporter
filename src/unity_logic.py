@@ -11,6 +11,7 @@ import UnityPy
 
 from src.decryptor import decrypt_bundle, DEFAULT_KEY
 from src.constants import Config
+from src.utils import is_nuitka
 
 # Store original load_file to wrap it
 _orig_load_file = UnityPy.Environment.load_file
@@ -45,16 +46,6 @@ def _custom_load_file(self, file, is_dependency=False, name=None):
 # Apply monkey patch to the class
 UnityPy.Environment.load_file = _custom_load_file
 UnityPy.environment.Environment.load_file = _custom_load_file
-
-
-# Fix archspec JSON discovery in Nuitka standalone builds.
-# Nuitka compiles archspec into an extension module, which breaks its internal 
-# relative path logic for finding JSON data. PyInstaller doesn't need this.
-if hasattr(sys, "python_compiled"):
-    _base_path = os.path.dirname(os.path.abspath(sys.argv[0]))
-    _archspec_data = os.path.join(_base_path, "archspec", "json", "cpu")
-    if os.path.exists(_archspec_data):
-        os.environ["ARCHSPEC_CPU_DIR"] = _archspec_data
 
 
 class UnityLogic:
@@ -428,11 +419,21 @@ class UnityLogic:
                 print(f"Running CLI command: {' '.join(cmd)}")
                 # Scan BEFORE to compare
                 pre_files = set()
-                for root, dirs, files in os.walk(export_dir):
+                for root, _, files in os.walk(export_dir):
                     for f in files:
                         pre_files.add(os.path.join(root, f))
 
-                result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+                # Disable Nuitka self-execution mechanism for subprocess calls
+                if is_nuitka():
+                    env = os.environ.copy()
+                    env["NUITKA_SELF_EXECUTION"] = "0"
+                    result = subprocess.run(
+                        cmd, check=True, capture_output=True, text=True, env=env
+                    )
+                else:
+                    result = subprocess.run(
+                        cmd, check=True, capture_output=True, text=True
+                    )
 
                 # Scan AFTER to count new files
                 for root, dirs, files in os.walk(export_dir):

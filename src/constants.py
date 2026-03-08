@@ -4,18 +4,20 @@ import platform
 import locale
 import sys
 
+from src.utils import is_nuitka
+
 CONFIG_FILE = "config.json"
 
 
 class Config:
     @staticmethod
     def get_bundle_dir():
-        """Returns the base directory of the application, handling PyInstaller bundles.
-        When frozen, returns the directory containing the executable.
+        """Returns the base directory of the application, handling PyInstaller and Nuitka bundles.
+        When frozen or compiled, returns the directory containing the executable.
         """
-        if getattr(sys, "frozen", False):
-            # For PyInstaller onedir, sys.executable is the binary inside the bundle folder.
-            # os.path.dirname(sys.executable) is the bundle folder root.
+        if getattr(sys, "frozen", False) or is_nuitka():
+            # For PyInstaller onedir and Nuitka standalone:
+            # sys.executable is the binary, os.path.dirname(sys.executable) is the bundle folder root.
             return os.path.dirname(sys.executable)
         else:
             # Running from source

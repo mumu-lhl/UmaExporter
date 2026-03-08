@@ -38,7 +38,7 @@ debug-nuitka: build-cython check-as-cli
         --follow-imports \
         --assume-yes-for-downloads \
         --output-filename=UmaExporter \
-        --enable-plugin=multiprocessing \
+        --no-deployment-flag=self-execution \
         --lto=no \
         --include-package-data=dearpygui \
         --include-package-data=f3d \
@@ -79,7 +79,6 @@ package-nuitka: build-cython check-as-cli
         --follow-imports \
         --assume-yes-for-downloads \
         --output-filename=UmaExporter \
-        --enable-plugin=multiprocessing \
         --no-deployment-flag=self-execution \
         {{nuitka-upx-flag}} \
         --include-package-data=dearpygui \
