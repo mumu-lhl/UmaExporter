@@ -29,10 +29,6 @@ def _launch_f3d_viewer(queue):
         interactor = eng.interactor
         window = eng.window
 
-        base_dir = Path(os.getcwd())
-        filename = Path("DaySkyHDRI046A_2K_HDR.exr")
-        hdri_file = f3d.Utils.collapse_path(filename, base_dir)
-
         eng.options.update(
             {
                 "model.scivis.cells": True,
@@ -42,7 +38,7 @@ def _launch_f3d_viewer(queue):
                 "ui.axis": True,
                 # "ui.fps": True,
                 "render.grid.enable": True,
-                "render.light.intensity": 3.5,
+                "render.light.intensity": 2.5,
                 "render.hdri.ambient": True,
                 "render.effect.tone_mapping": True,
                 # "render.effect.ambient_occlusion": True,
