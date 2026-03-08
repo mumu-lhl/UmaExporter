@@ -82,6 +82,8 @@ def _launch_f3d_viewer(queue):
         print("[F3D] Starting interactor...")
         interactor.start(0.1, timer_callback)
 
+    except KeyboardInterrupt:
+        print("[F3D] Viewer interrupted by user (Ctrl+C).")
     except Exception as e:
         print(f"F3D Viewer Error: {e}")
     finally:
@@ -224,19 +226,23 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             dpg.set_value("main_tabs", "settings_tab")
 
         dpg.set_primary_window("PrimaryWindow", True)
-        while dpg.is_dearpygui_running():
-            self._drain_ui_tasks()
-            dpg.render_dearpygui_frame()
+        try:
+            while dpg.is_dearpygui_running():
+                self._drain_ui_tasks()
+                dpg.render_dearpygui_frame()
+        finally:
+            if self.f3d_queue:
+                try:
+                    self.f3d_queue.put("STOP")
+                except:
+                    pass
+            if self.f3d_process and self.f3d_process.is_alive():
+                self.f3d_process.terminate()
+            self.executor.shutdown(wait=False, cancel_futures=True)
 
-        if self.f3d_queue:
-            self.f3d_queue.put("STOP")
-        if self.f3d_process and self.f3d_process.is_alive():
-            self.f3d_process.terminate()
-        self.executor.shutdown(wait=False, cancel_futures=True)
-
-        dpg.destroy_context()
-        if self.db:
-            self.db.close()
+            dpg.destroy_context()
+            if self.db:
+                self.db.close()
 
     def _queue_ui_task(self, task):
         self.ui_tasks.put(task)
