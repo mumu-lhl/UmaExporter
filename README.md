@@ -4,6 +4,8 @@
 
 ## 安装
 
+需要预先安装 [.Net 9 运行时](https://dotnet.microsoft.com/zh-cn/download/dotnet/9.0)。
+
 可以到本项目的 GitHub Action 中找安装包，每次提交都会自动生成安装包。
 
 或者在 Release 中下载。
