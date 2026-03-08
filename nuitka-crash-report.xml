@@ -1,0 +1,67 @@
+<?xml version='1.0' encoding='utf8'?>
+<nuitka-compilation-report nuitka_version="4.0.3" nuitka_commercial_version="not installed" mode="standalone" completion="error exit message (1)" exit_message="upx: No UPX binary found, please use '--upx-binary' option to specify it.">
+  <performance>
+    <memory_usage name="after_launch" value="68710400" />
+  </performance>
+  <data_composer blob_size="None" />
+  <command_line>
+    <option value="--standalone" />
+    <option value="--show-progress" />
+    <option value="--follow-imports" />
+    <option value="--assume-yes-for-downloads" />
+    <option value="--output-filename=UmaExporter" />
+    <option value="--enable-plugin=numpy" />
+    <option value="--enable-plugin=multiprocessing" />
+    <option value="--enable-plugin=upx" />
+    <option value="--include-package-data=dearpygui" />
+    <option value="--include-package-data=f3d" />
+    <option value="--include-package-data=UnityPy" />
+    <option value="--include-package-data=fmod_toolkit" />
+    <option value="--output-dir=dist-nuitka" />
+    <option value="--no-pyi-file" />
+    <option value="--include-package=dearpygui" />
+    <option value="--include-package=f3d" />
+    <option value="--include-package=UnityPy" />
+    <option value="--include-package=fmod_toolkit" />
+    <option value="--include-module=PIL" />
+    <option value="--include-module=src.uma_decryptor" />
+    <option value="--windows-disable-console" />
+    <option value="--nofollow-import-to=tkinter" />
+    <option value="--nofollow-import-to=matplotlib" />
+    <option value="--nofollow-import-to=unittest" />
+    <option value="main.py" />
+  </command_line>
+  <plugins>
+    <plugin name="anti-bloat" user_enabled="no" />
+    <plugin name="data-files" user_enabled="no" />
+    <plugin name="delvewheel" user_enabled="no" />
+    <plugin name="dll-files" user_enabled="no" />
+    <plugin name="eventlet" user_enabled="no" />
+    <plugin name="gevent" user_enabled="no" />
+    <plugin name="gi" user_enabled="no" />
+    <plugin name="glfw" user_enabled="no" />
+    <plugin name="implicit-imports" user_enabled="no" />
+    <plugin name="kivy" user_enabled="no" />
+    <plugin name="matplotlib" user_enabled="no" />
+    <plugin name="multiprocessing" user_enabled="no" />
+    <plugin name="options-nanny" user_enabled="no" />
+    <plugin name="pbr-compat" user_enabled="no" />
+    <plugin name="pkg-resources" user_enabled="no" />
+    <plugin name="playwright" user_enabled="no" />
+    <plugin name="pywebview" user_enabled="no" />
+    <plugin name="spacy" user_enabled="no" />
+    <plugin name="transformers" user_enabled="no" />
+    <plugin name="upx" user_enabled="yes" />
+  </plugins>
+  <distributions />
+  <python python_exe="${sys.prefix}/bin/python3" python_flavor="Fedora Python" python_version="3.14.3" os_name="Linux" os_release="Fedora-43" arch_name="x86_64" filesystem_encoding="utf-8" gil="yes">
+    <search_path>
+      <path value="${cwd}" />
+      <path value="${sys.real_prefix}/lib64/python3.14" />
+      <path value="${sys.real_prefix}/lib64/python3.14/lib-dynload" />
+      <path value="${sys.prefix}/lib64/python3.14/site-packages" />
+      <path value="${sys.prefix}/lib/python3.14/site-packages" />
+    </search_path>
+  </python>
+  <output />
+</nuitka-compilation-report>

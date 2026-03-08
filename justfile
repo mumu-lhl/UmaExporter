@@ -35,8 +35,7 @@ package-nuitka: build-cython check-as-cli
         --follow-imports \
         --assume-yes-for-downloads \
         --output-filename=UmaExporter \
-        --plugin-enable=numpy \
-        --plugin-enable=multiprocessing \
+        --enable-plugin=upx \
         --include-package-data=dearpygui \
         --include-package-data=f3d \
         --include-package-data=UnityPy \
