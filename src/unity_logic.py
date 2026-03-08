@@ -288,7 +288,7 @@ class UnityLogic:
             if has_animator:
                 print("Animator detected, using AssetStudioModCLI for export...")
                 cli_count = UnityLogic._export_via_cli(
-                    physical_paths, export_dir, mode="animator"
+                    physical_paths, export_dir, mode="animator", bundle_keys=bundle_keys
                 )
                 count += cli_count
 
