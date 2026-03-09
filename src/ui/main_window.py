@@ -13,6 +13,7 @@ import dearpygui.dearpygui as dpg
 
 from src.constants import Config
 from src.database import UmaDatabase
+from src.app_db import app_db
 from src.unity_logic import UnityLogic
 from src.ui.controllers import DragMixin, NavigationMixin, PreviewMixin
 from src.ui.i18n import i18n
@@ -646,6 +647,11 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                             width=200,
                             callback=self.apply_settings,
                         )
+                        dpg.add_button(
+                            label=i18n("btn_clear_cache"),
+                            width=200,
+                            callback=self.on_clear_thumbnail_cache,
+                        )
                         dpg.add_text("", tag="settings_status_msg")
 
                     dpg.add_text(
@@ -753,6 +759,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         hash_tag = f"{prefix}ui_hash"
         size_tag = f"{prefix}ui_size"
         phys_tag = f"{prefix}ui_phys"
+        thumbnail_container_tag = f"{prefix}ui_thumbnail_container"
         unity_parent_tag = f"{prefix}ui_unity_parent"
         unity_image_container_tag = f"{prefix}ui_unity_image_container"
         dep_parent_tag = f"{prefix}ui_dep_parent"
@@ -779,13 +786,20 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         dpg.add_text(i18n("label_select_file"), tag=path_tag, wrap=650)
 
         with dpg.group(tag=details_group_tag, show=False):
-            dpg.add_text("", tag=f"{prefix}ui_path_label", wrap=650)
             with dpg.group(horizontal=True):
                 dpg.add_text(i18n("prop_storage_hash"))
                 dpg.add_input_text(tag=hash_tag, readonly=True, width=-1)
             dpg.add_text("", tag=size_tag)
             dpg.add_text("", tag=phys_tag, color=[120, 150, 255])
             dpg.add_spacer(height=10)
+            
+            # Thumbnail container
+            with dpg.group(tag=thumbnail_container_tag, show=False):
+                dpg.add_text(i18n("label_thumbnail"), color=[0, 255, 255])
+                dpg.add_group(tag=f"{prefix}ui_thumbnail_actions_parent")
+                dpg.add_group(tag=f"{prefix}ui_thumbnail_image_parent")
+
+            dpg.add_spacer(height=5)
             dpg.add_button(
                 label=i18n("btn_export"),
                 width=200,
@@ -1282,3 +1296,21 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     dpg.set_value(status_tag, "")
 
             threading.Timer(3.0, clear_msg).start()
+
+    def on_clear_thumbnail_cache(self, sender, app_data, user_data, *args):
+        """Clears all generated thumbnails and resets the UI display."""
+        app_db.clear_all()
+        dpg.set_value("settings_status_msg", i18n("msg_cache_cleared"))
+
+        # Reset thumbnails in current detail views
+        for prefix in self._detail_prefixes():
+            thumbnail_container = f"{prefix}ui_thumbnail_container"
+            image_parent = f"{prefix}ui_thumbnail_image_parent"
+            actions_parent = f"{prefix}ui_thumbnail_actions_parent"
+            
+            if dpg.does_item_exist(thumbnail_container):
+                dpg.configure_item(thumbnail_container, show=False)
+            if dpg.does_item_exist(image_parent):
+                dpg.delete_item(image_parent, children_only=True)
+            if dpg.does_item_exist(actions_parent):
+                dpg.delete_item(actions_parent, children_only=True)

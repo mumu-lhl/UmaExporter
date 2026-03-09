@@ -135,6 +135,38 @@ class Config:
             print(f"Failed to save config: {e}")
 
     @classmethod
+    def get_app_data_dir(cls):
+        """Returns the system-standard directory for application data (thumbnails, cache, etc.)."""
+        app_name = "UmaExporter"
+        system = platform.system()
+
+        if system == "Windows":
+            base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~/AppData/Local")
+            path = os.path.join(base, app_name)
+        elif system == "Darwin":  # macOS
+            path = os.path.expanduser(f"~/Library/Application Support/{app_name}")
+        else:  # Linux/Other
+            base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+            path = os.path.join(base, app_name)
+
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+        return path
+
+    @classmethod
+    def get_thumbnail_dir(cls):
+        """Returns the directory where thumbnails are stored."""
+        path = os.path.join(cls.get_app_data_dir(), "thumbnails")
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+        return path
+
+    @classmethod
+    def get_app_db_path(cls):
+        """Returns the path to the main application database (for thumbnails, settings, etc.)."""
+        return os.path.join(cls.get_app_data_dir(), "app_data.db")
+
+    @classmethod
     def get_db_path(cls):
         return os.path.join(cls.BASE_PATH, "meta") if cls.BASE_PATH else ""
 

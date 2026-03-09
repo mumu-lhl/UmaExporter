@@ -1,11 +1,14 @@
 import os
 import time
+import threading
 
 import dearpygui.dearpygui as dpg
 
 from src.constants import Config
 from src.unity_logic import UnityLogic
 from src.ui.i18n import i18n
+from src.app_db import app_db
+from src.ui.f3d_worker import generate_thumbnail
 
 
 class PreviewMixin:
@@ -23,20 +26,96 @@ class PreviewMixin:
 
     def _update_asset_properties_panel(self, prefix, user_data):
         dpg.configure_item(f"{prefix}details_group", show=True)
-        # Keep the top-level path display but also update the detailed label inside the group
+        # Keep the top-level path display
         dpg.set_value(
             f"{prefix}ui_path", f"{i18n('prop_logical_path')}{user_data['full_path']}"
-        )
-        dpg.set_value(
-            f"{prefix}ui_path_label",
-            f"{i18n('prop_logical_path')}{user_data['full_path']}",
         )
         # Only set the hash value to the copyable field
         dpg.set_value(f"{prefix}ui_hash", user_data["hash"])
         formatted_size = self._format_size(user_data["size"])
         dpg.set_value(f"{prefix}ui_size", f"{i18n('prop_file_size')}{formatted_size}")
         h = user_data["hash"]
+        self.current_asset_hash = h
         dpg.set_value(f"{prefix}ui_phys", f"{i18n('prop_phys_loc')}dat/{h[:2]}/{h}")
+
+        self._check_and_display_thumbnail(prefix, h)
+
+    def _check_and_display_thumbnail(self, prefix, asset_hash):
+        thumbnail_container = f"{prefix}ui_thumbnail_container"
+        image_parent = f"{prefix}ui_thumbnail_image_parent"
+        
+        if not dpg.does_item_exist(thumbnail_container) or not dpg.does_item_exist(image_parent):
+            return
+
+        dpg.delete_item(image_parent, children_only=True)
+
+        path = app_db.get_thumbnail(asset_hash)
+        if path and os.path.exists(path):
+            dpg.configure_item(thumbnail_container, show=True)
+            self._load_thumbnail_image_async(prefix, path, asset_hash)
+        else:
+            # Hide the container if no button is added yet
+            # But the animator button logic will show it later if needed.
+            dpg.configure_item(thumbnail_container, show=False)
+
+    def _load_thumbnail_image_async(self, prefix, path, asset_hash):
+        def worker():
+            try:
+                from PIL import Image
+                img = Image.open(path).convert("RGBA")
+                width, height = img.size
+                # Resize if too large
+                if width > 450:
+                    scale = 450 / width
+                    img = img.resize((450, int(height * scale)))
+                    width, height = img.size
+                
+                # Convert to flat float array for DPG
+                import numpy as np
+                data = np.array(img).flatten().astype(np.float32) / 255.0
+                return data, width, height
+            except Exception as e:
+                print(f"Error loading thumbnail image: {e}")
+                return None, 0, 0
+
+        future = self.executor.submit(worker)
+
+        def done_callback(f):
+            data, w, h = f.result()
+            if data is not None:
+                self._queue_ui_task(lambda: self._apply_thumbnail_texture(prefix, data, w, h, asset_hash))
+
+        future.add_done_callback(done_callback)
+
+    def _apply_thumbnail_texture(self, prefix, data, width, height, asset_hash):
+        # Check if we are still on the same asset
+        if not hasattr(self, "current_asset_hash") or self.current_asset_hash != asset_hash:
+             # Wait, PreviewMixin might not have current_asset_hash yet. 
+             # Let's ensure it's set in _update_asset_properties_panel.
+             pass
+
+        tex_tag = f"{prefix}thumbnail_tex_{asset_hash}"
+        image_tag = f"{prefix}thumbnail_image_{prefix}"
+        image_parent = f"{prefix}ui_thumbnail_image_parent"
+        container = f"{prefix}ui_thumbnail_container"
+
+        with self.texture_lock:
+            if dpg.does_item_exist(tex_tag):
+                dpg.delete_item(tex_tag)
+            
+            dpg.add_static_texture(
+                width=width,
+                height=height,
+                default_value=data,
+                tag=tex_tag,
+                parent="main_texture_registry",
+            )
+
+            if dpg.does_item_exist(image_tag):
+                dpg.delete_item(image_tag)
+
+            dpg.add_image(tex_tag, parent=image_parent, tag=image_tag)
+            dpg.configure_item(container, show=True)
 
     def _reset_detail_containers(self, is_drag_preview=False):
         for prefix in self._detail_prefixes():
@@ -91,6 +170,11 @@ class PreviewMixin:
 
         for prefix in self._detail_prefixes():
             self._render_unity_objects(prefix, phys_path, objs, bundle_key=bundle_key)
+
+            # Check if there's an animator to enable thumbnail generation
+            has_animator = any(obj[0] == "Animator" for obj in objs)
+            if has_animator:
+                self._update_thumbnail_button(prefix, current_asset_id)
 
         if (
             self.scene_auto_preview_request
@@ -197,9 +281,17 @@ class PreviewMixin:
         if not self.current_view_is_drag_preview:
             return
 
+        asset_hash = self.current_asset_hash
+
         for prefix in self._detail_prefixes():
             # Render internal objects even during drag
             self._render_unity_objects(prefix, phys_path, objs, bundle_key=bundle_key)
+
+            # Check for animator to show thumbnail if exists
+            has_animator = any(obj[0] == "Animator" for obj in objs)
+            if has_animator:
+                self._check_and_display_thumbnail(prefix, asset_hash)
+                self._update_thumbnail_button(prefix, current_asset_id)
 
             image_container_tag = f"{prefix}ui_unity_image_container"
             header_tag = f"{prefix}ui_texture_preview_header"
@@ -378,6 +470,94 @@ class PreviewMixin:
             self.on_animator_preview_click(
                 None, None, (phys_path, path_id, prefix, object_name, bundle_key)
             )
+
+    def _update_thumbnail_button(self, prefix, asset_id):
+        thumbnail_container = f"{prefix}ui_thumbnail_container"
+        actions_parent = f"{prefix}ui_thumbnail_actions_parent"
+        
+        if not dpg.does_item_exist(thumbnail_container) or not dpg.does_item_exist(actions_parent):
+            return
+
+        dpg.configure_item(thumbnail_container, show=True)
+        dpg.delete_item(actions_parent, children_only=True)
+        
+        asset_hash = self.current_asset_hash
+        has_thumb = app_db.get_thumbnail(asset_hash) is not None
+        label = i18n("btn_regenerate_thumbnail") if has_thumb else i18n("btn_generate_thumbnail")
+        
+        dpg.add_button(
+            label=label,
+            parent=actions_parent,
+            callback=self.on_generate_thumbnail_click,
+            user_data=(asset_id, prefix)
+        )
+
+    def on_generate_thumbnail_click(self, sender, app_data, user_data):
+        asset_id, prefix = user_data
+        asset_hash = self.current_asset_hash
+        
+        # Disable button and show status
+        if sender:
+            dpg.configure_item(sender, enabled=False)
+        
+        actions_parent = f"{prefix}ui_thumbnail_actions_parent"
+        status_tag = f"{prefix}ui_thumbnail_status"
+        if dpg.does_item_exist(status_tag):
+            dpg.delete_item(status_tag)
+        
+        if dpg.does_item_exist(actions_parent):
+            dpg.add_text(i18n("msg_generating_thumbnail"), tag=status_tag, parent=actions_parent, color=[255, 200, 0])
+
+        def worker():
+            try:
+                # 1. Export FBX
+                tmp_fbx_path = self._build_animator_preview(asset_id)
+                if not tmp_fbx_path:
+                    return None
+                
+                # 2. Generate PNG
+                output_filename = f"{asset_hash}.png"
+                output_path = os.path.join(Config.get_thumbnail_dir(), output_filename)
+                
+                success = generate_thumbnail(tmp_fbx_path, output_path)
+                
+                # Cleanup tmp FBX
+                try:
+                    os.remove(tmp_fbx_path)
+                except:
+                    pass
+                
+                if success:
+                    return output_path
+            except Exception as e:
+                print(f"Thumbnail worker error: {e}")
+            return None
+
+        future = self.executor.submit(worker)
+
+        def done_callback(f):
+            result_path = f.result()
+            self._queue_ui_task(lambda: self._finish_thumbnail_generation(prefix, asset_hash, result_path, sender))
+
+        future.add_done_callback(done_callback)
+
+    def _finish_thumbnail_generation(self, prefix, asset_hash, result_path, button_sender):
+        status_tag = f"{prefix}ui_thumbnail_status"
+        if dpg.does_item_exist(status_tag):
+            dpg.delete_item(status_tag)
+        
+        if result_path:
+            app_db.set_thumbnail(asset_hash, result_path)
+            # Refresh display
+            self._check_and_display_thumbnail(prefix, asset_hash)
+            # Update button to "Regenerate"
+            self._update_thumbnail_button(prefix, self.current_asset_id)
+        else:
+            actions_parent = f"{prefix}ui_thumbnail_actions_parent"
+            if dpg.does_item_exist(actions_parent):
+                dpg.add_text("Failed to generate thumbnail.", parent=actions_parent, color=[255, 0, 0])
+            if button_sender and dpg.does_item_exist(button_sender):
+                dpg.configure_item(button_sender, enabled=True)
 
     def on_mesh_preview_click(self, sender, app_data, user_data, *args):
         phys_path, path_id = user_data[:2]
