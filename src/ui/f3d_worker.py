@@ -1,23 +1,22 @@
 import os
 import sys
 
-def generate_thumbnail(model_path, output_path):
-    """Generates a thumbnail image for a 3D model using f3d."""
+def generate_thumbnail(model_path, output_path, engine=None):
+    """Generates a thumbnail image for a 3D model using f3d.
+    
+    If engine is provided, it reuses it for faster performance.
+    """
     try:
-        import f3d
-    except ImportError:
-        print("[F3D] Error: f3d module not found.")
-        return False
-
-    try:
-        # Create engine in offscreen (headless) mode
-        eng = f3d.Engine.create(offscreen=True)
-        scene = eng.scene
-        window = eng.window
+        if engine is None:
+            import f3d
+            # Create engine in offscreen (headless) mode
+            engine = f3d.Engine.create(offscreen=True)
+            
+        scene = engine.scene
+        window = engine.window
 
         # Configure options for better look
-        eng.options.update({
-            "render.grid.enable": False,
+        engine.options.update({
             "render.light.intensity": 2.5,
             "render.hdri.ambient": True,
             "render.effect.tone_mapping": True,
@@ -25,18 +24,19 @@ def generate_thumbnail(model_path, output_path):
             "render.background.color": [0.1, 0.1, 0.1], # Dark grey
         })
 
+        scene.clear()
         scene.add(model_path)
-        
+
         # Access camera from window
         cam = window.camera
         cam.reset_to_bounds()
         cam.azimuth(45)
         cam.elevation(30)
-        
+
         window.render()
         img = window.render_to_image()
         img.save(output_path)
-        
+
         return True
     except Exception as e:
         print(f"[F3D] Thumbnail generation error: {e}")

@@ -7,7 +7,7 @@ import dearpygui.dearpygui as dpg
 from src.constants import Config
 from src.unity_logic import UnityLogic
 from src.ui.i18n import i18n
-from src.app_db import app_db
+from src.thumbnail_manager import ThumbnailManager as thumb_manager
 from src.ui.f3d_worker import generate_thumbnail
 
 
@@ -47,18 +47,20 @@ class PreviewMixin:
         if not dpg.does_item_exist(thumbnail_container) or not dpg.does_item_exist(image_parent):
             return
 
-        dpg.delete_item(image_parent, children_only=True)
+        # Increment request ID to cancel previous loads for this prefix
+        self.thumbnail_request_ids[prefix] += 1
+        request_id = self.thumbnail_request_ids[prefix]
 
-        path = app_db.get_thumbnail(asset_hash)
+        path = thumb_manager.get_thumbnail(asset_hash)
         if path and os.path.exists(path):
             dpg.configure_item(thumbnail_container, show=True)
-            self._load_thumbnail_image_async(prefix, path, asset_hash)
+            self._load_thumbnail_image_async(prefix, path, asset_hash, request_id)
         else:
-            # Hide the container if no button is added yet
-            # But the animator button logic will show it later if needed.
+            # Clear previous if any
+            dpg.delete_item(image_parent, children_only=True)
             dpg.configure_item(thumbnail_container, show=False)
 
-    def _load_thumbnail_image_async(self, prefix, path, asset_hash):
+    def _load_thumbnail_image_async(self, prefix, path, asset_hash, request_id):
         def worker():
             try:
                 from PIL import Image
@@ -70,10 +72,10 @@ class PreviewMixin:
                     img = img.resize((450, int(height * scale)))
                     width, height = img.size
                 
-                # Convert to flat float array for DPG
+                # Convert to flat float list for DPG (PLAIN LIST, NOT NUMPY)
                 import numpy as np
-                data = np.array(img).flatten().astype(np.float32) / 255.0
-                return data, width, height
+                data_np = np.array(img).flatten().astype(np.float32) / 255.0
+                return data_np.tolist(), width, height
             except Exception as e:
                 print(f"Error loading thumbnail image: {e}")
                 return None, 0, 0
@@ -81,46 +83,74 @@ class PreviewMixin:
         future = self.executor.submit(worker)
 
         def done_callback(f):
-            data, w, h = f.result()
-            if data is not None:
-                self._queue_ui_task(lambda: self._apply_thumbnail_texture(prefix, data, w, h, asset_hash))
+            try:
+                data, w, h = f.result()
+                if data is not None:
+                    # MUST queue UI task, done_callback is on worker thread
+                    self._queue_ui_task(lambda: self._apply_thumbnail_texture(prefix, data, w, h, asset_hash, request_id))
+            except Exception as e:
+                print(f"Thumbnail load callback error: {e}")
 
         future.add_done_callback(done_callback)
 
-    def _apply_thumbnail_texture(self, prefix, data, width, height, asset_hash):
-        # Check if we are still on the same asset
-        if not hasattr(self, "current_asset_hash") or self.current_asset_hash != asset_hash:
-             # Wait, PreviewMixin might not have current_asset_hash yet. 
-             # Let's ensure it's set in _update_asset_properties_panel.
-             pass
+    def _apply_thumbnail_texture(self, prefix, data, width, height, asset_hash, request_id):
+        # 1. Check if this is still the latest request for this prefix
+        if request_id != self.thumbnail_request_ids.get(prefix):
+            return
 
-        tex_tag = f"{prefix}thumbnail_tex_{asset_hash}"
+        # 2. Double check current selection (only if not in drag preview which might be more transient)
+        if not self.current_view_is_drag_preview:
+            if not hasattr(self, "current_asset_hash") or self.current_asset_hash != asset_hash:
+                 return
+
         image_tag = f"{prefix}thumbnail_image_{prefix}"
         image_parent = f"{prefix}ui_thumbnail_image_parent"
         container = f"{prefix}ui_thumbnail_container"
 
+        # Ensure UI components exist before proceeding
+        if not dpg.does_item_exist(image_parent):
+            return
+
+        # Use a unique tag with timestamp to avoid name collisions/stale data
+        tex_tag = f"{prefix}thumb_tex_{int(time.time() * 1000)}"
+
         with self.texture_lock:
-            if dpg.does_item_exist(tex_tag):
-                dpg.delete_item(tex_tag)
-            
-            dpg.add_static_texture(
-                width=width,
-                height=height,
-                default_value=data,
-                tag=tex_tag,
-                parent="main_texture_registry",
-            )
+            try:
+                dpg.add_static_texture(
+                    width=width,
+                    height=height,
+                    default_value=data,
+                    tag=tex_tag,
+                    parent="main_texture_registry",
+                )
 
-            if dpg.does_item_exist(image_tag):
-                dpg.delete_item(image_tag)
+                if dpg.does_item_exist(image_tag):
+                    dpg.delete_item(image_tag)
 
-            dpg.add_image(tex_tag, parent=image_parent, tag=image_tag)
-            dpg.configure_item(container, show=True)
+                # Clear children to ensure no stale text/images
+                dpg.delete_item(image_parent, children_only=True)
+                
+                dpg.add_image(tex_tag, parent=image_parent, tag=image_tag)
+                dpg.configure_item(container, show=True)
+                
+                # Cleanup previous texture
+                self._clear_thumbnail_texture(prefix)
+                self.thumbnail_texture_tags[prefix] = tex_tag
+                
+            except Exception as e:
+                print(f"Failed to apply thumbnail texture: {e}")
+
+    def _clear_thumbnail_texture(self, prefix):
+        tag = self.thumbnail_texture_tags.get(prefix)
+        if tag and dpg.does_item_exist(tag):
+            dpg.delete_item(tag)
+        self.thumbnail_texture_tags[prefix] = None
 
     def _reset_detail_containers(self, is_drag_preview=False):
         for prefix in self._detail_prefixes():
             if not is_drag_preview:
                 self._clear_preview_texture(prefix)
+                self._clear_thumbnail_texture(prefix)
             messages = []
             if not is_drag_preview:
                 messages.append((f"{prefix}ui_unity_parent", i18n("msg_loading_unity")))
@@ -482,7 +512,7 @@ class PreviewMixin:
         dpg.delete_item(actions_parent, children_only=True)
         
         asset_hash = self.current_asset_hash
-        has_thumb = app_db.get_thumbnail(asset_hash) is not None
+        has_thumb = thumb_manager.get_thumbnail(asset_hash) is not None
         label = i18n("btn_regenerate_thumbnail") if has_thumb else i18n("btn_generate_thumbnail")
         
         dpg.add_button(
@@ -547,7 +577,7 @@ class PreviewMixin:
             dpg.delete_item(status_tag)
         
         if result_path:
-            app_db.set_thumbnail(asset_hash, result_path)
+            thumb_manager.set_thumbnail(asset_hash, result_path)
             # Refresh display
             self._check_and_display_thumbnail(prefix, asset_hash)
             # Update button to "Regenerate"
@@ -767,6 +797,12 @@ class PreviewMixin:
                     dpg.set_value(preview_loading_tag, "Invalid texture size.")
                 return
 
+            # Ensure we are passing a plain list to DPG
+            if hasattr(data_flat, "tolist"):
+                data_flat = data_flat.tolist()
+            elif not isinstance(data_flat, list):
+                data_flat = list(data_flat)
+
             expected_size = width * height * 4
             actual_size = len(data_flat)
             if actual_size != expected_size:
@@ -787,19 +823,9 @@ class PreviewMixin:
                         tag=tex_tag,
                         parent="main_texture_registry",
                     )
-                except Exception:
-                    fallback_data = (
-                        data_flat.tolist()
-                        if hasattr(data_flat, "tolist")
-                        else list(data_flat)
-                    )
-                    dpg.add_static_texture(
-                        width=width,
-                        height=height,
-                        default_value=fallback_data,
-                        tag=tex_tag,
-                        parent="main_texture_registry",
-                    )
+                except Exception as e:
+                    print(f"Texture creation failed: {e}")
+                    return
 
                 if dpg.does_item_exist(image_tag):
                     dpg.delete_item(image_tag)

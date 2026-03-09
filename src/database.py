@@ -305,6 +305,33 @@ class UmaDatabase:
             )
         return cursor.fetchall()
 
+    def get_all_animator_assets(self, categories=None):
+        """Retrieves all asset info for specified categories (scene, prop)."""
+        cursor = self.conn.cursor()
+        cols = "i, n, l, h, e" if Config.DB_ENCRYPTED else "i, n, l, h, NULL as e"
+        
+        query_base = f"SELECT {cols} FROM a WHERE "
+        conditions = []
+        
+        # Define 3D-related path filters
+        scene_filter = "n LIKE '3d/env/%'"
+        prop_filters = "(n LIKE '3d/chara/prop/%' OR n LIKE '3d/chara/toonprop/%' OR n LIKE '3d/chara/richprop/%')"
+        
+        if categories is None or "all" in categories:
+            # "All" now specifically means Scenes + Props to avoid scanning 300k+ non-3D assets
+            conditions.append(f"({scene_filter} OR {prop_filters})")
+        else:
+            if "scene" in categories:
+                conditions.append(scene_filter)
+            if "prop" in categories:
+                conditions.append(prop_filters)
+        
+        if not conditions:
+            return []
+            
+        cursor.execute(f"{query_base} ({' OR '.join(conditions)})")
+        return cursor.fetchall()
+
     def close(self):
         self.conn.close()
 

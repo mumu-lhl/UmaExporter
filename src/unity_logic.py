@@ -355,10 +355,177 @@ class UnityLogic:
             print(f"Global export error: {e}")
 
     @staticmethod
+    def batch_export_animators(export_configs, tmp_root):
+        """
+        High-performance batch export.
+        export_configs: List of dicts { "physical_paths": [], "bundle_keys": [] }
+        """
+        staging_dir = os.path.join(tmp_root, "batch_staging")
+        export_dir = os.path.join(tmp_root, "batch_output")
+        os.makedirs(staging_dir, exist_ok=True)
+        os.makedirs(export_dir, exist_ok=True)
+
+        all_physical_paths = []
+        all_bundle_keys = {}
+
+        # 1. Collect all paths and keys
+        for cfg in export_configs:
+            paths = cfg.get("physical_paths", [])
+            keys = cfg.get("bundle_keys", [])
+            for i, p in enumerate(paths):
+                if p not in all_physical_paths:
+                    all_physical_paths.append(p)
+                    if i < len(keys):
+                        all_bundle_keys[p] = keys[i]
+
+        # 2. Run CLI on the collected paths
+        # _export_via_cli handles decryption and staging internally
+        UnityLogic._export_via_cli(
+            all_physical_paths, export_dir, mode="animator", bundle_keys=all_bundle_keys
+        )
+
+        return export_dir
+
+    @staticmethod
+    def batch_export_to_fbx(batch_configs, export_dir):
+        """
+        Efficiently exports multiple animators at once with parallel staging.
+        """
+        results = []
+        from concurrent.futures import ThreadPoolExecutor
+        
+        with tempfile.TemporaryDirectory() as staging_dir:
+            # 1. Collect all unique paths to prepare
+            all_unique_tasks = {} # Map path -> (key, target_filename)
+            for cfg in batch_configs:
+                paths = cfg.get("paths", [])
+                keys = cfg.get("keys", [])
+                for i, p in enumerate(paths):
+                    if os.path.exists(p) and p not in all_unique_tasks:
+                        all_unique_tasks[p] = (
+                            keys[i] if i < len(keys) else None,
+                            os.path.basename(p)
+                        )
+
+            # 2. Parallel Staging (Decryption + I/O)
+            # 16 workers is usually a good balance for disk/CPU overlap
+            def stage_file(path_info):
+                p, info = path_info
+                key, filename = info
+                target = os.path.join(staging_dir, filename)
+                try:
+                    if Config.DB_ENCRYPTED:
+                        data = UnityLogic._load_bundle_data(p, bundle_key=key)
+                        if data:
+                            with open(target, "wb") as f:
+                                f.write(data)
+                    else:
+                        # Link for speed
+                        try:
+                            if hasattr(os, "symlink"):
+                                os.symlink(p, target)
+                            else:
+                                os.link(p, target)
+                        except:
+                            shutil.copy2(p, target)
+                    return True
+                except Exception as e:
+                    print(f"Failed to stage {p}: {e}")
+                    return False
+
+            with ThreadPoolExecutor(max_workers=16) as executor:
+                list(executor.map(stage_file, all_unique_tasks.items()))
+
+            # 3. Run CLI ONCE on the staging directory
+            UnityLogic._run_as_cli(staging_dir, export_dir, mode="animator")
+
+            # 3. Match exported FBX files back to assets
+            # AS CLI structure: {export_dir}/FBX_Animator/{logical_name}/{animator_name}.fbx
+            # Since we don't know animator_name here easily without parsing, 
+            # we'll look for files in subfolders that match the logical_name.
+            
+            animator_base = os.path.join(export_dir, "FBX_Animator")
+            if not os.path.exists(animator_base):
+                return results
+
+            for cfg in batch_configs:
+                asset_hash = cfg["hash"]
+                logical_name = cfg.get("logical_name")
+                if not logical_name:
+                    continue
+                
+                # Look in {animator_base}/{logical_name}/
+                search_dir = os.path.join(animator_base, logical_name)
+                if os.path.exists(search_dir):
+                    for f in os.listdir(search_dir):
+                        if f.lower().endswith(".fbx"):
+                            results.append((asset_hash, os.path.join(search_dir, f)))
+                            break # Take first one for thumbnail
+                else:
+                    # Fallback search if logical name mapping failed
+                    # This is slower but robust
+                    found = False
+                    for root, dirs, files in os.walk(animator_base):
+                        if logical_name in root:
+                            for f in files:
+                                if f.lower().endswith(".fbx"):
+                                    results.append((asset_hash, os.path.join(root, f)))
+                                    found = True
+                                    break
+                        if found: break
+
+        return results
+
+    @staticmethod
+    def _run_as_cli(input_path, output_dir, mode="animator"):
+        cli_name = "AssetStudioModCLI"
+        if os.name == "nt":
+            cli_name += ".exe"
+
+        cli_path = os.path.join(Config.get_bundle_dir(), "as_cli", cli_name)
+        if not os.path.exists(cli_path):
+            cli_path = os.path.abspath(os.path.join("as_cli", cli_name))
+
+        if not os.path.exists(cli_path):
+            return 0
+
+        if os.name != "nt":
+            try: os.chmod(cli_path, 0o755)
+            except: pass
+
+        cmd = [
+            cli_path,
+            input_path,
+            "--mode", mode,
+            "--output", output_dir,
+            "--fbx-animation", "auto",
+        ]
+
+        try:
+            if is_nuitka():
+                env = os.environ.copy()
+                env["NUITKA_SELF_EXECUTION"] = "0"
+                subprocess.run(cmd, check=True, capture_output=True, text=True, env=env)
+            else:
+                subprocess.run(cmd, check=True, capture_output=True, text=True)
+            return True
+        except Exception as e:
+            print(f"AS CLI Error: {e}")
+            return False
+
+    @staticmethod
     def _export_via_cli(physical_paths, export_dir, mode="animator", bundle_keys=None):
         """Export assets using AssetStudioModCLI in a temporary directory"""
-        # Deduplicate paths to avoid duplicate link attempts
-        unique_paths = list(dict.fromkeys(physical_paths))
+        if isinstance(physical_paths, str) and os.path.isdir(physical_paths):
+            # If a directory is passed, collect all files in it
+            unique_paths = []
+            for root, _, files in os.walk(physical_paths):
+                for f in files:
+                    unique_paths.append(os.path.join(root, f))
+        else:
+            # Deduplicate paths to avoid duplicate link attempts
+            unique_paths = list(dict.fromkeys(physical_paths))
+        
         exported_count = 0
 
         # Map paths to keys for easier retrieval

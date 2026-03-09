@@ -242,7 +242,7 @@ class DragMixin:
     def _handle_tab_drag_switch(self):
         mouse_x, mouse_y = dpg.get_mouse_pos(local=False)
         target_tab = None
-        for tab_tag in ["home_tab", "scene_tab", "prop_tab", "settings_tab"]:
+        for tab_tag in ["home_tab", "scene_tab", "prop_tab", "actions_tab", "settings_tab"]:
             if not dpg.does_item_exist(tab_tag) or not dpg.is_item_shown(tab_tag):
                 continue
             try:

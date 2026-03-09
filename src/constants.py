@@ -162,11 +162,6 @@ class Config:
         return path
 
     @classmethod
-    def get_app_db_path(cls):
-        """Returns the path to the main application database (for thumbnails, settings, etc.)."""
-        return os.path.join(cls.get_app_data_dir(), "app_data.db")
-
-    @classmethod
     def get_db_path(cls):
         return os.path.join(cls.BASE_PATH, "meta") if cls.BASE_PATH else ""
 
