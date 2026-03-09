@@ -3,7 +3,7 @@ import sys
 
 def launch_f3d_viewer_stdin():
     """Worker function for f3d viewer that reads paths from stdin.
-    
+
     This avoids multiprocessing issues in compiled environments.
     """
     try:
@@ -44,6 +44,16 @@ def launch_f3d_viewer_stdin():
             current_mesh = path
             scene.clear()
             scene.add(path)
+
+            # Set to Isometric view (similar to pressing '9')
+            # Use a small delay or ensure it's called after loading
+            try:
+                import time
+                time.sleep(0.1) # Small delay to ensure model is processed
+                interactor.trigger_command("set_camera isometric")
+            except Exception as e:
+                print(f"[F3D] Warning: Could not set isometric view: {e}")
+
             window.render()
             print(f"[F3D] Loaded: {path}")
 

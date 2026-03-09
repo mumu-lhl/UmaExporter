@@ -471,8 +471,11 @@ class PreviewMixin:
             if os.path.exists(p):
                 paths.append(p)
                 bundle_keys.append(k)
+
+        asset_info = self.db._get_asset_info(asset_id)
+        logical_file_name = os.path.basename(asset_info[0]) if asset_info else None
         return UnityLogic.save_animator_to_tmp(
-            paths, object_name, bundle_keys=bundle_keys
+            paths, object_name, bundle_keys=bundle_keys, logical_file_name=logical_file_name
         )
 
     def _get_recursive_hashes(self, asset_id):

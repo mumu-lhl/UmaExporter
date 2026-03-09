@@ -194,26 +194,47 @@ class UnityLogic:
             return None
 
     @staticmethod
-    def save_animator_to_tmp(physical_paths, object_name=None, bundle_keys=None):
+    def save_animator_to_tmp(physical_paths, object_name=None, bundle_keys=None, logical_file_name=None):
         """Export Animator to FBX in a temporary folder using CLI (For Preview)"""
         tmp_export_dir = tempfile.mkdtemp()
         try:
             UnityLogic._export_via_cli(
                 physical_paths, tmp_export_dir, mode="animator", bundle_keys=bundle_keys
             )
-            expected_name = UnityLogic._sanitize_export_name(object_name)
-            if expected_name:
-                expected_file = f"{expected_name}.fbx"
-                for root, dirs, files in os.walk(tmp_export_dir):
-                    for f in files:
-                        if f.lower() == expected_file.lower():
-                            return os.path.join(root, f)
 
-            # Fallback: find any fbx file in the output.
-            for root, dirs, files in os.walk(tmp_export_dir):
+            # AssetStudioModCLI Animator mode structure: FBX_Animator/{logical_file_name}/{object_name}.fbx
+            animator_dir = os.path.join(tmp_export_dir, "FBX_Animator")
+
+            # 1. Direct addressing (Efficient)
+            if logical_file_name and object_name:
+                sanitized_obj = UnityLogic._sanitize_export_name(object_name)
+                # Try with logical_file_name as provided (might be basename already)
+                direct_path = os.path.join(animator_dir, logical_file_name, f"{sanitized_obj}.fbx")
+                if os.path.exists(direct_path):
+                    return direct_path
+
+                # Try with basename of logical_file_name
+                base_logical = os.path.basename(logical_file_name)
+                direct_path = os.path.join(animator_dir, base_logical, f"{sanitized_obj}.fbx")
+                if os.path.exists(direct_path):
+                    return direct_path
+
+            # 2. Fallback: Scoped os.walk search (Efficient and Robust)
+            fbx_files = []
+            sanitized_obj_lower = UnityLogic._sanitize_export_name(object_name).lower() if object_name else None
+
+            for root, _, files in os.walk(animator_dir):
                 for f in files:
                     if f.lower().endswith(".fbx"):
-                        return os.path.join(root, f)
+                        full_path = os.path.join(root, f)
+                        # If we find a filename match, return immediately
+                        if sanitized_obj_lower and sanitized_obj_lower in f.lower():
+                            return full_path
+                        fbx_files.append(full_path)
+
+            if fbx_files:
+                return fbx_files[0]
+
             return None
         except Exception as e:
             print(f"Animator preview error: {e}")

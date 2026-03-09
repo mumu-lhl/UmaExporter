@@ -1011,6 +1011,19 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
                 )
 
+                # Thread to pipe stdout and stderr to the main terminal
+                def log_pipe(pipe, label):
+                    try:
+                        for line in iter(pipe.readline, ""):
+                            if line:
+                                print(f"{label}: {line.strip()}", flush=True)
+                        pipe.close()
+                    except:
+                        pass
+
+                threading.Thread(target=log_pipe, args=(self.f3d_process.stdout, "[F3D-OUT]"), daemon=True).start()
+                threading.Thread(target=log_pipe, args=(self.f3d_process.stderr, "[F3D-ERR]"), daemon=True).start()
+
     def on_search(self, sender, app_data, user_data, *args):
         if not self.db:
             return
