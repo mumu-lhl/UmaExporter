@@ -164,7 +164,6 @@ class DragMixin:
                 final_item = hovered_item
 
         prev_nav_state = self.is_navigating
-        prev_drag_state = self.drag_preview_active
         self.is_navigating = True
         self.drag_preview_active = False
         try:
@@ -179,7 +178,8 @@ class DragMixin:
             self.on_file_click(sender_item, None, final_data)
         finally:
             self.is_navigating = prev_nav_state
-            self.drag_preview_active = prev_drag_state
+            # self.drag_preview_active is intentionally left as False here
+            # because the mouse release terminates the drag preview session.
 
     def _pick_scroll_target_under_mouse(self):
         mouse_pos = dpg.get_mouse_pos(local=False)

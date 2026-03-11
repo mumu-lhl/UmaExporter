@@ -151,6 +151,11 @@ class PreviewMixin:
             if not is_drag_preview:
                 self._clear_preview_texture(prefix)
                 self._clear_thumbnail_texture(prefix)
+
+            # Special case for scene/prop: Always clear internal objects if dragging
+            # to keep the preview focused only on the thumbnail.
+            is_scene_prop = prefix in ("scene_", "prop_")
+            
             messages = []
             if not is_drag_preview:
                 messages.append((f"{prefix}ui_unity_parent", i18n("msg_loading_unity")))
@@ -160,14 +165,23 @@ class PreviewMixin:
                         (f"{prefix}ui_rev_dep_parent", i18n("msg_loading_rev_deps")),
                     ]
                 )
+            elif is_scene_prop:
+                # Clear objects list during drag for scene/prop to follow user's UI preference
+                dpg.delete_item(f"{prefix}ui_unity_parent", children_only=True)
+
             for tag, msg in messages:
                 dpg.delete_item(tag, children_only=True)
                 dpg.add_text(msg, parent=tag, color=[150, 150, 150])
 
     def _set_dependency_sections_visible(self, visible):
         for prefix in self._detail_prefixes():
+            # Hide dependency sections for all pages during drag
             dpg.configure_item(f"{prefix}ui_dep_section", show=visible)
             dpg.configure_item(f"{prefix}ui_rev_dep_section", show=visible)
+            
+            # Specifically hide the Unity Objects section for scene and prop pages during drag
+            if prefix in ("scene_", "prop_"):
+                 dpg.configure_item(f"{prefix}ui_unity_section", show=visible)
 
     def _load_unity_async(
         self, phys_path, current_asset_id, request_id, bundle_key=None
@@ -198,12 +212,21 @@ class PreviewMixin:
         if not self._is_still_selected(current_asset_id):
             return
 
+        current_hash = self.current_asset_hash
+
         for prefix in self._detail_prefixes():
             self._render_unity_objects(prefix, phys_path, objs, bundle_key=bundle_key)
 
-            # Check if there's an animator to enable thumbnail generation
+            # Performance: For scene/prop pages, we always attempt to show thumbnail if it exists,
+            # regardless of animator presence.
+            if prefix in ("scene_", "prop_"):
+                self._check_and_display_thumbnail(prefix, current_hash)
+
+            # Check if there's an animator to enable thumbnail generation (for others)
             has_animator = any(obj[0] == "Animator" for obj in objs)
             if has_animator:
+                if prefix not in ("scene_", "prop_"):
+                    self._check_and_display_thumbnail(prefix, current_hash)
                 self._update_thumbnail_button(prefix, current_asset_id)
 
         if (
@@ -314,13 +337,23 @@ class PreviewMixin:
         asset_hash = self.current_asset_hash
 
         for prefix in self._detail_prefixes():
-            # Render internal objects even during drag
-            self._render_unity_objects(prefix, phys_path, objs, bundle_key=bundle_key)
+            is_scene_prop = prefix in ("scene_", "prop_")
+            
+            # For scene/prop pages, we skip showing internal objects list during drag
+            # to keep the view clean and improve drag performance.
+            if not is_scene_prop:
+                self._render_unity_objects(prefix, phys_path, objs, bundle_key=bundle_key)
 
-            # Check for animator to show thumbnail if exists
+            # Performance: For scene/prop pages, we always attempt to show thumbnail if it exists,
+            # regardless of animator presence in the current asset (which might be just a part of the scene)
+            if is_scene_prop:
+                self._check_and_display_thumbnail(prefix, asset_hash)
+
+            # Check for animator to show thumbnail if exists (for others)
             has_animator = any(obj[0] == "Animator" for obj in objs)
             if has_animator:
-                self._check_and_display_thumbnail(prefix, asset_hash)
+                if not is_scene_prop:
+                    self._check_and_display_thumbnail(prefix, asset_hash)
                 self._update_thumbnail_button(prefix, current_asset_id)
 
             image_container_tag = f"{prefix}ui_unity_image_container"

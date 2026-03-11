@@ -38,6 +38,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         self.is_batch_running = False
         self.current_asset_id = None
         self.current_asset_data = None
+        self.current_asset_hash = None
         self.texture_lock = threading.Lock()
         self.preview_texture_tags = {"": None, "scene_": None, "prop_": None}
         self.thumbnail_texture_tags = {"": None, "scene_": None, "prop_": None}
@@ -174,21 +175,32 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         dpg.create_context()
         self._setup_fonts()
         dpg.add_texture_registry(tag="main_texture_registry")
+
+        # Create themes before layout
+        with dpg.theme(tag="button_state_theme"):
+            with dpg.theme_component(dpg.mvButton, enabled_state=False):
+                dpg.add_theme_color(dpg.mvThemeCol_Text, [128, 128, 128])
+                dpg.add_theme_color(dpg.mvThemeCol_Button, [45, 45, 48])
+                dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, [45, 45, 48])
+                dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, [45, 45, 48])
+                dpg.add_theme_style(dpg.mvStyleVar_Alpha, 0.5, category=dpg.mvThemeCat_Core)
+
+        with dpg.theme(tag="checkbox_state_theme"):
+            with dpg.theme_component(dpg.mvCheckbox, enabled_state=False):
+                dpg.add_theme_color(dpg.mvThemeCol_Text, [128, 128, 128])
+                dpg.add_theme_color(dpg.mvThemeCol_CheckMark, [80, 80, 80])
+                dpg.add_theme_color(dpg.mvThemeCol_FrameBg, [50, 50, 50])
+                dpg.add_theme_style(dpg.mvStyleVar_Alpha, 0.5, category=dpg.mvThemeCat_Core)
+
         self._create_file_dialog()
         self._create_main_layout()
-        
+
         # Add a simple loading modal
         with dpg.window(label="Loading...", modal=True, show=False, tag="loading_modal", no_title_bar=True, pos=(500, 350), width=200, height=100):
             dpg.add_text("Parsing Database...")
             dpg.add_loading_indicator(style=1)
 
         self._setup_shortcuts()
-
-        with dpg.theme(tag="disabled_checkbox_theme"):
-            with dpg.theme_component(dpg.mvCheckbox):
-                dpg.add_theme_color(dpg.mvThemeCol_Text, [100, 100, 100])
-                dpg.add_theme_color(dpg.mvThemeCol_CheckMark, [80, 80, 80])
-                dpg.add_theme_color(dpg.mvThemeCol_FrameBg, [50, 50, 50])
 
         dpg.create_viewport(title="Uma Musume Exporter", width=1200, height=800)
         dpg.setup_dearpygui()
@@ -667,12 +679,14 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                             default_value=True,
                             enabled=False,
                         )
+                        dpg.bind_item_theme("batch_cat_scene", "checkbox_state_theme")
                         dpg.add_checkbox(
                             label=i18n("label_cat_prop"),
                             tag="batch_cat_prop",
                             default_value=True,
                             enabled=False,
                         )
+                        dpg.bind_item_theme("batch_cat_prop", "checkbox_state_theme")
 
                     dpg.add_spacer(height=10)
                     dpg.add_text(i18n("label_batch_size"))
@@ -690,7 +704,9 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     dpg.add_spacer(height=20)
                     with dpg.group(horizontal=True):
                         dpg.add_button(label=i18n("btn_start_batch"), tag="btn_start_batch", callback=self.on_start_batch_click, width=150)
+                        dpg.bind_item_theme("btn_start_batch", "button_state_theme")
                         dpg.add_button(label=i18n("btn_stop_batch"), tag="btn_stop_batch", callback=self.on_stop_batch_click, width=100, enabled=False)
+                        dpg.bind_item_theme("btn_stop_batch", "button_state_theme")
 
                     dpg.add_spacer(height=20)
                     dpg.add_text(i18n("label_progress"), tag="batch_progress_text", show=False)
@@ -902,10 +918,11 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             )
 
             dpg.add_spacer(height=20)
-            dpg.add_text(i18n("label_unity_objs"), color=[0, 255, 255])
-            dpg.add_separator()
-            with dpg.child_window(height=250, border=True, tag=unity_parent_tag):
-                pass
+            with dpg.group(tag=f"{prefix}ui_unity_section"):
+                dpg.add_text(i18n("label_unity_objs"), color=[0, 255, 255])
+                dpg.add_separator()
+                with dpg.child_window(height=250, border=True, tag=unity_parent_tag):
+                    pass
 
             with dpg.group(tag=unity_image_container_tag, show=False):
                 pass
@@ -1091,6 +1108,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 dpg.delete_item(f"{prefix}ui_unity_image_container", children_only=True)
 
         h = user_data["hash"]
+        self.current_asset_hash = h
 
         self._reset_detail_containers(is_drag_preview=is_drag_preview)
 
@@ -1099,6 +1117,14 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         bundle_key = user_data.get("key")
 
         if is_drag_preview:
+            # Performance optimization: During drag-previews on scene and prop pages,
+            # we skip UnityPy file parsing entirely and only show the thumbnail.
+            # We check both the context flags and self.is_navigating to be sure it's a transient view.
+            if is_scene_click_context or is_prop_click_context:
+                prefix = "scene_" if is_scene_click_context else "prop_"
+                self._check_and_display_thumbnail(prefix, h)
+                return
+
             self._preview_drag_texture_async(
                 phys_path, asset_id, request_id, bundle_key=bundle_key
             )
@@ -1440,13 +1466,14 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             dpg.set_value("batch_cat_prop", True)
             dpg.configure_item("batch_cat_scene", enabled=False)
             dpg.configure_item("batch_cat_prop", enabled=False)
-            dpg.bind_item_theme("batch_cat_scene", "disabled_checkbox_theme")
-            dpg.bind_item_theme("batch_cat_prop", "disabled_checkbox_theme")
         else:
+            dpg.set_value("batch_cat_scene", False)
+            dpg.set_value("batch_cat_prop", False)
             dpg.configure_item("batch_cat_scene", enabled=True)
             dpg.configure_item("batch_cat_prop", enabled=True)
-            dpg.bind_item_theme("batch_cat_scene", 0) # Unbind theme
-            dpg.bind_item_theme("batch_cat_prop", 0) # Unbind theme
+
+        dpg.bind_item_theme("batch_cat_scene", "checkbox_state_theme")
+        dpg.bind_item_theme("batch_cat_prop", "checkbox_state_theme")
 
     def on_start_batch_click(self, sender, app_data, user_data):
         if self.is_batch_running:
