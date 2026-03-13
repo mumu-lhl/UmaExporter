@@ -1133,17 +1133,32 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
 
         self._update_nav_buttons()
 
+        # Handle visual selection state
         if self.last_selected and dpg.does_item_exist(self.last_selected):
             try:
-                dpg.set_value(self.last_selected, False)
+                # Reset previous: if it was a selectable
+                if dpg.get_item_type(self.last_selected) == "mvAppItemType::mvSelectable":
+                    dpg.set_value(self.last_selected, False)
+                # Reset previous: if it was a thumbnail image
+                elif dpg.get_item_type(self.last_selected) == "mvAppItemType::mvImage":
+                    dpg.configure_item(self.last_selected, tint_color=[255, 255, 255, 255])
             except:
                 pass
 
         if sender:
-            dpg.set_value(sender, True)
+            # Apply selection to new item
+            if dpg.get_item_type(sender) == "mvAppItemType::mvSelectable":
+                dpg.set_value(sender, True)
+            elif dpg.get_item_type(sender) == "mvAppItemType::mvImage":
+                # Light blue tint for selected thumbnail
+                dpg.configure_item(sender, tint_color=[150, 200, 255, 255])
+            
             self.last_selected = sender
         else:
             self.last_selected = self._select_existing_result_item(user_data["id"])
+            # If the fallback found an item, apply the selection color if it's an image
+            if self.last_selected and dpg.get_item_type(self.last_selected) == "mvAppItemType::mvImage":
+                dpg.configure_item(self.last_selected, tint_color=[150, 200, 255, 255])
 
         for prefix in self._detail_prefixes():
             self._update_asset_properties_panel(prefix, user_data)
@@ -1480,14 +1495,15 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                                     thumb_path = thumb_manager.get_thumbnail(f_hash)
                                     if thumb_path:
                                         abs_path = os.path.abspath(thumb_path)
-                                        self.lazy_thumb_queues[prefix].append((abs_path, img_id))
+                                        # Include parent tag for buffered coordinate checking
+                                        self.lazy_thumb_queues[prefix].append((abs_path, img_id, parent))
                             else:
                                 dpg.add_spacer()
 
         self._queue_ui_task(build_grid)
 
     def _process_lazy_thumbnails(self):
-        """Optimized True Lazy Loading: Only scans the current active tab's queue."""
+        """Proximity-Buffered Lazy Loading: Uses visibility as anchor to load a range of items."""
         now = time.time()
         if now - self.last_lazy_scan_time < self.lazy_scan_interval:
             return
@@ -1501,35 +1517,52 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         if not active_prefix or not self.lazy_thumb_queues[active_prefix]:
             return
 
-        batch_limit = 48 
-        to_load = []
-        still_lazy = []
+        queue = self.lazy_thumb_queues[active_prefix]
         
-        # Scan only the active prefix queue - much more efficient
-        for task in self.lazy_thumb_queues[active_prefix]:
-            path, img_id = task
-            
-            if len(to_load) >= batch_limit:
-                still_lazy.append(task)
-                continue
-                
-            is_visible = False
+        # 1. Find the first visible item to use as an anchor
+        first_visible_idx = -1
+        # Check every few items to speed up scanning of large lists
+        for i in range(0, len(queue), 4):
             try:
-                if dpg.does_item_exist(img_id):
-                    is_visible = dpg.is_item_visible(img_id)
+                if dpg.is_item_visible(queue[i][1]):
+                    first_visible_idx = i
+                    break
             except:
-                is_visible = False
-
-            if is_visible:
-                to_load.append((path, img_id))
-            else:
-                still_lazy.append(task)
-                
-        self.lazy_thumb_queues[active_prefix] = still_lazy
+                continue
         
-        if to_load:
-            self._load_search_thumbnails_batch_async(active_prefix, to_load)
+        # 2. Determine the batch to load based on the anchor
+        if first_visible_idx == -1:
+            # Check the very first one as a final fallback
+            try:
+                if dpg.is_item_visible(queue[0][1]):
+                    first_visible_idx = 0
+            except:
+                pass
 
+        to_load_batch = []
+        remaining = []
+
+        if first_visible_idx == -1:
+            # If NOTHING is visible yet (can happen during initial render or fast scroll),
+            # just eager-load the first few items to provide immediate feedback.
+            to_load_batch = queue[:24]
+            remaining = queue[24:]
+        else:
+            # Load a window around the visible anchor: 12 above, 48 below
+            start = max(0, first_visible_idx - 12)
+            end = min(len(queue), first_visible_idx + 48)
+            
+            to_load_batch = queue[start:end]
+            # Keep items outside this window in the queue
+            remaining = queue[:start] + queue[end:]
+            
+        self.lazy_thumb_queues[active_prefix] = remaining
+        
+        if to_load_batch:
+            # Extract (path, img_id) for the worker
+            tasks = [(t[0], t[1]) for t in to_load_batch]
+            self._load_search_thumbnails_batch_async(active_prefix, tasks)
+            
     def _load_search_thumbnails_batch_async(self, prefix, tasks):
         """Processes a batch of thumbnails in a single worker thread."""
         def worker():
