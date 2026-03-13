@@ -6,6 +6,8 @@ import time
 import platform
 import sys
 import tempfile
+import numpy as np
+from PIL import Image
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from queue import Empty, Queue
@@ -79,6 +81,15 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         self.history_back = []
         self.history_forward = []
         self.is_navigating = False
+
+        # View modes for scene and prop pages
+        self.scene_view_mode = "list"
+        self.prop_view_mode = "list"
+        self.search_thumbnail_textures = {"scene_": [], "prop_": []}
+        # Separated queues for much faster scanning
+        self.lazy_thumb_queues = {"scene_": [], "prop_": []} 
+        self.last_lazy_scan_time = 0.0
+        self.lazy_scan_interval = 0.05 
 
     def _setup_fonts(self):
         font_paths = []
@@ -175,6 +186,18 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         dpg.create_context()
         self._setup_fonts()
         dpg.add_texture_registry(tag="main_texture_registry")
+        
+        # Create a placeholder texture for image buttons (matched to 100x100)
+        # Using a solid gray (0.5) to indicate loading state visually
+        # 100 * 100 * 4 = 40,000 values
+        with self.texture_lock:
+            placeholder_data = [0.5] * 40000
+            dpg.add_static_texture(
+                width=100, height=100,
+                default_value=placeholder_data,
+                tag="thumb_placeholder",
+                parent="main_texture_registry"
+            )
 
         # Create themes before layout
         with dpg.theme(tag="button_state_theme"):
@@ -214,6 +237,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         try:
             while dpg.is_dearpygui_running():
                 self._drain_ui_tasks()
+                self._process_lazy_thumbnails()
                 dpg.render_dearpygui_frame()
         finally:
             if self.f3d_process and self.f3d_process.poll() is None:
@@ -627,8 +651,18 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                             self.clear_scene_search,
                             scroll_targets=["scene_results_parent"],
                         )
+                        with dpg.group(horizontal=True):
+                            dpg.add_radio_button(
+                                items=[i18n("label_view_list"), i18n("label_view_thumbnail")],
+                                default_value=i18n("label_view_list"),
+                                horizontal=True,
+                                callback=self._on_view_mode_change,
+                                user_data="scene_",
+                            )
                         dpg.add_separator()
                         with dpg.child_window(tag="scene_results_parent", border=False):
+                            pass
+                        with dpg.child_window(tag="scene_thumbnails_parent", border=False, show=False):
                             pass
 
 
@@ -648,8 +682,18 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                             self.clear_prop_search,
                             scroll_targets=["prop_results_parent"],
                         )
+                        with dpg.group(horizontal=True):
+                            dpg.add_radio_button(
+                                items=[i18n("label_view_list"), i18n("label_view_thumbnail")],
+                                default_value=i18n("label_view_list"),
+                                horizontal=True,
+                                callback=self._on_view_mode_change,
+                                user_data="prop_",
+                            )
                         dpg.add_separator()
                         with dpg.child_window(tag="prop_results_parent", border=False):
+                            pass
+                        with dpg.child_window(tag="prop_thumbnails_parent", border=False, show=False):
                             pass
 
                     # Right Column: Details
@@ -1223,48 +1267,6 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         query = dpg.get_value("scene_search_input").strip()
         self.executor.submit(self._render_scene_results, query)
 
-    def _render_scene_results(self, query=""):
-        self._queue_ui_task(lambda: dpg.delete_item("scene_results_parent", children_only=True))
-        if not self.db:
-            self._queue_ui_task(lambda: dpg.add_text(
-                i18n("label_db_not_ready"),
-                parent="scene_results_parent",
-                color=[200, 120, 120],
-            ))
-            return
-
-        rows = self.db.search_scenes(query)
-        if not rows:
-            self._queue_ui_task(lambda: dpg.add_text(i18n("label_no_scenes"), parent="scene_results_parent"))
-            return
-
-        first_item = None
-        for i_id, name, size, f_hash, key_val in rows:
-            u_data = {
-                "id": i_id,
-                "full_path": name,
-                "size": size,
-                "hash": f_hash,
-                "key": key_val,
-            }
-            display_name = self._scene_display_name(name)
-
-            def add_scene_item(label=display_name, tag=f"scene_item_{i_id}", data=u_data):
-                self._add_file_selectable(
-                    label=label,
-                    tag=tag,
-                    user_data=data,
-                    parent="scene_results_parent",
-                    span_columns=True,
-                )
-
-            self._queue_ui_task(add_scene_item)
-            if first_item is None:
-                first_item = (f"scene_item_{i_id}", u_data)
-
-        if first_item and query:
-            self._queue_ui_task(lambda f=first_item: self.on_file_click(f[0], None, f[1]))
-
     def _scene_display_name(self, full_path):
         return os.path.basename(full_path)
 
@@ -1281,50 +1283,302 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         query = dpg.get_value("prop_search_input").strip()
         self.executor.submit(self._render_prop_results, query)
 
-    def _render_prop_results(self, query=""):
-        self._queue_ui_task(lambda: dpg.delete_item("prop_results_parent", children_only=True))
+    def _on_view_mode_change(self, sender, app_data, user_data):
+        prefix = user_data  # "scene_" or "prop_"
+        new_mode = "thumbnail" if app_data == i18n("label_view_thumbnail") else "list"
+        
+        if prefix == "scene_":
+            self.scene_view_mode = new_mode
+            query = dpg.get_value("scene_search_input").strip()
+            self.executor.submit(self._render_scene_results, query)
+        else:
+            self.prop_view_mode = new_mode
+            query = dpg.get_value("prop_search_input").strip()
+            self.executor.submit(self._render_prop_results, query)
+
+    def _clear_search_thumbnails(self, prefix):
+        with self.texture_lock:
+            for tag in self.search_thumbnail_textures.get(prefix, []):
+                if dpg.does_item_exist(tag):
+                    dpg.delete_item(tag)
+            self.search_thumbnail_textures[prefix] = []
+
+    def _render_scene_results(self, query=""):
+        view_mode = self.scene_view_mode
+        list_container = "scene_results_parent"
+        thumb_container = "scene_thumbnails_parent"
+        
+        self._queue_ui_task(lambda: dpg.configure_item(list_container, show=(view_mode == "list")))
+        self._queue_ui_task(lambda: dpg.configure_item(thumb_container, show=(view_mode == "thumbnail")))
+        self._queue_ui_task(lambda: dpg.delete_item(list_container, children_only=True))
+        self._queue_ui_task(lambda: dpg.delete_item(thumb_container, children_only=True))
+        self._clear_search_thumbnails("scene_")
+        self.lazy_thumb_queues["scene_"] = []
+
         if not self.db:
             self._queue_ui_task(lambda: dpg.add_text(
                 i18n("label_db_not_ready"),
-                parent="prop_results_parent",
+                parent=list_container,
+                color=[200, 120, 120],
+            ))
+            return
+
+        rows = self.db.search_scenes(query)
+        if not rows:
+            target = list_container if view_mode == "list" else thumb_container
+            self._queue_ui_task(lambda: dpg.add_text(i18n("label_no_scenes"), parent=target))
+            return
+
+        first_item = None
+        
+        if view_mode == "list":
+            for i_id, name, size, f_hash, key_val in rows:
+                u_data = {
+                    "id": i_id,
+                    "full_path": name,
+                    "size": size,
+                    "hash": f_hash,
+                    "key": key_val,
+                }
+                display_name = self._scene_display_name(name)
+
+                def add_scene_item(label=display_name, tag=f"scene_item_{i_id}", data=u_data):
+                    self._add_file_selectable(
+                        label=label,
+                        tag=tag,
+                        user_data=data,
+                        parent=list_container,
+                        span_columns=True,
+                    )
+
+                self._queue_ui_task(add_scene_item)
+                if first_item is None:
+                    first_item = (f"scene_item_{i_id}", u_data)
+        else:
+            # Thumbnail mode
+            items_with_thumb = []
+            for i_id, name, size, f_hash, key_val in rows:
+                if thumb_manager.get_thumbnail(f_hash):
+                    items_with_thumb.append((i_id, name, size, f_hash, key_val))
+            
+            if not items_with_thumb:
+                self._queue_ui_task(lambda: dpg.add_text(i18n("label_no_scenes"), parent=thumb_container))
+            else:
+                self._render_thumbnail_grid("scene_", items_with_thumb, thumb_container)
+                # In thumb mode, we don't necessarily auto-click the first one as it might be jarring
+                # during a search unless explicitly requested.
+
+        if first_item and query and view_mode == "list":
+            self._queue_ui_task(lambda f=first_item: self.on_file_click(f[0], None, f[1]))
+
+    def _render_prop_results(self, query=""):
+        view_mode = self.prop_view_mode
+        list_container = "prop_results_parent"
+        thumb_container = "prop_thumbnails_parent"
+
+        self._queue_ui_task(lambda: dpg.configure_item(list_container, show=(view_mode == "list")))
+        self._queue_ui_task(lambda: dpg.configure_item(thumb_container, show=(view_mode == "thumbnail")))
+        self._queue_ui_task(lambda: dpg.delete_item(list_container, children_only=True))
+        self._queue_ui_task(lambda: dpg.delete_item(thumb_container, children_only=True))
+        self._clear_search_thumbnails("prop_")
+        self.lazy_thumb_queues["prop_"] = []
+
+        if not self.db:
+            self._queue_ui_task(lambda: dpg.add_text(
+                i18n("label_db_not_ready"),
+                parent=list_container,
                 color=[200, 120, 120],
             ))
             return
 
         rows = self.db.search_props(query)
         if not rows:
+            target = list_container if view_mode == "list" else thumb_container
             self._queue_ui_task(lambda: dpg.add_text(
                 i18n("label_no_props"),
-                parent="prop_results_parent",
+                parent=target,
             ))
             return
 
-        first_item = None
-        for i_id, name, size, f_hash, key_val in rows:
-            u_data = {
-                "id": i_id,
-                "full_path": name,
-                "size": size,
-                "hash": f_hash,
-                "key": key_val,
-            }
-            display_name = os.path.basename(name)
+        if view_mode == "list":
+            first_item = None
+            for i_id, name, size, f_hash, key_val in rows:
+                u_data = {
+                    "id": i_id,
+                    "full_path": name,
+                    "size": size,
+                    "hash": f_hash,
+                    "key": key_val,
+                }
+                def add_prop_item(label=os.path.basename(name), tag=f"prop_item_{i_id}", data=u_data):
+                    self._add_file_selectable(
+                        label=label,
+                        tag=tag,
+                        user_data=data,
+                        parent=list_container,
+                        span_columns=True,
+                    )
+                self._queue_ui_task(add_prop_item)
+                if first_item is None:
+                    first_item = (f"prop_item_{i_id}", u_data)
+            
+            if first_item and query:
+                self._queue_ui_task(lambda f=first_item: self.on_file_click(f[0], None, f[1]))
+        else:
+            # Thumbnail mode
+            items_with_thumb = []
+            for i_id, name, size, f_hash, key_val in rows:
+                if thumb_manager.get_thumbnail(f_hash):
+                    items_with_thumb.append((i_id, name, size, f_hash, key_val))
+            
+            if not items_with_thumb:
+                self._queue_ui_task(lambda: dpg.add_text(i18n("label_no_props"), parent=thumb_container))
+            else:
+                self._render_thumbnail_grid("prop_", items_with_thumb, thumb_container)
 
-            def add_prop_item(label=display_name, tag=f"prop_item_{i_id}", data=u_data):
-                self._add_file_selectable(
-                    label=label,
-                    tag=tag,
-                    user_data=data,
-                    parent="prop_results_parent",
-                    span_columns=True,
-                )
+    def _render_thumbnail_grid(self, prefix, items, parent):
+        columns = 4
+        
+        def build_grid():
+            if not dpg.does_item_exist(parent):
+                return
+                
+            with dpg.table(header_row=False, parent=parent, policy=dpg.mvTable_SizingStretchProp):
+                for _ in range(columns):
+                    dpg.add_table_column()
+                
+                for i in range(0, len(items), columns):
+                    with dpg.table_row():
+                        for j in range(columns):
+                            idx = i + j
+                            if idx < len(items):
+                                i_id, name, size, f_hash, key_val = items[idx]
+                                with dpg.group() as cell_group:
+                                    u_data = {
+                                        "id": i_id,
+                                        "full_path": name,
+                                        "size": size,
+                                        "hash": f_hash,
+                                        "key": key_val,
+                                    }
+                                    
+                                    img_id = dpg.add_image(
+                                        "thumb_placeholder",
+                                        width=100, height=100,
+                                    )
+                                    
+                                    with dpg.item_handler_registry() as handler:
+                                        dpg.add_item_clicked_handler(
+                                            callback=lambda s, a, u: self.on_file_click(a[1], a, u),
+                                            user_data=u_data
+                                        )
+                                    dpg.bind_item_handler_registry(img_id, handler)
 
-            self._queue_ui_task(add_prop_item)
-            if first_item is None:
-                first_item = (f"prop_item_{i_id}", u_data)
+                                    with dpg.tooltip(img_id):
+                                        dpg.add_text(os.path.basename(name))
+                                    
+                                    thumb_path = thumb_manager.get_thumbnail(f_hash)
+                                    if thumb_path:
+                                        abs_path = os.path.abspath(thumb_path)
+                                        self.lazy_thumb_queues[prefix].append((abs_path, img_id))
+                            else:
+                                dpg.add_spacer()
 
-        if first_item and query:
-            self._queue_ui_task(lambda f=first_item: self.on_file_click(f[0], None, f[1]))
+        self._queue_ui_task(build_grid)
+
+    def _process_lazy_thumbnails(self):
+        """Optimized True Lazy Loading: Only scans the current active tab's queue."""
+        now = time.time()
+        if now - self.last_lazy_scan_time < self.lazy_scan_interval:
+            return
+        self.last_lazy_scan_time = now
+        
+        raw_tab = dpg.get_value("main_tabs")
+        active_tab = dpg.get_item_alias(raw_tab) if isinstance(raw_tab, int) else raw_tab
+        tab_to_prefix = {"scene_tab": "scene_", "prop_tab": "prop_"}
+        active_prefix = tab_to_prefix.get(active_tab)
+        
+        if not active_prefix or not self.lazy_thumb_queues[active_prefix]:
+            return
+
+        batch_limit = 48 
+        to_load = []
+        still_lazy = []
+        
+        # Scan only the active prefix queue - much more efficient
+        for task in self.lazy_thumb_queues[active_prefix]:
+            path, img_id = task
+            
+            if len(to_load) >= batch_limit:
+                still_lazy.append(task)
+                continue
+                
+            is_visible = False
+            try:
+                if dpg.does_item_exist(img_id):
+                    is_visible = dpg.is_item_visible(img_id)
+            except:
+                is_visible = False
+
+            if is_visible:
+                to_load.append((path, img_id))
+            else:
+                still_lazy.append(task)
+                
+        self.lazy_thumb_queues[active_prefix] = still_lazy
+        
+        if to_load:
+            self._load_search_thumbnails_batch_async(active_prefix, to_load)
+
+    def _load_search_thumbnails_batch_async(self, prefix, tasks):
+        """Processes a batch of thumbnails in a single worker thread."""
+        def worker():
+            results = []
+            resample_filter = getattr(Image, "Resampling", Image).BILINEAR
+            
+            for path, img_id in tasks:
+                try:
+                    if not os.path.exists(path):
+                        continue
+                    img = Image.open(path).convert("RGBA")
+                    img = img.resize((100, 100), resample_filter)
+                    data = np.array(img).flatten().astype(np.float32) / 255.0
+                    results.append((img_id, data.tolist()))
+                except Exception as e:
+                    pass
+            return results
+
+        future = self.executor.submit(worker)
+        
+        def done(f):
+            try:
+                batch_results = f.result()
+                if batch_results:
+                    self._queue_ui_task(lambda: self._apply_search_thumbnails_batch(prefix, batch_results))
+            except Exception as e:
+                pass
+        
+        future.add_done_callback(done)
+
+    def _apply_search_thumbnails_batch(self, prefix, batch_results):
+        """Applies multiple textures and updates images in a single UI task."""
+        with self.texture_lock:
+            for img_id, data in batch_results:
+                if not dpg.does_item_exist(img_id):
+                    continue
+                
+                tex_tag = dpg.generate_uuid()
+                try:
+                    dpg.add_static_texture(
+                        width=100, height=100,
+                        default_value=data,
+                        tag=tex_tag,
+                        parent="main_texture_registry"
+                    )
+                    dpg.configure_item(img_id, texture_tag=tex_tag)
+                    self.search_thumbnail_textures[prefix].append(tex_tag)
+                except Exception as e:
+                    pass
 
     def clear_prop_search(self, *args):
         dpg.set_value("prop_search_input", "")

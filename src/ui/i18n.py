@@ -80,6 +80,8 @@ TRANSLATIONS = {
         "msg_exporting_fbx": "Exporting FBX for preview (this may take a while)...",
         "msg_loading": "Loading...",
         "msg_no_unity_objs": "No Unity objects found or file not downloaded.",
+        "label_view_list": "List",
+        "label_view_thumbnail": "Thumbnail",
     },
     "Chinese": {
         "tab_home": "首页",
@@ -160,6 +162,8 @@ TRANSLATIONS = {
         "msg_exporting_fbx": "正在导出 FBX 预览 (可能需要较长时间)...",
         "msg_loading": "加载中...",
         "msg_no_unity_objs": "未发现 Unity 对象，或文件尚未下载。",
+        "label_view_list": "列表",
+        "label_view_thumbnail": "缩略图",
     },
 }
 
