@@ -1016,49 +1016,52 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         node = app_data[1]
         if node not in self.node_map:
             return
+        children = dpg.get_item_children(node, slot=1)
+        found_loading_text = False
+        for child in children:
+            if dpg.get_item_type(child) == "mvAppItemType::mvText":
+                dpg.delete_item(child)
+                found_loading_text = True
+                break
 
-        def process_expand():
-            children = dpg.get_item_children(node, slot=1)
-            found_loading_text = False
-            for child in children:
-                if dpg.get_item_type(child) == "mvAppItemType::mvText":
-                    dpg.delete_item(child)
-                    found_loading_text = True
-                    break
-            
-            if not found_loading_text:
-                return
+        if not found_loading_text:
+            return
 
-            content = self.node_map.pop(node)
-            dirs, files = [], []
-            if "_file_entry" in content:
-                files.append(("[F] (Asset Root)", content["_file_entry"]))
-            for sub_name, sub_content in content.items():
-                if sub_name == "_file_entry":
-                    continue
-                if isinstance(sub_content, dict) and "_is_file" in sub_content:
-                    files.append((f"[F] {sub_name}", sub_content))
-                else:
-                    dirs.append((sub_name, sub_content))
+        content = self.node_map.pop(node)
+        dirs, files = [], []
+        if "_file_entry" in content:
+            files.append(("[F] (Asset Root)", content["_file_entry"]))
+        for sub_name, sub_content in content.items():
+            if sub_name == "_file_entry":
+                continue
+            if isinstance(sub_content, dict) and "_is_file" in sub_content:
+                files.append((f"[F] {sub_name}", sub_content))
+            else:
+                dirs.append((sub_name, sub_content))
 
-            for sub_name, sub_content in sorted(dirs):
-                self.render_node(sub_name, sub_content, node)
-            for label, sub_content in sorted(files):
-                def add_sub_file(l=label, c=sub_content, p=node):
-                    self._add_file_selectable(
-                        label=l,
-                        user_data=c,
-                        parent=p,
-                    )
-                self._queue_ui_task(add_sub_file)
-
-        self.executor.submit(process_expand)
+        for sub_name, sub_content in sorted(dirs):
+            self.render_node(sub_name, sub_content, node)
+        for label, sub_content in sorted(files):
+            def add_sub_file(l=label, c=sub_content, p=node):
+                self._add_file_selectable(
+                    label=l,
+                    user_data=c,
+                    parent=p,
+                )
+            self._queue_ui_task(add_sub_file)
 
     def _add_file_selectable(
         self, label, user_data, parent=None, tag=None, span_columns=False
     ):
+        if parent is not None and not dpg.does_item_exist(parent):
+            return None
+        safe_label = label if isinstance(label, str) else str(label)
+        if "\x00" in safe_label:
+            safe_label = safe_label.replace("\x00", "")
+        if not safe_label:
+            safe_label = "(unnamed)"
         kwargs = {
-            "label": label,
+            "label": safe_label,
             "callback": self.on_file_click,
             "user_data": user_data,
         }
@@ -1068,8 +1071,10 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             kwargs["tag"] = tag
         if span_columns:
             kwargs["span_columns"] = True
-
-        item = dpg.add_selectable(**kwargs)
+        try:
+            item = dpg.add_selectable(**kwargs)
+        except Exception:
+            return None
         self.file_item_data[item] = user_data
         return item
 

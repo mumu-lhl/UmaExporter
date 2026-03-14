@@ -415,20 +415,28 @@ class PreviewMixin:
                 with dpg.table_row():
                     dpg.add_text(u_type)
                     tag = f"{prefix}unity_obj_{path_id}"
-                    dpg.add_selectable(
-                        label=u_name,
-                        tag=tag,
-                        callback=self.on_unity_obj_click,
-                        user_data=(
-                            phys_path,
-                            path_id,
-                            u_type,
-                            prefix,
-                            u_name,
-                            bundle_key,
-                        ),
-                        span_columns=True,
-                    )
+                    safe_label = u_name if isinstance(u_name, str) else str(u_name)
+                    if "\x00" in safe_label:
+                        safe_label = safe_label.replace("\x00", "")
+                    if not safe_label:
+                        safe_label = "(unnamed)"
+                    try:
+                        dpg.add_selectable(
+                            label=safe_label,
+                            tag=tag,
+                            callback=self.on_unity_obj_click,
+                            user_data=(
+                                phys_path,
+                                path_id,
+                                u_type,
+                                prefix,
+                                u_name,
+                                bundle_key,
+                            ),
+                            span_columns=True,
+                        )
+                    except Exception:
+                        continue
 
     def on_unity_obj_click(self, sender, app_data, user_data, *args):
         phys_path, path_id, u_type, prefix = user_data[:4]
