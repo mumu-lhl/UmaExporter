@@ -54,6 +54,24 @@ def launch_f3d_viewer_stdin():
         print("[F3D] Error: f3d module not found.")
         return
 
+    import threading
+    import queue
+
+    input_queue = queue.Queue()
+
+    def stdin_reader():
+        while True:
+            line = sys.stdin.readline()
+            if not line:
+                break
+            input_queue.put(line.strip())
+            if line.strip() == "STOP":
+                break
+
+    # Start the background thread for stdin
+    reader_thread = threading.Thread(target=stdin_reader, daemon=True)
+    reader_thread.start()
+
     current_mesh = None
     try:
         eng = f3d.Engine.create()
@@ -88,7 +106,6 @@ def launch_f3d_viewer_stdin():
             scene.add(path)
 
             # Set to Isometric view (similar to pressing '9')
-            # Use a small delay or ensure it's called after loading
             try:
                 import time
                 time.sleep(0.1) # Small delay to ensure model is processed
@@ -100,19 +117,20 @@ def launch_f3d_viewer_stdin():
             print(f"[F3D] Loaded: {path}")
 
         def timer_callback(t=None):
-            # Non-blocking check for new paths from stdin
-            # We use a simple protocol: one path per line
-            import select
-            if select.select([sys.stdin], [], [], 0)[0]:
-                line = sys.stdin.readline()
-                if not line or line.strip() == "STOP":
-                    return False
-                update_scene(line)
+            # Non-blocking check for new paths from the queue
+            try:
+                while not input_queue.empty():
+                    line = input_queue.get_nowait()
+                    if line == "STOP":
+                        return False
+                    update_scene(line)
+            except queue.Empty:
+                pass
             return True
 
-        # Initial wait for first mesh
-        line = sys.stdin.readline()
-        if not line or line.strip() == "STOP":
+        # Initial wait for first mesh (via the queue)
+        line = input_queue.get(timeout=30) # Wait up to 30s for first load
+        if not line or line == "STOP":
             return
 
         update_scene(line)
