@@ -1689,6 +1689,11 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 self.cached_recursive_hashes.clear()
                 self.node_map.clear()
                 self.tree_data = self.db.load_index()
+                
+                # Re-render UI components that depend on the database
+                self.executor.submit(self._render_browser_tree_items, "browse_group")
+                self.executor.submit(self._render_scene_results, "")
+                self.executor.submit(self._render_prop_results, "")
             except Exception as e:
                 print(f"Failed to initialize database: {e}")
                 self.db = None

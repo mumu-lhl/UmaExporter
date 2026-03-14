@@ -31,7 +31,7 @@ package: build-cython check-as-cli
 # Debug package using Nuitka (FASTEST)
 debug-nuitka: build-cython check-as-cli
     @echo "Packaging with Nuitka (DEBUG/FAST)..."
-    uv run python -m nuitka \
+    uv run nuitka \
         --standalone \
         --show-progress \
         --clang \
@@ -67,13 +67,12 @@ debug-nuitka: build-cython check-as-cli
         main.py
     @echo "Placing as_cli next to the binary..."
     {{cp-cmd}} as_cli dist-debug/main.dist/as_cli
-    {{cp-cmd}} README.md dist-debug/main.dist/README.txt
     @echo "Debug build complete! Run: ./dist-debug/main.dist/UmaExporter"
 
 # Package the application using Nuitka via uv
 package-nuitka: build-cython check-as-cli
     @echo "Packaging with Nuitka..."
-    uv run python -m nuitka \
+    uv run nuitka \
         --standalone \
         --show-progress \
         --follow-imports \
