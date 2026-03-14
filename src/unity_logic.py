@@ -501,13 +501,31 @@ class UnityLogic:
             "--fbx-animation", "auto",
         ]
 
+        # Prepare creationflags for Windows to hide terminal window
+        creationflags = 0
+        if os.name == "nt":
+            creationflags = subprocess.CREATE_NO_WINDOW
+
         try:
             if is_nuitka():
                 env = os.environ.copy()
                 env["NUITKA_SELF_EXECUTION"] = "0"
-                subprocess.run(cmd, check=True, capture_output=True, text=True, env=env)
+                subprocess.run(
+                    cmd,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                    creationflags=creationflags,
+                )
             else:
-                subprocess.run(cmd, check=True, capture_output=True, text=True)
+                subprocess.run(
+                    cmd,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    creationflags=creationflags,
+                )
             return True
         except Exception as e:
             print(f"AS CLI Error: {e}")
@@ -611,16 +629,30 @@ class UnityLogic:
                     for f in files:
                         pre_files.add(os.path.join(root, f))
 
+                # Prepare creationflags for Windows to hide terminal window
+                creationflags = 0
+                if os.name == "nt":
+                    creationflags = subprocess.CREATE_NO_WINDOW
+
                 # Disable Nuitka self-execution mechanism for subprocess calls
                 if is_nuitka():
                     env = os.environ.copy()
                     env["NUITKA_SELF_EXECUTION"] = "0"
                     result = subprocess.run(
-                        cmd, check=True, capture_output=True, text=True, env=env
+                        cmd,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        env=env,
+                        creationflags=creationflags,
                     )
                 else:
                     result = subprocess.run(
-                        cmd, check=True, capture_output=True, text=True
+                        cmd,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        creationflags=creationflags,
                     )
 
                 # Scan AFTER to count new files
