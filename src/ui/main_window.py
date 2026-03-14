@@ -8,7 +8,6 @@ import sys
 import tempfile
 import numpy as np
 from PIL import Image
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from queue import Empty, Queue
 
@@ -86,6 +85,8 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         self.scene_view_mode = "list"
         self.prop_view_mode = "list"
         self.search_thumbnail_textures = {"scene_": [], "prop_": []}
+        self.thumbnail_items = {"scene_": [], "prop_": []}
+        self.thumbnail_columns = {"scene_": 0, "prop_": 0}
         # Separated queues for much faster scanning
         self.lazy_thumb_queues = {"scene_": [], "prop_": []} 
         self.last_lazy_scan_time = 0.0
@@ -1147,7 +1148,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 # Reset previous: if it was a thumbnail image
                 elif dpg.get_item_type(self.last_selected) == "mvAppItemType::mvImage":
                     dpg.configure_item(self.last_selected, tint_color=[255, 255, 255, 255])
-            except:
+            except Exception:
                 pass
 
         if sender:
@@ -1382,6 +1383,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     items_with_thumb.append((i_id, name, size, f_hash, key_val))
             
             if not items_with_thumb:
+                self.thumbnail_items["scene_"] = []
                 self._queue_ui_task(lambda: dpg.add_text(i18n("label_no_scenes"), parent=thumb_container))
             else:
                 self._render_thumbnail_grid("scene_", items_with_thumb, thumb_container)
@@ -1452,17 +1454,32 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     items_with_thumb.append((i_id, name, size, f_hash, key_val))
             
             if not items_with_thumb:
+                self.thumbnail_items["prop_"] = []
                 self._queue_ui_task(lambda: dpg.add_text(i18n("label_no_props"), parent=thumb_container))
             else:
                 self._render_thumbnail_grid("prop_", items_with_thumb, thumb_container)
 
     def _render_thumbnail_grid(self, prefix, items, parent):
-        columns = 4
+        self.thumbnail_items[prefix] = items
+        
+        try:
+            width = dpg.get_item_rect_size(parent)[0]
+            if width <= 0:
+                width = 500
+        except Exception:
+            width = 500
+            
+        columns = max(1, int(width / 115))
+        self.thumbnail_columns[prefix] = columns
         
         def build_grid():
             if not dpg.does_item_exist(parent):
                 return
                 
+            dpg.delete_item(parent, children_only=True)
+            self._clear_search_thumbnails(prefix)
+            self.lazy_thumb_queues[prefix] = []
+            
             with dpg.table(header_row=False, parent=parent, policy=dpg.mvTable_SizingStretchProp):
                 for _ in range(columns):
                     dpg.add_table_column()
@@ -1519,6 +1536,19 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         tab_to_prefix = {"scene_tab": "scene_", "prop_tab": "prop_"}
         active_prefix = tab_to_prefix.get(active_tab)
         
+        if active_prefix:
+            view_mode = self.scene_view_mode if active_prefix == "scene_" else self.prop_view_mode
+            if view_mode == "thumbnail":
+                container = f"{active_prefix}thumbnails_parent"
+                if dpg.does_item_exist(container):
+                    width = dpg.get_item_rect_size(container)[0]
+                    expected_columns = max(1, int(width / 115))
+                    if expected_columns != self.thumbnail_columns.get(active_prefix, 0):
+                        items = self.thumbnail_items.get(active_prefix, [])
+                        if items:
+                            self._render_thumbnail_grid(active_prefix, items, container)
+                            return
+
         if not active_prefix or not self.lazy_thumb_queues[active_prefix]:
             return
 
@@ -1582,7 +1612,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     img = img.resize((100, 100), resample_filter)
                     data = np.array(img).flatten().astype(np.float32) / 255.0
                     results.append((img_id, data.tolist()))
-                except Exception as e:
+                except Exception:
                     pass
             return results
 
@@ -1593,7 +1623,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 batch_results = f.result()
                 if batch_results:
                     self._queue_ui_task(lambda: self._apply_search_thumbnails_batch(prefix, batch_results))
-            except Exception as e:
+            except Exception:
                 pass
         
         future.add_done_callback(done)
@@ -1615,7 +1645,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     )
                     dpg.configure_item(img_id, texture_tag=tex_tag)
                     self.search_thumbnail_textures[prefix].append(tex_tag)
-                except Exception as e:
+                except Exception:
                     pass
 
     def clear_prop_search(self, *args):

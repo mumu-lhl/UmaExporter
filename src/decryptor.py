@@ -1,6 +1,4 @@
-import os
 import struct
-from typing import Optional, Union, List
 
 
 # Asset Bundle Constants

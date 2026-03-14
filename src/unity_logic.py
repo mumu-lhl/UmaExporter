@@ -1,5 +1,4 @@
 import os
-import sys
 import shutil
 import subprocess
 import tempfile
@@ -155,7 +154,7 @@ class UnityLogic:
 
             assets_info.sort(key=lambda x: (x[0], x[1]))
             return tuple(assets_info)
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             print(f"Asset file not found (likely not downloaded): {physical_path}")
             return ()
         except Exception as e:
@@ -580,7 +579,7 @@ class UnityLogic:
                             os.symlink(p, target)
                         else:
                             os.link(p, target)
-                except Exception as e:
+                except Exception:
                     # Fallback to copy if linking/decryption fails
                     try:
                         shutil.copy2(p, target)
