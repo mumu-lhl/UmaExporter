@@ -31,7 +31,7 @@ package: build-cython check-as-cli
 # Debug package using Nuitka (FASTEST)
 debug-nuitka: build-cython check-as-cli
     @echo "Packaging with Nuitka (DEBUG/FAST)..."
-    uv run nuitka \
+    uv run --python 3.13 nuitka \
         --standalone \
         --show-progress \
         --clang \
@@ -72,7 +72,7 @@ debug-nuitka: build-cython check-as-cli
 # Package the application using Nuitka via uv
 package-nuitka: build-cython check-as-cli
     @echo "Packaging with Nuitka..."
-    uv run nuitka \
+    uv run --python 3.13 nuitka \
         --standalone \
         --show-progress \
         --follow-imports \
