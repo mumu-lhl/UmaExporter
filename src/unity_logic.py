@@ -240,7 +240,7 @@ class UnityLogic:
             return None
 
     @staticmethod
-    def get_texture_data(physical_path, path_id, bundle_key=None):
+    def get_texture_data(physical_path, path_id, bundle_key=None, max_dim=None):
         """Extract Unity texture and convert to raw RGBA float32 for DPG."""
         try:
             env = UnityLogic._load_env(physical_path, bundle_key=bundle_key)
@@ -258,8 +258,25 @@ class UnityLogic:
                 return None, 0, 0
 
             img = data.image.convert("RGBA")
+            
+            # Optional resizing for preview performance
+            if max_dim:
+                w, h = img.size
+                if w > max_dim or h > max_dim:
+                    if w > h:
+                        new_w = max_dim
+                        new_h = int(h * (max_dim / w))
+                    else:
+                        new_h = max_dim
+                        new_w = int(w * (max_dim / h))
+                    from PIL import Image
+                    # Use BILINEAR for speed in preview mode
+                    img = img.resize((new_w, new_h), resample=Image.BILINEAR)
+
             width, height = img.size
-            data_np = np.array(img, dtype=np.float32) / 255.0
+            # Convert to float32 early in background
+            data_np = np.array(img, dtype=np.float32)
+            data_np /= 255.0
             return data_np.ravel(), width, height
         except Exception as e:
             import traceback

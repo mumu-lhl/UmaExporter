@@ -24,6 +24,7 @@ Prioritize predictable hit-testing, low flicker, and smooth automated scrolling 
 
 ### 1. Zero-Flicker Texture Preview
 - Use a persistent `image_container_tag` for the preview area.
+- Perform expensive conversions (e.g., `tolist()`, `np.ravel()`) in a **background thread**.
 - In `_apply_texture_preview_result`:
     1. Check `request_id` and `asset_id` to ensure response is still valid.
     2. Add the new texture to the registry.
@@ -44,13 +45,12 @@ Prioritize predictable hit-testing, low flicker, and smooth automated scrolling 
     - Apply a buffer (e.g., 40px) to ensure the item isn't partially cut off.
     - Use `dpg.set_y_scroll(container, ...)` with the calculated delta.
 
-### 4. Left-Button Drag Preview For File List
-- Detect hovered file row in `_on_mouse_move` using rectangle hit-test.
-- If left button is down, preview the row under cursor.
-- Keep throttled preview responsive:
-  - Store newest target in `pending_drag_preview` while inside interval.
-  - On every mouse-move tick, if interval has elapsed, flush `pending_drag_preview` immediately.
-- On left release, call `_finalize_drag_preview_selection` to exit preview mode and load full asset metadata.
+### 4. Robust Drag Preview (Left-Button)
+- **ID Normalization**: Always convert `dpg.get_value("tabs")` (which might be an `int`) to a `str` tag alias using `dpg.get_item_alias`.
+- **Throttled Hit-Test**:
+    - Use a recursive search for nested containers.
+    - **Brute-Force Fallback**: If recursive search fails (often due to slot mismatches), iterate through `file_item_data` keys and check `dpg.get_item_rect_min/max`.
+- **Balanced Rendering**: Skip heavy UI updates (like full dependency tables or 3D scene loads) during `drag_preview_active` mode. Only update high-impact labels and textures.
 
 ### 5. Middle-Button Drag Scroll
 - Map mouse Y-delta to container scroll Y.
@@ -58,10 +58,11 @@ Prioritize predictable hit-testing, low flicker, and smooth automated scrolling 
 
 ## Crash Prevention Checklist
 
-1. Ensure no `executor.submit(...)` targets call `dpg.*`.
-2. Ensure `drag_preview_active` is explicitly set to `False` before final `on_file_click` to trigger full data loading.
-3. Always check `dpg.does_item_exist(tag)` before `delete_item` or `configure_item`.
-4. Run syntax check after modification:
+1. **Async Safety**: Ensure no `executor.submit(...)` targets call `dpg.*`.
+2. **Mode Cleanup**: Ensure `drag_preview_active` is explicitly set to `False` before final `on_file_click` to trigger full data loading.
+3. **Existence Check**: Always check `dpg.does_item_exist(tag)` before `delete_item` or `configure_item`.
+4. **Resampling**: Use `BILINEAR` for fast previews and `LANCZOS` only for final exports to keep the UI responsive.
+5. Run syntax check after modification:
 ```bash
 python -m py_compile src/ui/main_window.py
 ```
