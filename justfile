@@ -44,7 +44,7 @@ debug-nuitka: build-cython check-as-cli
         --include-package-data=f3d \
         --include-package-data=UnityPy \
         --include-package-data=fmod_toolkit \
-        --include-data-dir="{{archspec-path}}/json"=ar -p 3.14chspec/json \
+        --include-data-dir="{{archspec-path}}/json"=ar \
         --output-dir=dist-debug \
         --no-pyi-file \
         --include-package=dearpygui \
@@ -84,7 +84,7 @@ package-nuitka: build-cython check-as-cli
         --include-package-data=f3d \
         --include-package-data=UnityPy \
         --include-package-data=fmod_toolkit \
-        --include-data-dir="{{archspec-path}}/json"=ar -p 3.14chspec/json \
+        --include-data-dir="{{archspec-path}}/json"=ar \
         --output-dir=dist-nuitka \
         --no-pyi-file \
         --include-package=dearpygui \
