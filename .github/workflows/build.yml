@@ -47,6 +47,18 @@ jobs:
       if: runner.os == 'Windows'
       run: choco install upx
 
+    - name: Install mold (Linux)
+      if: runner.os == 'Linux'
+      run: sudo apt-get install -y mold
+
+    - name: Install mold (macOS)
+      if: runner.os == 'macOS'
+      run: brew install mold
+
+    - name: Install mold (Windows)
+      if: runner.os == 'Windows'
+      run: choco install mold
+
     - name: Sync Dependencies
       run: uv sync --group dev --python 3.14
       env:
@@ -57,7 +69,7 @@ jobs:
         if [ "${{ matrix.packager }}" == "pyinstaller" ]; then
           just package
         else
-          just package-nuitka
+          mold -run just package-nuitka
         fi
       shell: bash
       env:
