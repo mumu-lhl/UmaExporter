@@ -1,6 +1,6 @@
 # Set cross-platform variables
 os-name := os()
-nuitka-win-flags := if os-name == "windows" { "--clang" } else { "" }
+# nuitka-win-flags := if os-name == "windows" { "--clang" } else { "" }
 nuitka-upx-flag := if os-name == "macos" { "" } else { "--enable-plugin=upx" }
 data-sep := if os-name == "windows" { ";" } else { ":" }
 cli-bin := if os-name == "windows" { "as_cli/AssetStudioModCLI.exe" } else { "as_cli/AssetStudioModCLI" }
@@ -63,7 +63,6 @@ debug-nuitka: build-cython check-as-cli
         --nofollow-import-to=tkinter \
         --nofollow-import-to=matplotlib \
         --nofollow-import-to=unittest \
-        {{nuitka-win-flags}} \
         main.py
     @echo "Placing as_cli next to the binary..."
     {{cp-cmd}} as_cli dist-debug/main.dist/as_cli
@@ -106,7 +105,7 @@ package-nuitka: build-cython check-as-cli
         --nofollow-import-to=tkinter \
         --nofollow-import-to=matplotlib \
         --nofollow-import-to=unittest \
-        {{nuitka-win-flags}} \
+        --clang \
         main.py
     @echo "Placing as_cli next to the binary..."
     {{cp-cmd}} as_cli dist-nuitka/main.dist/as_cli
