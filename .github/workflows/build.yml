@@ -26,22 +26,13 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Set target Python version
-      run: |
-        if [ "${{ matrix.packager }}" == "nuitka" ]; then
-          echo "PYTHON_VERSION=3.13" >> $GITHUB_ENV
-        else
-          echo "PYTHON_VERSION=3.14" >> $GITHUB_ENV
-        fi
-      shell: bash
-
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
         enable-cache: true
 
     - name: Set up Python
-      run: uv python install ${{ env.PYTHON_VERSION }}
+      run: uv python install 3.14
 
     - name: Install just
       uses: extractions/setup-just@v3

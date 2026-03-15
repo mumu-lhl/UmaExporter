@@ -5,7 +5,7 @@ nuitka-upx-flag := if os-name == "macos" { "" } else { "--enable-plugin=upx" }
 data-sep := if os-name == "windows" { ";" } else { ":" }
 cli-bin := if os-name == "windows" { "as_cli/AssetStudioModCLI.exe" } else { "as_cli/AssetStudioModCLI" }
 cp-cmd := "uv run scripts/copy_dir.py"
-archspec-path := `uv run -p 3.13 python -c "import archspec, os; print(os.path.dirname(archspec.__file__))"`
+archspec-path := `uv run python -c "import archspec, os; print(os.path.dirname(archspec.__file__))"`
 
 # Install/Update Asset Studio CLI using uv
 as-cli-setup:
@@ -19,9 +19,6 @@ check-as-cli:
 build-cython:
     @uv run python -c "import glob, os; exit(0 if glob.glob('src/uma_decryptor*.so') or glob.glob('src/uma_decryptor*.pyd') else 1)" || uv run python setup.py build_ext --inplace
 
-build-cython-nuitka:
-    @uv run -p 3.13 python -c "import glob, os; exit(0 if glob.glob('src/uma_decryptor*.so') or glob.glob('src/uma_decryptor*.pyd') else 1)" || uv run python setup.py build_ext --inplace
-
 # Package the application using PyInstaller via uv
 package: build-cython check-as-cli
     @echo "Packaging with PyInstaller..."
@@ -34,7 +31,7 @@ package: build-cython check-as-cli
 # Debug package using Nuitka (FASTEST)
 debug-nuitka: build-cython-nuitka check-as-cli
     @echo "Packaging with Nuitka (DEBUG/FAST)..."
-    uv run -p 3.13 nuitka \
+    uv run nuitka \
         --standalone \
         --show-progress \
         --clang \
@@ -75,7 +72,7 @@ debug-nuitka: build-cython-nuitka check-as-cli
 # Package the application using Nuitka via uv
 package-nuitka: build-cython-nuitka check-as-cli
     @echo "Packaging with Nuitka..."
-    uv run -p 3.13 nuitka \
+    uv run nuitka \
         --standalone \
         --show-progress \
         --follow-imports \
