@@ -1,5 +1,6 @@
 import os
 import dearpygui.dearpygui as dpg
+from src.constants import Config
 from src.ui.i18n import i18n
 from src.thumbnail_manager import ThumbnailManager as thumb_manager
 
@@ -150,8 +151,13 @@ class SearchController:
         else:
             # Thumbnail mode
             items_with_thumb = []
+            thumb_dir = Config.get_thumbnail_dir()
+            existing_thumbs = set()
+            if os.path.exists(thumb_dir):
+                existing_thumbs = {f[:-4] for f in os.listdir(thumb_dir) if f.endswith(".png")}
+
             for i_id, name, size, f_hash, key_val in rows:
-                if thumb_manager.get_thumbnail(f_hash):
+                if f_hash in existing_thumbs:
                     items_with_thumb.append((i_id, name, size, f_hash, key_val))
             
             if not items_with_thumb:
@@ -219,8 +225,13 @@ class SearchController:
         else:
             # Thumbnail mode
             items_with_thumb = []
+            thumb_dir = Config.get_thumbnail_dir()
+            existing_thumbs = set()
+            if os.path.exists(thumb_dir):
+                existing_thumbs = {f[:-4] for f in os.listdir(thumb_dir) if f.endswith(".png")}
+
             for i_id, name, size, f_hash, key_val in rows:
-                if thumb_manager.get_thumbnail(f_hash):
+                if f_hash in existing_thumbs:
                     items_with_thumb.append((i_id, name, size, f_hash, key_val))
             
             if not items_with_thumb:

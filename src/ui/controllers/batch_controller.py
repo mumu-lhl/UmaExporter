@@ -72,11 +72,19 @@ class BatchController:
         try:
             raw_assets = self.app.db.get_all_animator_assets(cats)
             force_overwrite = dpg.get_value("batch_force_overwrite")
+            
+            existing_thumbnails = set()
+            if not force_overwrite:
+                thumb_dir = Config.get_thumbnail_dir()
+                if os.path.exists(thumb_dir):
+                    # Cache filenames (without .png) for quick lookup
+                    existing_thumbnails = {f[:-4] for f in os.listdir(thumb_dir) if f.endswith(".png")}
+
             to_process = []
             for i_id, name, size, f_hash, key_val in raw_assets:
                 if self.app.batch_stop_event.is_set():
                     break
-                if force_overwrite or not thumb_manager.get_thumbnail(f_hash):
+                if force_overwrite or (f_hash not in existing_thumbnails):
                     to_process.append((i_id, name, f_hash))
 
             total_to_process = len(to_process)
