@@ -5,7 +5,7 @@ nuitka-upx-flag := if os-name == "macos" { "" } else { "--enable-plugin=upx" }
 data-sep := if os-name == "windows" { ";" } else { ":" }
 cli-bin := if os-name == "windows" { "as_cli/AssetStudioModCLI.exe" } else { "as_cli/AssetStudioModCLI" }
 cp-cmd := "uv run scripts/copy_dir.py"
-archspec-path := `uv run python -c "import archspec, os; print(os.path.dirname(archspec.__file__))"`
+archspec-path := `uv run -p 3.14 python -c "import archspec, os; print(os.path.dirname(archspec.__file__))"`
 
 # Install/Update Asset Studio CLI using uv
 as-cli-setup:
@@ -44,7 +44,7 @@ debug-nuitka: build-cython check-as-cli
         --include-package-data=f3d \
         --include-package-data=UnityPy \
         --include-package-data=fmod_toolkit \
-        --include-data-dir="{{archspec-path}}/json"=archspec/json \
+        --include-data-dir="{{archspec-path}}/json"=ar -p 3.14chspec/json \
         --output-dir=dist-debug \
         --no-pyi-file \
         --include-package=dearpygui \
@@ -84,7 +84,7 @@ package-nuitka: build-cython check-as-cli
         --include-package-data=f3d \
         --include-package-data=UnityPy \
         --include-package-data=fmod_toolkit \
-        --include-data-dir="{{archspec-path}}/json"=archspec/json \
+        --include-data-dir="{{archspec-path}}/json"=ar -p 3.14chspec/json \
         --output-dir=dist-nuitka \
         --no-pyi-file \
         --include-package=dearpygui \
