@@ -116,7 +116,6 @@ jobs:
           unittest
         windows-disable-console: true
         clang: true
-        enable-plugins: ${{ runner.os == 'macOS' && '' || 'upx' }}
 
     - name: Post-Process Nuitka
       if: matrix.packager == 'nuitka'
