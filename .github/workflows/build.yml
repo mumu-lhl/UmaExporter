@@ -50,17 +50,84 @@ jobs:
       env:
         UV_PYTHON: ${{ env.PYTHON_VERSION }}
 
-    - name: Package
-      run: |
-        if [ "${{ matrix.packager }}" == "pyinstaller" ]; then
-          just package
-        else
-          just package-nuitka
-        fi
+    - name: Package (PyInstaller)
+      if: matrix.packager == 'pyinstaller'
+      run: just package
       shell: bash
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         PreferredToolArchitecture: x64
+
+    - name: Prepare Nuitka Environment
+      if: matrix.packager == 'nuitka'
+      id: nuitka-prep
+      run: |
+        just build-cython check-as-cli
+        
+        archspec_path=$(uv run python -c "import archspec, os; print(os.path.dirname(archspec.__file__))")
+        echo "archspec_path=$archspec_path" >> $GITHUB_OUTPUT
+        
+        # Add venv to PATH so Nuitka-Action uses the correct Python and dependencies
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          echo "$PWD/.venv/Scripts" >> $GITHUB_PATH
+        else
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+        fi
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Package (Nuitka)
+      if: matrix.packager == 'nuitka'
+      uses: Nuitka/Nuitka-Action@main
+      with:
+        nuitka-version: main
+        script-name: main.py
+        mode: standalone
+        output-dir: dist-nuitka
+        output-filename: UmaExporter
+        include-package: |
+          dearpygui
+          f3d
+          UnityPy
+          fmod_toolkit
+          archspec
+          astc_encoder
+          texture2ddecoder
+          etcpak
+          pyfmodex
+          ctypes
+          PIL
+          numpy
+          apsw
+        include-module: |
+          ctypes._layout
+          src.uma_decryptor
+        include-package-data: |
+          dearpygui
+          f3d
+          UnityPy
+          fmod_toolkit
+        include-data-dir: |
+          ${{ steps.nuitka-prep.outputs.archspec_path }}/json=ar
+        nofollow-import-to: |
+          tkinter
+          matplotlib
+          unittest
+        windows-disable-console: true
+        clang: true
+        enable-plugins: ${{ runner.os == 'macOS' && '' || 'upx' }}
+
+    - name: Post-Process Nuitka
+      if: matrix.packager == 'nuitka'
+      run: |
+        # Find the .dist directory (either main.dist or UmaExporter.dist depending on Nuitka version/flags)
+        DIST_DIR=$(find dist-nuitka -maxdepth 1 -name "*.dist" | head -n 1)
+        echo "Detected Nuitka dist dir: $DIST_DIR"
+        
+        uv run scripts/copy_dir.py as_cli "$DIST_DIR/as_cli"
+        uv run scripts/copy_dir.py README.md "$DIST_DIR/使用说明.txt"
+      shell: bash
 
     - name: Stage Artifacts
       run: |
@@ -68,7 +135,8 @@ jobs:
         if [ "${{ matrix.packager }}" == "pyinstaller" ]; then
           cp -r dist/UmaExporter/* staging/UmaExporter/
         else
-          cp -r dist-nuitka/main.dist/* staging/UmaExporter/
+          DIST_DIR=$(find dist-nuitka -maxdepth 1 -name "*.dist" | head -n 1)
+          cp -r "$DIST_DIR"/* staging/UmaExporter/
         fi
       shell: bash
 
