@@ -29,7 +29,7 @@ package: build-cython check-as-cli
     @echo "Build complete! Check the 'dist/UmaExporter' directory."
 
 # Debug package using Nuitka (FASTEST)
-debug-nuitka: build-cython-nuitka check-as-cli
+debug-nuitka: build-cython check-as-cli
     @echo "Packaging with Nuitka (DEBUG/FAST)..."
     uv run nuitka \
         --standalone \
@@ -70,7 +70,7 @@ debug-nuitka: build-cython-nuitka check-as-cli
     @echo "Debug build complete! Run: ./dist-debug/main.dist/UmaExporter"
 
 # Package the application using Nuitka via uv
-package-nuitka: build-cython-nuitka check-as-cli
+package-nuitka: build-cython check-as-cli
     @echo "Packaging with Nuitka..."
     uv run nuitka \
         --standalone \

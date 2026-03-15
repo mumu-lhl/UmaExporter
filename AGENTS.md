@@ -7,56 +7,62 @@ A high-performance desktop application built with Python and Dear PyGui for expl
 - **Purpose**: Provides a professional-grade interface to navigate logical game asset structures, inspect internal Unity objects (Textures, Meshes, Animators), and export them.
 - **Main Technologies**:
     - **UI Framework**: [Dear PyGui](https://github.com/hoffstadt/DearPyGui) (GPU-accelerated, immediate-mode UI).
+    - **Architecture**: Modular MVC (Model-View-Controller) with Service-based background processing.
     - **Asset Parsing**: [UnityPy](https://github.com/K00L4ID/UnityPy) for metadata/texture extraction; [AssetStudioModCLI](https://github.com/Razmoth/AssetStudioModCLI) for complex 3D/Animation exports.
-    - **3D Rendering**: [f3d](https://f3d.app/) (Fast and minimalist 3D viewer) running as a separate process.
-    - **Data Layer**: SQLite (mapping asset names to physical hashes) with an in-memory dependency graph for instant lookups.
+    - **Performance**: [Cython](https://cython.org/) for critical path decryption (`uma_decryptor.pyx`).
+    - **3D Rendering**: [f3d](https://f3d.app/) (Fast and minimalist 3D viewer) running as a managed subprocess.
     - **Runtime**: Python 3.14+ managed by `uv`.
 
 ## Architecture
 
-The system follows a multi-threaded, multi-process architecture to ensure UI responsiveness:
+The system utilizes a specialized MVC pattern optimized for Dear PyGui's immediate mode paradigm, ensuring responsiveness even during heavy I/O.
 
-1.  **Presentation Layer (`src/ui/main_window.py`)**:
-    - `UmaExporterApp`: The core controller. Manages the DPG event loop, navigation history, and UI state.
-    - **Concurrency**: Uses a `ThreadPoolExecutor` for background I/O and a thread-safe `Queue` (`ui_tasks`) to schedule UI updates on the main thread.
-    - **3D Preview**: Spawns a dedicated `subprocess.Popen` instance of the application with a `--f3d-viewer` flag. Communication (e.g., loading new meshes) is handled via `stdin` to ensure stability in packaged environments (Nuitka/PyInstaller) and prevent UI deadlocks.
+### 1. Presentation Layer (MVC)
+- **Root Coordinator (`src/ui/main_window.py`)**: `UmaExporterApp` initializes the application, manages global state (navigation history, specialized stores), and orchestrates the main event loop.
+- **Controllers (`src/ui/controllers/`)**: Encapsulate distinct functional logic.
+    - `PreviewController`: Manages the asset inspector, texture loading, and f3d integration.
+    - `SearchController`: Handles asynchronous SQL queries and result filtering.
+    - `DragController`: Implements complex drag-and-drop interactions (e.g., drag-to-preview).
+    - **Mixin Pattern**: Shared behaviors (like navigation or preview helpers) are composed via Mixins (`preview_mixin.py`).
+- **Services (`src/ui/services/`)**: Handle long-running background tasks to keep the main thread free.
+    - `ThumbnailService`: Asynchronously loads, resizes, and caches textures using `ThreadPoolExecutor`.
+    - `F3dService`: Manages the lifecycle of the external 3D viewer process.
+- **Views (`src/ui/views/`)**: Define UI layout and hierarchy, decoupling rendering code from logic.
 
-2.  **Logic Layer (`src/unity_logic.py`)**:
-    - `UnityLogic`: Handles bridge logic. It extracts `Texture2D` directly for live preview and delegates complex FBX/Animator exports to the `as_cli/` binaries.
-    - Converts raw texture data to `numpy` arrays for high-speed Dear PyGui texture registry updates.
-
-3.  **Data Layer (`src/database.py` & `src/constants.py`)**:
-    - `UmaDatabase`: Indexes the game's `meta` database. Builds a bidirectional dependency map (Forward/Reverse) during initialization for O(1) navigation between related assets.
-    - `Config`: Manages path resolution for game data and CLI tools.
+### 2. Core Logic & Data
+- **High-Performance Decryption**:
+    - Game assets are decrypted in-place using a compiled **Cython extension** (`src/uma_decryptor.pyx`) to minimize memory overhead and CPU usage.
+    - `src/decryptor.py` provides a Pythonic wrapper for the low-level Cython routines.
+- **Unity Logic (`src/unity_logic.py`)**: Abstraction layer over `UnityPy` for extracting raw `Texture2D` data and metadata.
+- **Thumbnail Manager (`src/thumbnail_manager.py`)**: Global cache for asset thumbnails, preventing redundant processing.
+- **Data Layer (`src/database.py`)**:
+    - SQLite-backed `UmaDatabase` for persistent metadata.
+    - In-memory bidirectional dependency graph for O(1) asset relationship traversal.
 
 ## Key Features
 
-- **Asynchronous Search**: Fast SQL-based lookup with live-updating results via the task queue.
-- **Interactive Inspector**: Lists all internal Unity objects within a bundle with type-specific actions.
-- **Hybrid 3D Preview**: 
-    - Real-time 2D texture previews in DPG.
-    - One-click 3D preview in an external `f3d` window for Meshes/Models.
-- **Advanced UX (Skills)**:
-    - **Drag-to-Inspect**: Drag an asset to hover over other UI elements to trigger auto-previews.
-    - **Middle-Mouse Navigation**: Fluid canvas-style scrolling and interaction.
-- **Deep Export**: Supports exporting logical assets and their entire dependency tree (e.g., character models with textures and animations) using specialized CLI tools.
+- **Asynchronous Search**: Non-blocking SQL lookups with batched UI updates via `ui_tasks` queue.
+- **Interactive Inspector**: Deep inspection of Unity bundles with type-aware context menus.
+- **Hybrid 3D Preview**:
+    - **Instant 2D**: Native DPG texture viewing.
+    - **External 3D**: Seamless integration with `f3d` for viewing Meshes and Animations without bloating the main process.
+- **Agent Skills Integration**:
+    - The project uses specialized "Skills" (located in `.agents/skills/`) to define complex behaviors like "Scene Auto-Preview" and "Async UI Patterns". These serve as executable documentation and behavior guides.
 
 ## Development Conventions
 
-- **Thread Safety**: **Crucial.** Never modify DPG items directly from a background thread. Always push a callback to `self.ui_tasks` and let `_drain_ui_tasks` handle it in the main loop.
-- **Process Management**: The `f3d` viewer process must be monitored and cleaned up on application exit to avoid orphaned windows.
-- **CLI Integration**: AssetStudio operations are non-blocking. Use temporary directories for intermediate files and clean up after successful export/preview.
-- **Asset Identification**: Use the physical `hash` (physical path) for data operations and the `name` (logical path) for UI display.
+- **Thread Safety**: **Strict Requirement.** DPG contexts are not thread-safe. Background threads (Services) must *never* call DPG functions directly. They must submit callbacks to `app.ui_tasks`, which the main thread drains every frame.
+- **Cython Compilation**: Critical modules (`uma_decryptor`) must be compiled. Use `setup.py build_ext --inplace` or rely on the `uv` build environment.
+- **Process Management**: Child processes (like f3d) are managed via `subprocess.Popen` with careful `stdin` communication to prevent zombie processes or deadlocks.
+- **Asset Identification**: Use `hash` (physical filename) for backend operations and `name` (logical path) for UI presentation.
 
 ## Building and Running
-
-The project utilizes `uv` for modern, reproducible dependency management.
 
 - **Run Application**:
   ```bash
   uv run main.py
   ```
 - **Setup**:
-  1. Ensure `as_cli/ASExport` (AssetStudioModCLI) is present and executable.
-  2. Run `uv sync` to install all dependencies (including `numpy`, `unitypy`, `dearpygui`, etc.).
-  3. Configure game data paths in `config.json` (auto-generated on first run).
+  1. Ensure `as_cli/ASExport` is present.
+  2. Run `uv sync` to install dependencies.
+  3. Ensure Cython modules are built (handled by `setup.py` if installing as package, or build manually for dev).
