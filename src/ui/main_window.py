@@ -230,7 +230,7 @@ class UmaExporterApp:
         self._setup_font_and_theme()
         
         with dpg.texture_registry(show=False, tag="main_texture_registry"):
-            dpg.add_static_texture(width=100, height=100, default_value=[0]*40000, tag="thumb_placeholder")
+            dpg.add_static_texture(width=100, height=100, default_value=[0.2, 0.2, 0.2, 1.0]*10000, tag="thumb_placeholder")
 
         dpg.setup_dearpygui()
         
