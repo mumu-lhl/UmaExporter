@@ -85,7 +85,7 @@ jobs:
         script-name: main.py
         mode: standalone
         output-dir: dist-nuitka
-        output-filename: UmaExporter
+        output-file: UmaExporter
         include-package: |
           dearpygui
           f3d
@@ -114,7 +114,7 @@ jobs:
           tkinter
           matplotlib
           unittest
-        windows-disable-console: true
+        disable-console: true
         clang: true
 
     - name: Post-Process Nuitka
