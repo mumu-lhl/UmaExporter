@@ -1,9 +1,9 @@
 [project]
 name = "uma-exporter"
-version = "0.2.0"
+version = "0.2.1"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
     "apsw-sqlite3mc>=3.51.2.0",
     "dearpygui>=2.2",
