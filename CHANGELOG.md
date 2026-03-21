@@ -1,3 +1,24 @@
+## [0.2.1] - 2026-03-19
+
+### 🚀 Features
+
+- Empty thumbmail when have not loaded
+
+### 📚 Documentation
+
+- *(changelog)* Update CHANGELOG.md for v0.2.0 [skip ci]
+
+### ⚙️ Miscellaneous Tasks
+
+- *(ci)* Remove cache
+- *(ci)* Speed up nuitka compiling
+- *(release)* Remove Release prefix
+- *(ci)* Use mold as linker
+- *(ci)* Fix mold
+- *(ci)* Improve nuitka
+- *(ci)* Don't use upx
+- *(ci)* Fix nuitka warning
+- *(version)* Release v0.2.1
 ## [0.2.0] - 2026-03-15
 
 ### 🚀 Features
