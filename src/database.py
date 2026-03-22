@@ -19,28 +19,10 @@ class UmaDatabase:
         if not db_path:
             raise ValueError("Database path is empty.")
 
-        # Try standard sqlite3 first
-        try:
-            conn = sqlite3.connect(
-                f"file:{db_path}?mode=ro",
-                uri=True,
-                check_same_thread=False,
-                isolation_level=None,
-                cached_statements=256,
-            )
-            # Verify it's actually readable
-            cursor = conn.cursor()
-            cursor.execute("SELECT name FROM sqlite_master LIMIT 1")
-            Config.DB_ENCRYPTED = False
-            return conn
-        except sqlite3.OperationalError, sqlite3.DatabaseError:
-            # If standard fails, try encrypted with apsw
-            print(
-                f"Standard SQLite failed for {db_path}, trying encrypted with apsw..."
-            )
-            conn = self._connect_encrypted(db_path)
-            Config.DB_ENCRYPTED = True
-            return conn
+        # Always use encrypted connection with apsw as all data is now encrypted
+        print(f"Connecting to encrypted database {db_path}...")
+        conn = self._connect_encrypted(db_path)
+        return conn
 
     def _connect_encrypted(self, db_path):
         """Connect to an encrypted database using apsw and sqlite3mc."""
@@ -114,7 +96,7 @@ class UmaDatabase:
         cursor = self.conn.cursor()
 
         # Dynamically include 'e' (key) column only if the DB is encrypted
-        cols = "i, n, l, h, e" if Config.DB_ENCRYPTED else "i, n, l, h, NULL as e"
+        cols = "i, n, l, h, e"
         cursor.execute(f"SELECT {cols} FROM a WHERE n IS NOT NULL AND n != ''")
 
         tree_data = {}
@@ -192,17 +174,16 @@ class UmaDatabase:
             )
 
     def _get_asset_info(self, asset_id):
+        """Fetch basic asset info (name, size, hash, key) and cache it"""
         key = str(asset_id)
         info = self._asset_info_by_id.get(key)
         if info is not None:
             return info
         cursor = self.conn.cursor()
-        cols = "n, l, h, e" if Config.DB_ENCRYPTED else "n, l, h"
+        cols = "n, l, h, e"
         cursor.execute(f"SELECT {cols} FROM a WHERE i = ? LIMIT 1", (key,))
         row = cursor.fetchone()
         if row:
-            if not Config.DB_ENCRYPTED:
-                row = (*row, None)  # Add None as key_val
             self._asset_info_by_id[key] = row
         return row
 
@@ -235,7 +216,7 @@ class UmaDatabase:
     def search_assets(self, query, limit=100):
         """Search assets via database LIKE query"""
         cursor = self.conn.cursor()
-        cols = "i, n, l, h, e" if Config.DB_ENCRYPTED else "i, n, l, h, NULL as e"
+        cols = "i, n, l, h, e"
         cursor.execute(
             f"SELECT {cols} FROM a WHERE n LIKE ? LIMIT ?", (f"%{query}%", limit)
         )
@@ -268,7 +249,7 @@ class UmaDatabase:
     def search_scenes(self, query="", limit=None):
         """Search specifically for scene assets in 3d/env/"""
         cursor = self.conn.cursor()
-        cols = "i, n, l, h, e" if Config.DB_ENCRYPTED else "i, n, l, h, NULL as e"
+        cols = "i, n, l, h, e"
         if limit is None:
             cursor.execute(
                 f"SELECT {cols} FROM a WHERE n LIKE ? AND n LIKE '3d/env/%'",
@@ -284,7 +265,7 @@ class UmaDatabase:
     def search_props(self, query="", limit=None):
         """Search specifically for prop assets in 3d/chara/prop, 3d/chara/toonprop, and 3d/chara/richprop"""
         cursor = self.conn.cursor()
-        cols = "i, n, l, h, e" if Config.DB_ENCRYPTED else "i, n, l, h, NULL as e"
+        cols = "i, n, l, h, e"
         conditions = [
             "n LIKE '3d/chara/prop/%'",
             "n LIKE '3d/chara/toonprop/%'",
@@ -307,7 +288,7 @@ class UmaDatabase:
     def get_all_animator_assets(self, categories=None):
         """Retrieves all asset info for specified categories (scene, prop)."""
         cursor = self.conn.cursor()
-        cols = "i, n, l, h, e" if Config.DB_ENCRYPTED else "i, n, l, h, NULL as e"
+        cols = "i, n, l, h, e"
 
         query_base = f"SELECT {cols} FROM a WHERE "
         conditions = []
@@ -336,10 +317,6 @@ class UmaDatabase:
 
     def get_key_by_hash(self, f_hash):
         """Quick look up for decryption key by file hash."""
-        if not Config.DB_ENCRYPTED:
-            return None
-
-        # Check cache first
         # Note: _asset_info_by_id is keyed by ID, not hash.
         # But we can use a separate small cache or just query.
         cursor = self.conn.cursor()

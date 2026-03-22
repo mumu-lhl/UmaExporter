@@ -18,7 +18,7 @@ _orig_load_file = UnityPy.Environment.load_file
 
 def _custom_load_file(self, file, is_dependency=False, name=None):
     """Custom load_file for UnityPy that handles UMA decryption."""
-    if Config.DB_ENCRYPTED and isinstance(file, str):
+    if isinstance(file, str):
         # Resolve path if it's relative
         phys_path = file
         if not os.path.exists(phys_path) and self.path:
@@ -38,7 +38,6 @@ def _custom_load_file(self, file, is_dependency=False, name=None):
                         is_dependency=is_dependency,
                         name=name or os.path.basename(file),
                     )
-
     return _orig_load_file(self, file, is_dependency=is_dependency, name=name)
 
 
@@ -75,34 +74,29 @@ class UnityLogic:
 
     @staticmethod
     def _load_bundle_data(physical_path, bundle_key=None):
-        """Read bundle data and decrypt if necessary."""
+        """Read bundle data and decrypt."""
         if not os.path.exists(physical_path):
             return None
 
-        if Config.DB_ENCRYPTED:
-            try:
-                # Use provided key if available, else fallback to default
-                decryption_key = DEFAULT_KEY
-                if bundle_key is not None and str(bundle_key).strip() != "":
-                    try:
-                        decryption_key = int(bundle_key)
-                    except ValueError, TypeError:
-                        pass
+        try:
+            # Use provided key if available, else fallback to default
+            decryption_key = DEFAULT_KEY
+            if bundle_key is not None and str(bundle_key).strip() != "":
+                try:
+                    decryption_key = int(bundle_key)
+                except ValueError, TypeError:
+                    pass
 
-                with open(physical_path, "rb") as f:
-                    data = bytearray(f.read())
+            with open(physical_path, "rb") as f:
+                data = bytearray(f.read())
 
-                decrypted = decrypt_bundle(
-                    data, region=Config.REGION, key=decryption_key
-                )
+            decrypted = decrypt_bundle(data, region=Config.REGION, key=decryption_key)
 
-                # Convert to bytes because bytearray is unhashable and causes UnityPy to fail in some Python versions
-                return bytes(decrypted)
-            except Exception as e:
-                print(f"Error decrypting bundle {physical_path}: {e}")
-                return None
-        else:
-            return physical_path
+            # Convert to bytes because bytearray is unhashable and causes UnityPy to fail in some Python versions
+            return bytes(decrypted)
+        except Exception as e:
+            print(f"Error decrypting bundle {physical_path}: {e}")
+            return None
 
     @staticmethod
     @lru_cache(maxsize=8)
@@ -441,13 +435,16 @@ class UnityLogic:
                 key, filename = info
                 target = os.path.join(staging_dir, filename)
                 try:
-                    if Config.DB_ENCRYPTED:
-                        data = UnityLogic._load_bundle_data(p, bundle_key=key)
-                        if data:
-                            with open(target, "wb") as f:
-                                f.write(data)
-                    else:
-                        # Link for speed
+                    success = False
+                    # All data is now encrypted, so we must decrypt before staging
+                    data = UnityLogic._load_bundle_data(p, bundle_key=key)
+                    if data:
+                        with open(target, "wb") as f:
+                            f.write(data)
+                        success = True
+
+                    if not success:
+                        # Fallback for unexpected cases or decryption failure
                         try:
                             if hasattr(os, "symlink"):
                                 os.symlink(p, target)
@@ -600,15 +597,16 @@ class UnityLogic:
                     continue
 
                 try:
-                    if Config.DB_ENCRYPTED:
-                        data = UnityLogic._load_bundle_data(
-                            p, bundle_key=key_map.get(p)
-                        )
-                        if data:
-                            with open(target, "wb") as f:
-                                f.write(data)
-                    else:
-                        # Link/Copy for unencrypted files
+                    success = False
+                    # All data is now encrypted, so we must decrypt first
+                    data = UnityLogic._load_bundle_data(p, bundle_key=key_map.get(p))
+                    if data:
+                        with open(target, "wb") as f:
+                            f.write(data)
+                        success = True
+
+                    if not success:
+                        # Link/Copy for unencrypted files or decryption failure
                         if hasattr(os, "symlink"):
                             os.symlink(p, target)
                         else:

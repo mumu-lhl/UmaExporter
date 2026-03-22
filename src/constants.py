@@ -29,8 +29,8 @@ class Config:
     LANGUAGE = "Auto"
     # Data region (jp, global)
     REGION = "jp"
-    # Runtime flag: detected if the database is encrypted
-    DB_ENCRYPTED = False
+    # Runtime flag: all user data is now assumed to be encrypted
+    DB_ENCRYPTED = True
 
     @classmethod
     def get_effective_language(cls):
