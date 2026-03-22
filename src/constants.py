@@ -141,12 +141,16 @@ class Config:
         system = platform.system()
 
         if system == "Windows":
-            base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~/AppData/Local")
+            base = os.environ.get("LOCALAPPDATA") or os.path.expanduser(
+                "~/AppData/Local"
+            )
             path = os.path.join(base, app_name)
         elif system == "Darwin":  # macOS
             path = os.path.expanduser(f"~/Library/Application Support/{app_name}")
         else:  # Linux/Other
-            base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+            base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser(
+                "~/.local/share"
+            )
             path = os.path.join(base, app_name)
 
         if not os.path.exists(path):

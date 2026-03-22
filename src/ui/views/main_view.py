@@ -7,6 +7,7 @@ from .browser_view import BrowserView
 from .search_view import SearchView
 from .details_view import DetailsView
 
+
 class MainView:
     def __init__(self, controller):
         self.controller = controller
@@ -126,7 +127,10 @@ class MainView:
                         )
                         with dpg.group(horizontal=True):
                             dpg.add_radio_button(
-                                items=[i18n("label_view_list"), i18n("label_view_thumbnail")],
+                                items=[
+                                    i18n("label_view_list"),
+                                    i18n("label_view_thumbnail"),
+                                ],
                                 default_value=i18n("label_view_list"),
                                 horizontal=True,
                                 callback=self.controller._on_view_mode_change,
@@ -135,9 +139,10 @@ class MainView:
                         dpg.add_separator()
                         with dpg.child_window(tag="scene_results_parent", border=False):
                             pass
-                        with dpg.child_window(tag="scene_thumbnails_parent", border=False, show=False):
+                        with dpg.child_window(
+                            tag="scene_thumbnails_parent", border=False, show=False
+                        ):
                             pass
-
 
                     # Right Column: Details (same structure as Home)
                     with dpg.child_window(
@@ -157,7 +162,10 @@ class MainView:
                         )
                         with dpg.group(horizontal=True):
                             dpg.add_radio_button(
-                                items=[i18n("label_view_list"), i18n("label_view_thumbnail")],
+                                items=[
+                                    i18n("label_view_list"),
+                                    i18n("label_view_thumbnail"),
+                                ],
                                 default_value=i18n("label_view_list"),
                                 horizontal=True,
                                 callback=self.controller._on_view_mode_change,
@@ -166,7 +174,9 @@ class MainView:
                         dpg.add_separator()
                         with dpg.child_window(tag="prop_results_parent", border=False):
                             pass
-                        with dpg.child_window(tag="prop_thumbnails_parent", border=False, show=False):
+                        with dpg.child_window(
+                            tag="prop_thumbnails_parent", border=False, show=False
+                        ):
                             pass
 
                     # Right Column: Details
@@ -216,17 +226,34 @@ class MainView:
                     )
 
                     dpg.add_spacer(height=5)
-                    dpg.add_checkbox(label=i18n("label_force_overwrite"), tag="batch_force_overwrite", default_value=False)
+                    dpg.add_checkbox(
+                        label=i18n("label_force_overwrite"),
+                        tag="batch_force_overwrite",
+                        default_value=False,
+                    )
 
                     dpg.add_spacer(height=20)
                     with dpg.group(horizontal=True):
-                        dpg.add_button(label=i18n("btn_start_batch"), tag="btn_start_batch", callback=self.controller.on_start_batch_click, width=150)
+                        dpg.add_button(
+                            label=i18n("btn_start_batch"),
+                            tag="btn_start_batch",
+                            callback=self.controller.on_start_batch_click,
+                            width=150,
+                        )
                         dpg.bind_item_theme("btn_start_batch", "button_state_theme")
-                        dpg.add_button(label=i18n("btn_stop_batch"), tag="btn_stop_batch", callback=self.controller.on_stop_batch_click, width=100, enabled=False)
+                        dpg.add_button(
+                            label=i18n("btn_stop_batch"),
+                            tag="btn_stop_batch",
+                            callback=self.controller.on_stop_batch_click,
+                            width=100,
+                            enabled=False,
+                        )
                         dpg.bind_item_theme("btn_stop_batch", "button_state_theme")
 
                     dpg.add_spacer(height=20)
-                    dpg.add_text(i18n("label_progress"), tag="batch_progress_text", show=False)
+                    dpg.add_text(
+                        i18n("label_progress"), tag="batch_progress_text", show=False
+                    )
                     dpg.add_progress_bar(tag="batch_progress_bar", width=-1, show=False)
                     dpg.add_text("", tag="batch_status_msg", wrap=600)
 

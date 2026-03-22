@@ -1,6 +1,7 @@
 import os
 import ast
 
+
 def check_syntax():
     base_dir = "src/ui"
     for root, _, files in os.walk(base_dir):
@@ -12,6 +13,7 @@ def check_syntax():
                         ast.parse(file.read(), filename=path)
                     except SyntaxError as e:
                         print(f"SyntaxError in {path}: {e}")
+
 
 if __name__ == "__main__":
     check_syntax()

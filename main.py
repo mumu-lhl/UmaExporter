@@ -11,11 +11,13 @@ if is_nuitka():
     if os.path.exists(_archspec_data):
         os.environ["ARCHSPEC_CPU_DIR"] = _archspec_data
 
+
 def main():
     # 1. HARD GUARD: Check for our custom viewer flag first.
     # This is 100% reliable for child processes in all packaged environments.
     if "--f3d-viewer" in sys.argv:
         from src.ui.f3d_worker import launch_f3d_viewer_stdin
+
         launch_f3d_viewer_stdin()
         return
 
@@ -47,6 +49,7 @@ def main():
             import traceback
 
             traceback.print_exc()
+
 
 if __name__ == "__main__":
     main()

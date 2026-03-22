@@ -3,6 +3,7 @@ import threading
 import sys
 import os
 
+
 class F3dService:
     def __init__(self):
         self.f3d_process = None
@@ -30,9 +31,9 @@ class F3dService:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
-                    bufsize=1, # Line buffered
+                    bufsize=1,  # Line buffered
                     # On Windows, hide the console window
-                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 )
 
                 # Thread to pipe stdout and stderr to the main terminal
@@ -45,8 +46,16 @@ class F3dService:
                     except:
                         pass
 
-                threading.Thread(target=log_pipe, args=(self.f3d_process.stdout, "[F3D-OUT]"), daemon=True).start()
-                threading.Thread(target=log_pipe, args=(self.f3d_process.stderr, "[F3D-ERR]"), daemon=True).start()
+                threading.Thread(
+                    target=log_pipe,
+                    args=(self.f3d_process.stdout, "[F3D-OUT]"),
+                    daemon=True,
+                ).start()
+                threading.Thread(
+                    target=log_pipe,
+                    args=(self.f3d_process.stderr, "[F3D-ERR]"),
+                    daemon=True,
+                ).start()
 
     def load_mesh(self, fbx_path):
         self.ensure_f3d_viewer()

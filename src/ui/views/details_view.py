@@ -1,6 +1,7 @@
 import dearpygui.dearpygui as dpg
 from src.ui.i18n import i18n
 
+
 class DetailsView:
     def __init__(self, controller):
         self.controller = controller

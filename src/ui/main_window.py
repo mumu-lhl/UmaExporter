@@ -37,13 +37,13 @@ class UmaExporterApp:
         self.ui_tasks = queue.Queue()
         self.is_db_loading = False
         self.max_ui_tasks_per_frame = 32
-        
+
         # Application State
         self.node_map = {}
         self.tree_data = {}
         self.file_item_data = {}
         self.last_selected = None
-        
+
         # Navigation State
         self.history_back = []
         self.history_forward = []
@@ -51,7 +51,7 @@ class UmaExporterApp:
         self.current_asset_hash = None
         self.current_asset_data = None
         self.is_navigating = False
-        
+
         # Drag State
         self.drag_preview_active = False
         self.current_view_is_drag_preview = False
@@ -69,15 +69,11 @@ class UmaExporterApp:
         self.last_tab_drag_switch_target = None
         self.last_tab_drag_switch_time = 0
         self.tab_drag_switch_interval = 0.5
-        
+
         # Preview State
         self.selection_request_id = 0
         self.texture_request_ids = {}
-        self.thumbnail_request_ids = {
-            "": 0,
-            "scene_": 0,
-            "prop_": 0
-        }
+        self.thumbnail_request_ids = {"": 0, "scene_": 0, "prop_": 0}
         self.last_unity_selected = {}
         self.thumbnail_texture_tags = {}
         self.preview_texture_tags = {}
@@ -86,12 +82,12 @@ class UmaExporterApp:
         self.cached_rev_deps = {}
         self.scene_auto_preview_request = None
         self.prop_auto_preview_request = None
-        
+
         # Lazy Thumbnail Processing State
         self.last_lazy_scan_time = 0
         self.lazy_scan_interval = 0.2
         self.texture_lock = threading.Lock()
-        
+
         # View Modes
         self.scene_view_mode = "list"
         self.prop_view_mode = "list"
@@ -99,15 +95,15 @@ class UmaExporterApp:
         self.thumbnail_columns = {"scene_": 0, "prop_": 0}
         self.thumbnail_items = {"scene_": [], "prop_": []}
         self.lazy_thumb_queues = {"scene_": [], "prop_": []}
-        
+
         # Batch Processor State
         self.is_batch_running = False
         self.batch_stop_event = threading.Event()
-        
+
         # Initialize Services
         self.f3d_service = F3dService()
         self.thumbnail_service = ThumbnailService(self.executor, self)
-        
+
         # Initialize Controllers
         self.preview_controller = PreviewController(self)
         self.drag_controller = DragController(self)
@@ -116,13 +112,15 @@ class UmaExporterApp:
         self.browser_controller = BrowserController(self)
         self.shortcut_controller = ShortcutController(self)
         self.batch_controller = BatchController(self)
-        
+
         # Build UI Structure
         self._setup_dearpygui()
-        
+
         # Initialize Views
-        self.main_view = MainView(self) # We pass self as controller proxy to MainView for simplicity
-        
+        self.main_view = MainView(
+            self
+        )  # We pass self as controller proxy to MainView for simplicity
+
         # Map some proxy callbacks for MainView because it binds to self.controller.*
         self.on_search = self.search_controller.on_search
         self.clear_search = self.search_controller.clear_search
@@ -137,7 +135,7 @@ class UmaExporterApp:
         self._update_nav_buttons = self.navigation_controller._update_nav_buttons
         self.go_back = self.navigation_controller.go_back
         self.go_forward = self.navigation_controller.go_forward
-        
+
         self._init_ui()
         self._db_load_worker()
 
@@ -145,14 +143,29 @@ class UmaExporterApp:
         dpg.create_context()
         if not hasattr(dpg, "_context_created"):
             dpg._context_created = True
-            
+
             with dpg.handler_registry(tag="global_drag_handlers"):
                 dpg.add_mouse_move_handler(callback=self.drag_controller._on_mouse_move)
-                dpg.add_mouse_drag_handler(button=dpg.mvMouseButton_Left, callback=self.drag_controller._on_mouse_move)
-                dpg.add_mouse_down_handler(button=dpg.mvMouseButton_Middle, callback=self.drag_controller._on_middle_mouse_down)
-                dpg.add_mouse_drag_handler(button=dpg.mvMouseButton_Middle, callback=self.drag_controller._on_middle_mouse_drag)
-                dpg.add_mouse_release_handler(button=dpg.mvMouseButton_Middle, callback=self.drag_controller._on_middle_mouse_release)
-                dpg.add_mouse_release_handler(button=dpg.mvMouseButton_Left, callback=self.drag_controller._on_left_mouse_release)
+                dpg.add_mouse_drag_handler(
+                    button=dpg.mvMouseButton_Left,
+                    callback=self.drag_controller._on_mouse_move,
+                )
+                dpg.add_mouse_down_handler(
+                    button=dpg.mvMouseButton_Middle,
+                    callback=self.drag_controller._on_middle_mouse_down,
+                )
+                dpg.add_mouse_drag_handler(
+                    button=dpg.mvMouseButton_Middle,
+                    callback=self.drag_controller._on_middle_mouse_drag,
+                )
+                dpg.add_mouse_release_handler(
+                    button=dpg.mvMouseButton_Middle,
+                    callback=self.drag_controller._on_middle_mouse_release,
+                )
+                dpg.add_mouse_release_handler(
+                    button=dpg.mvMouseButton_Left,
+                    callback=self.drag_controller._on_left_mouse_release,
+                )
 
             self.shortcut_controller.setup_shortcuts()
 
@@ -161,13 +174,23 @@ class UmaExporterApp:
 
         with dpg.theme() as global_theme:
             with dpg.theme_component(dpg.mvAll):
-                dpg.add_theme_style(dpg.mvStyleVar_FrameRounding, 5, category=dpg.mvThemeCat_Core)
-                dpg.add_theme_style(dpg.mvStyleVar_WindowRounding, 5, category=dpg.mvThemeCat_Core)
-                dpg.add_theme_style(dpg.mvStyleVar_ChildRounding, 5, category=dpg.mvThemeCat_Core)
-                dpg.add_theme_style(dpg.mvStyleVar_ItemSpacing, 8, 4, category=dpg.mvThemeCat_Core)
-                dpg.add_theme_style(dpg.mvStyleVar_ScrollbarRounding, 5, category=dpg.mvThemeCat_Core)
+                dpg.add_theme_style(
+                    dpg.mvStyleVar_FrameRounding, 5, category=dpg.mvThemeCat_Core
+                )
+                dpg.add_theme_style(
+                    dpg.mvStyleVar_WindowRounding, 5, category=dpg.mvThemeCat_Core
+                )
+                dpg.add_theme_style(
+                    dpg.mvStyleVar_ChildRounding, 5, category=dpg.mvThemeCat_Core
+                )
+                dpg.add_theme_style(
+                    dpg.mvStyleVar_ItemSpacing, 8, 4, category=dpg.mvThemeCat_Core
+                )
+                dpg.add_theme_style(
+                    dpg.mvStyleVar_ScrollbarRounding, 5, category=dpg.mvThemeCat_Core
+                )
         dpg.bind_theme(global_theme)
-        
+
         with dpg.theme(tag="button_state_theme"):
             with dpg.theme_component(dpg.mvButton, enabled_state=False):
                 dpg.add_theme_color(dpg.mvThemeCol_Button, [60, 60, 60])
@@ -178,10 +201,13 @@ class UmaExporterApp:
                 dpg.add_theme_color(dpg.mvThemeCol_Text, [128, 128, 128])
                 dpg.add_theme_color(dpg.mvThemeCol_CheckMark, [80, 80, 80])
                 dpg.add_theme_color(dpg.mvThemeCol_FrameBg, [50, 50, 50])
-                dpg.add_theme_style(dpg.mvStyleVar_Alpha, 0.5, category=dpg.mvThemeCat_Core)
+                dpg.add_theme_style(
+                    dpg.mvStyleVar_Alpha, 0.5, category=dpg.mvThemeCat_Core
+                )
 
     def _setup_fonts(self):
         import platform
+
         font_paths = []
         is_chinese = Config.get_effective_language() == "Chinese"
         system = platform.system()
@@ -200,8 +226,12 @@ class UmaExporterApp:
         elif system == "Linux":
             if is_chinese:
                 font_paths.append("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc")
-                font_paths.append("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc")
-                font_paths.append("/usr/share/fonts/google-noto-sans-cjk-fonts/NotoSansCJK-Regular.ttc")
+                font_paths.append(
+                    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+                )
+                font_paths.append(
+                    "/usr/share/fonts/google-noto-sans-cjk-fonts/NotoSansCJK-Regular.ttc"
+                )
             font_paths.append("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
             font_paths.append("/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf")
 
@@ -224,21 +254,33 @@ class UmaExporterApp:
                     dpg.bind_font(default_font)
 
     def _init_ui(self):
-        dpg.create_viewport(
-            title="Uma Musume Exporter", width=1200, height=800
-        )
+        dpg.create_viewport(title="Uma Musume Exporter", width=1200, height=800)
         self._setup_font_and_theme()
-        
+
         with dpg.texture_registry(show=False, tag="main_texture_registry"):
-            dpg.add_static_texture(width=100, height=100, default_value=[0.2, 0.2, 0.2, 1.0]*10000, tag="thumb_placeholder")
+            dpg.add_static_texture(
+                width=100,
+                height=100,
+                default_value=[0.2, 0.2, 0.2, 1.0] * 10000,
+                tag="thumb_placeholder",
+            )
 
         dpg.setup_dearpygui()
-        
+
         self.main_view.create_file_dialog()
         self.main_view.create_main_layout()
 
         # Add a simple loading modal
-        with dpg.window(label="Loading...", modal=True, show=False, tag="loading_modal", no_title_bar=True, pos=(500, 350), width=200, height=100):
+        with dpg.window(
+            label="Loading...",
+            modal=True,
+            show=False,
+            tag="loading_modal",
+            no_title_bar=True,
+            pos=(500, 350),
+            width=200,
+            height=100,
+        ):
             dpg.add_text("Parsing Database...")
             dpg.add_loading_indicator(style=1)
 
@@ -268,7 +310,9 @@ class UmaExporterApp:
                     dpg.hide_item("loading_modal")
 
                     self.browser_controller.render_browser_tree_items("browse_group")
-                    self.executor.submit(self.search_controller.render_scene_results, "")
+                    self.executor.submit(
+                        self.search_controller.render_scene_results, ""
+                    )
                     self.executor.submit(self.search_controller.render_prop_results, "")
 
                 self._queue_ui_task(finalize)
@@ -282,7 +326,7 @@ class UmaExporterApp:
 
     def _set_database_ready(self, tree_data):
         self.tree_data = tree_data
-        
+
         if dpg.does_item_exist("home_browse_scroll"):
             dpg.delete_item("home_browse_scroll", children_only=True)
             self.browser_controller.render_browser_tree_items("home_browse_scroll")
@@ -290,7 +334,7 @@ class UmaExporterApp:
         dpg.set_value(
             "settings_status_msg", i18n("msg_db_ready") + f" ({self.db.db_path})"
         )
-        
+
         self.search_controller.render_scene_results()
         self.search_controller.render_prop_results()
 
@@ -308,7 +352,9 @@ class UmaExporterApp:
             except Exception as e:
                 print(f"UI task error: {e}")
 
-    def _add_file_selectable(self, label, user_data, parent, span_columns=False, tag=None):
+    def _add_file_selectable(
+        self, label, user_data, parent, span_columns=False, tag=None
+    ):
         safe_label = label if isinstance(label, str) else str(label)
         if "\\x00" in safe_label:
             safe_label = safe_label.replace("\\x00", "")
@@ -323,14 +369,14 @@ class UmaExporterApp:
             "span_columns": span_columns,
         }
         if tag:
-             kwargs["tag"] = tag
+            kwargs["tag"] = tag
 
         try:
-             s = dpg.add_selectable(**kwargs)
-             self.file_item_data[s] = user_data
-             return s
+            s = dpg.add_selectable(**kwargs)
+            self.file_item_data[s] = user_data
+            return s
         except Exception:
-             pass
+            pass
         return None
 
     def on_file_click(self, sender, app_data, user_data, *args):
@@ -387,7 +433,9 @@ class UmaExporterApp:
         if not self.is_navigating:
             current_data = self.current_asset_data
             if current_data and current_data["id"] != user_data["id"]:
-                self.history_back.append(self.navigation_controller._snapshot_asset_data(current_data))
+                self.history_back.append(
+                    self.navigation_controller._snapshot_asset_data(current_data)
+                )
                 self.history_forward.clear()
 
         self.last_unity_selected = {"": None, "scene_": None, "prop_": None}
@@ -401,14 +449,16 @@ class UmaExporterApp:
             # Normalize for comparison using integer IDs if possible
             last_id = self.last_selected
             sender_id = sender
-            
+
             if last_id != sender_id:
                 try:
                     t = dpg.get_item_type(self.last_selected)
                     if "mvSelectable" in t:
                         dpg.set_value(self.last_selected, False)
                     elif "mvImage" in t:
-                        dpg.configure_item(self.last_selected, tint_color=[255, 255, 255, 255])
+                        dpg.configure_item(
+                            self.last_selected, tint_color=[255, 255, 255, 255]
+                        )
                 except Exception:
                     pass
 
@@ -425,11 +475,15 @@ class UmaExporterApp:
             self.last_selected = sender
         elif not sender:
             # Fallback for programmatic selection
-            self.last_selected = self.navigation_controller._select_existing_result_item(user_data["id"])
+            self.last_selected = (
+                self.navigation_controller._select_existing_result_item(user_data["id"])
+            )
             if self.last_selected and dpg.does_item_exist(self.last_selected):
                 t = dpg.get_item_type(self.last_selected)
                 if "mvImage" in t:
-                    dpg.configure_item(self.last_selected, tint_color=[150, 200, 255, 255])
+                    dpg.configure_item(
+                        self.last_selected, tint_color=[150, 200, 255, 255]
+                    )
                 elif "mvSelectable" in t:
                     dpg.set_value(self.last_selected, True)
 
@@ -446,10 +500,12 @@ class UmaExporterApp:
             # During drag, prioritize the active view to keep it snappy.
             # If we can't determine active prefix, update all to be safe.
             is_active = (prefix == active_prefix) or not active_prefix
-            
+
             if not is_drag_preview or is_active:
-                self.preview_controller._update_asset_properties_panel(prefix, user_data)
-                
+                self.preview_controller._update_asset_properties_panel(
+                    prefix, user_data
+                )
+
             if not is_drag_preview:
                 dpg.configure_item(f"{prefix}ui_unity_image_container", show=False)
                 dpg.delete_item(f"{prefix}ui_unity_image_container", children_only=True)
@@ -458,7 +514,9 @@ class UmaExporterApp:
         self.current_asset_hash = h
 
         # Always reset detail containers to clear previous state
-        self.preview_controller._reset_detail_containers(is_drag_preview=is_drag_preview)
+        self.preview_controller._reset_detail_containers(
+            is_drag_preview=is_drag_preview
+        )
 
         phys_path = os.path.join(Config.get_data_root(), h[:2], h)
         asset_id = user_data["id"]
@@ -469,7 +527,7 @@ class UmaExporterApp:
                 prefix = "scene_" if is_scene_click_context else "prop_"
                 self.preview_controller._check_and_display_thumbnail(prefix, h)
                 return
-            
+
             # For general assets during drag, only preview texture if we aren't spamming tasks
             self.preview_controller._preview_drag_texture_async(
                 phys_path, asset_id, request_id, bundle_key=bundle_key
@@ -478,7 +536,9 @@ class UmaExporterApp:
 
         # Full load for non-drag
         self.preview_controller._reset_detail_containers(is_drag_preview=False)
-        self.preview_controller._load_unity_async(phys_path, asset_id, request_id, bundle_key=bundle_key)
+        self.preview_controller._load_unity_async(
+            phys_path, asset_id, request_id, bundle_key=bundle_key
+        )
         self.preview_controller._load_deps_async(asset_id, request_id)
         self.preview_controller._load_rev_deps_async(asset_id, request_id)
 
@@ -521,7 +581,7 @@ class UmaExporterApp:
                 self.search_controller.process_lazy_thumbnails()
                 dpg.render_dearpygui_frame()
         except KeyboardInterrupt:
-             pass
+            pass
         finally:
             self._on_app_exit()
             dpg.destroy_context()

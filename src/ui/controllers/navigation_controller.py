@@ -4,6 +4,7 @@ import dearpygui.dearpygui as dpg
 class NavigationController:
     def __init__(self, app):
         self.app = app
+
     def go_back(self, *args):
         if not self._has_navigable_history(self.app.history_back):
             return

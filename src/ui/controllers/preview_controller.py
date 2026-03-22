@@ -15,10 +15,11 @@ class PreviewController:
         self.app = app
         self.f3d_service = app.f3d_service
         self.thumbnail_service = app.thumbnail_service
+
     def _format_size(self, size_bytes):
         try:
             size_bytes = int(size_bytes)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return "Unknown"
         if size_bytes < 1024:
             return f"{size_bytes} Bytes"
@@ -46,8 +47,10 @@ class PreviewController:
     def _check_and_display_thumbnail(self, prefix, asset_hash):
         thumbnail_container = f"{prefix}ui_thumbnail_container"
         image_parent = f"{prefix}ui_thumbnail_image_parent"
-        
-        if not dpg.does_item_exist(thumbnail_container) or not dpg.does_item_exist(image_parent):
+
+        if not dpg.does_item_exist(thumbnail_container) or not dpg.does_item_exist(
+            image_parent
+        ):
             return
 
         # Increment request ID to cancel previous loads for this prefix
@@ -67,6 +70,7 @@ class PreviewController:
         def worker():
             try:
                 from PIL import Image
+
                 img = Image.open(path).convert("RGBA")
                 width, height = img.size
                 # Resize if too large
@@ -74,9 +78,10 @@ class PreviewController:
                     scale = 450 / width
                     img = img.resize((450, int(height * scale)))
                     width, height = img.size
-                
+
                 # Convert to flat float list for DPG (PLAIN LIST, NOT NUMPY)
                 import numpy as np
+
                 data_np = np.array(img).flatten().astype(np.float32) / 255.0
                 return data_np.tolist(), width, height
             except Exception as e:
@@ -90,21 +95,30 @@ class PreviewController:
                 data, w, h = f.result()
                 if data is not None:
                     # MUST queue UI task, done_callback is on worker thread
-                    self.app._queue_ui_task(lambda: self._apply_thumbnail_texture(prefix, data, w, h, asset_hash, request_id))
+                    self.app._queue_ui_task(
+                        lambda: self._apply_thumbnail_texture(
+                            prefix, data, w, h, asset_hash, request_id
+                        )
+                    )
             except Exception as e:
                 print(f"Thumbnail load callback error: {e}")
 
         future.add_done_callback(done_callback)
 
-    def _apply_thumbnail_texture(self, prefix, data, width, height, asset_hash, request_id):
+    def _apply_thumbnail_texture(
+        self, prefix, data, width, height, asset_hash, request_id
+    ):
         # 1. Check if this is still the latest request for this prefix
         if request_id != self.app.thumbnail_request_ids.get(prefix):
             return
 
         # 2. Double check current selection (only if not in drag preview which might be more transient)
         if not self.app.current_view_is_drag_preview:
-            if not hasattr(self.app, "current_asset_hash") or self.app.current_asset_hash != asset_hash:
-                 return
+            if (
+                not hasattr(self.app, "current_asset_hash")
+                or self.app.current_asset_hash != asset_hash
+            ):
+                return
 
         image_tag = f"{prefix}thumbnail_image_{prefix}"
         image_parent = f"{prefix}ui_thumbnail_image_parent"
@@ -132,14 +146,14 @@ class PreviewController:
 
                 # Clear children to ensure no stale text/images
                 dpg.delete_item(image_parent, children_only=True)
-                
+
                 dpg.add_image(tex_tag, parent=image_parent, tag=image_tag)
                 dpg.configure_item(container, show=True)
-                
+
                 # Cleanup previous texture
                 self._clear_thumbnail_texture(prefix)
                 self.app.thumbnail_texture_tags[prefix] = tex_tag
-                
+
             except Exception as e:
                 print(f"Failed to apply thumbnail texture: {e}")
 
@@ -158,7 +172,7 @@ class PreviewController:
             # Special case for scene/prop: Always clear internal objects if dragging
             # to keep the preview focused only on the thumbnail.
             is_scene_prop = prefix in ("scene_", "prop_")
-            
+
             messages = []
             if not is_drag_preview:
                 messages.append((f"{prefix}ui_unity_parent", i18n("msg_loading_unity")))
@@ -181,10 +195,10 @@ class PreviewController:
             # Hide dependency sections for all pages during drag
             dpg.configure_item(f"{prefix}ui_dep_section", show=visible)
             dpg.configure_item(f"{prefix}ui_rev_dep_section", show=visible)
-            
+
             # Specifically hide the Unity Objects section for scene and prop pages during drag
             if prefix in ("scene_", "prop_"):
-                 dpg.configure_item(f"{prefix}ui_unity_section", show=visible)
+                dpg.configure_item(f"{prefix}ui_unity_section", show=visible)
 
     def _load_unity_async(
         self, phys_path, current_asset_id, request_id, bundle_key=None
@@ -237,9 +251,20 @@ class PreviewController:
             and self.app.scene_auto_preview_request.get("asset_id") == current_asset_id
             and self.app.scene_auto_preview_request.get("request_id") == request_id
         ):
-            first_animator = next((obj for obj in objs if obj[0] == "Animator"), None)
-            if first_animator:
-                _, animator_name, path_id = first_animator
+            animators = [obj for obj in objs if obj[0] == "Animator"]
+            best_animator = None
+            if animators:
+                # Prioritize animator with the same name as the file
+                full_path = self.app.current_asset_data.get("full_path", "")
+                filename = os.path.basename(full_path).lower()
+                best_animator = next(
+                    (a for a in animators if a[1].lower() == filename), None
+                )
+                if not best_animator:
+                    best_animator = animators[0]
+
+            if best_animator:
+                _, animator_name, path_id = best_animator
                 animator_tag = f"scene_unity_obj_{path_id}"
                 sender = animator_tag if dpg.does_item_exist(animator_tag) else None
                 self.on_unity_obj_click(
@@ -262,9 +287,20 @@ class PreviewController:
             and self.app.prop_auto_preview_request.get("asset_id") == current_asset_id
             and self.app.prop_auto_preview_request.get("request_id") == request_id
         ):
-            first_animator = next((obj for obj in objs if obj[0] == "Animator"), None)
-            if first_animator:
-                _, animator_name, path_id = first_animator
+            animators = [obj for obj in objs if obj[0] == "Animator"]
+            best_animator = None
+            if animators:
+                # Prioritize animator with the same name as the file
+                full_path = self.app.current_asset_data.get("full_path", "")
+                filename = os.path.basename(full_path).lower()
+                best_animator = next(
+                    (a for a in animators if a[1].lower() == filename), None
+                )
+                if not best_animator:
+                    best_animator = animators[0]
+
+            if best_animator:
+                _, animator_name, path_id = best_animator
                 animator_tag = f"prop_unity_obj_{path_id}"
                 sender = animator_tag if dpg.does_item_exist(animator_tag) else None
                 self.on_unity_obj_click(
@@ -341,7 +377,7 @@ class PreviewController:
 
         for prefix in self._detail_prefixes():
             is_scene_prop = prefix in ("scene_", "prop_")
-            
+
             # Performance optimization: skip full object listing during drag
             # to keep the main thread responsive.
             # if not is_scene_prop:
@@ -548,39 +584,50 @@ class PreviewController:
     def _update_thumbnail_button(self, prefix, asset_id):
         thumbnail_container = f"{prefix}ui_thumbnail_container"
         actions_parent = f"{prefix}ui_thumbnail_actions_parent"
-        
-        if not dpg.does_item_exist(thumbnail_container) or not dpg.does_item_exist(actions_parent):
+
+        if not dpg.does_item_exist(thumbnail_container) or not dpg.does_item_exist(
+            actions_parent
+        ):
             return
 
         dpg.configure_item(thumbnail_container, show=True)
         dpg.delete_item(actions_parent, children_only=True)
-        
+
         asset_hash = self.app.current_asset_hash
         has_thumb = thumb_manager.get_thumbnail(asset_hash) is not None
-        label = i18n("btn_regenerate_thumbnail") if has_thumb else i18n("btn_generate_thumbnail")
-        
+        label = (
+            i18n("btn_regenerate_thumbnail")
+            if has_thumb
+            else i18n("btn_generate_thumbnail")
+        )
+
         dpg.add_button(
             label=label,
             parent=actions_parent,
             callback=self.on_generate_thumbnail_click,
-            user_data=(asset_id, prefix)
+            user_data=(asset_id, prefix),
         )
 
     def on_generate_thumbnail_click(self, sender, app_data, user_data):
         asset_id, prefix = user_data
         asset_hash = self.app.current_asset_hash
-        
+
         # Disable button and show status
         if sender:
             dpg.configure_item(sender, enabled=False)
-        
+
         actions_parent = f"{prefix}ui_thumbnail_actions_parent"
         status_tag = f"{prefix}ui_thumbnail_status"
         if dpg.does_item_exist(status_tag):
             dpg.delete_item(status_tag)
-        
+
         if dpg.does_item_exist(actions_parent):
-            dpg.add_text(i18n("msg_generating_thumbnail"), tag=status_tag, parent=actions_parent, color=[255, 200, 0])
+            dpg.add_text(
+                i18n("msg_generating_thumbnail"),
+                tag=status_tag,
+                parent=actions_parent,
+                color=[255, 200, 0],
+            )
 
         def worker():
             try:
@@ -588,19 +635,19 @@ class PreviewController:
                 tmp_fbx_path = self._build_animator_preview(asset_id)
                 if not tmp_fbx_path:
                     return None
-                
+
                 # 2. Generate PNG
                 output_filename = f"{asset_hash}.png"
                 output_path = os.path.join(Config.get_thumbnail_dir(), output_filename)
-                
+
                 success = generate_thumbnail(tmp_fbx_path, output_path)
-                
+
                 # Cleanup tmp FBX
                 try:
                     os.remove(tmp_fbx_path)
                 except:
                     pass
-                
+
                 if success:
                     return output_path
             except Exception as e:
@@ -611,15 +658,21 @@ class PreviewController:
 
         def done_callback(f):
             result_path = f.result()
-            self.app._queue_ui_task(lambda: self._finish_thumbnail_generation(prefix, asset_hash, result_path, sender))
+            self.app._queue_ui_task(
+                lambda: self._finish_thumbnail_generation(
+                    prefix, asset_hash, result_path, sender
+                )
+            )
 
         future.add_done_callback(done_callback)
 
-    def _finish_thumbnail_generation(self, prefix, asset_hash, result_path, button_sender):
+    def _finish_thumbnail_generation(
+        self, prefix, asset_hash, result_path, button_sender
+    ):
         status_tag = f"{prefix}ui_thumbnail_status"
         if dpg.does_item_exist(status_tag):
             dpg.delete_item(status_tag)
-        
+
         if result_path:
             thumb_manager.set_thumbnail(asset_hash, result_path)
             # Refresh display
@@ -629,7 +682,11 @@ class PreviewController:
         else:
             actions_parent = f"{prefix}ui_thumbnail_actions_parent"
             if dpg.does_item_exist(actions_parent):
-                dpg.add_text("Failed to generate thumbnail.", parent=actions_parent, color=[255, 0, 0])
+                dpg.add_text(
+                    "Failed to generate thumbnail.",
+                    parent=actions_parent,
+                    color=[255, 0, 0],
+                )
             if button_sender and dpg.does_item_exist(button_sender):
                 dpg.configure_item(button_sender, enabled=True)
 
@@ -670,7 +727,10 @@ class PreviewController:
         asset_id,
         request_id,
     ):
-        if request_id != self.app.selection_request_id or asset_id != self.app.current_asset_id:
+        if (
+            request_id != self.app.selection_request_id
+            or asset_id != self.app.current_asset_id
+        ):
             return
         if dpg.does_item_exist(preview_loading_tag):
             dpg.delete_item(preview_loading_tag)
@@ -729,7 +789,10 @@ class PreviewController:
         asset_info = self.app.db._get_asset_info(asset_id)
         logical_file_name = os.path.basename(asset_info[0]) if asset_info else None
         return UnityLogic.save_animator_to_tmp(
-            paths, object_name, bundle_keys=bundle_keys, logical_file_name=logical_file_name
+            paths,
+            object_name,
+            bundle_keys=bundle_keys,
+            logical_file_name=logical_file_name,
         )
 
     def _get_recursive_hashes(self, asset_id):
@@ -747,7 +810,10 @@ class PreviewController:
         asset_id,
         request_id,
     ):
-        if request_id != self.app.selection_request_id or asset_id != self.app.current_asset_id:
+        if (
+            request_id != self.app.selection_request_id
+            or asset_id != self.app.current_asset_id
+        ):
             return
         if dpg.does_item_exist(preview_loading_tag):
             dpg.delete_item(preview_loading_tag)
@@ -774,12 +840,15 @@ class PreviewController:
         request_id=None,
         bundle_key=None,
     ):
-        self.app.texture_request_ids[prefix] = self.app.texture_request_ids.get(prefix, 0) + 1
+        self.app.texture_request_ids[prefix] = (
+            self.app.texture_request_ids.get(prefix, 0) + 1
+        )
         texture_request_id = self.app.texture_request_ids[prefix]
         if asset_id is None:
             asset_id = self.app.current_asset_id
         if request_id is None:
             request_id = self.app.selection_request_id
+
         def texture_worker():
             try:
                 # Resize to max 1024px in the background thread to prevent DPG from blocking during upload
@@ -836,7 +905,10 @@ class PreviewController:
         image_container_tag = f"{prefix}ui_unity_image_container"
         image_tag = f"{prefix}ui_preview_image"
 
-        if request_id != self.app.selection_request_id or asset_id != self.app.current_asset_id:
+        if (
+            request_id != self.app.selection_request_id
+            or asset_id != self.app.current_asset_id
+        ):
             return
         if texture_request_id != self.app.texture_request_ids.get(prefix, 0):
             return
@@ -868,7 +940,7 @@ class PreviewController:
                 return
 
             tex_tag = f"{prefix}unity_tex_{path_id}_{int(time.time() * 1000)}"
-            
+
             # 1. Add new texture to registry - this is the "slow" part of DPG
             try:
                 # Add it to registry first
@@ -930,7 +1002,9 @@ class PreviewController:
             )
             return
 
-        future = self.app.executor.submit(self.app.db.get_dependencies, current_asset_id)
+        future = self.app.executor.submit(
+            self.app.db.get_dependencies, current_asset_id
+        )
 
         def done_callback(f):
             try:

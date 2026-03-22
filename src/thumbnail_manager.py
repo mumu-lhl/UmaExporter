@@ -2,13 +2,14 @@ import os
 import shutil
 from src.constants import Config
 
+
 class ThumbnailManager:
     @staticmethod
     def get_thumbnail(asset_hash):
         """Returns the thumbnail path for the given asset hash, if it exists."""
         if not asset_hash:
             return None
-        
+
         path = os.path.join(Config.get_thumbnail_dir(), f"{asset_hash}.png")
         if os.path.exists(path):
             return path
@@ -22,9 +23,9 @@ class ThumbnailManager:
         """
         if not asset_hash or not thumbnail_path:
             return
-        
+
         target_path = os.path.join(Config.get_thumbnail_dir(), f"{asset_hash}.png")
-        
+
         # If the provided path is already the target path, do nothing
         if os.path.abspath(thumbnail_path) == os.path.abspath(target_path):
             return
@@ -43,7 +44,7 @@ class ThumbnailManager:
         """Removes the thumbnail file for the given asset hash."""
         if not asset_hash:
             return
-            
+
         path = ThumbnailManager.get_thumbnail(asset_hash)
         if path and os.path.exists(path):
             try:

@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from src.ui.f3d_worker import generate_thumbnail
 from src.thumbnail_manager import ThumbnailManager as thumb_manager
 
+
 class BatchController:
     def __init__(self, app):
         self.app = app
@@ -72,13 +73,15 @@ class BatchController:
         try:
             raw_assets = self.app.db.get_all_animator_assets(cats)
             force_overwrite = dpg.get_value("batch_force_overwrite")
-            
+
             existing_thumbnails = set()
             if not force_overwrite:
                 thumb_dir = Config.get_thumbnail_dir()
                 if os.path.exists(thumb_dir):
                     # Cache filenames (without .png) for quick lookup
-                    existing_thumbnails = {f[:-4] for f in os.listdir(thumb_dir) if f.endswith(".png")}
+                    existing_thumbnails = {
+                        f[:-4] for f in os.listdir(thumb_dir) if f.endswith(".png")
+                    }
 
             to_process = []
             for i_id, name, size, f_hash, key_val in raw_assets:
@@ -89,16 +92,26 @@ class BatchController:
 
             total_to_process = len(to_process)
             if total_to_process == 0:
-                self.app._queue_ui_task(lambda: self._finalize_batch(i18n("msg_batch_finished")))
+                self.app._queue_ui_task(
+                    lambda: self._finalize_batch(i18n("msg_batch_finished"))
+                )
                 return
 
-            self.app._queue_ui_task(lambda: dpg.set_value("batch_status_msg", f"Found {total_to_process} assets needing thumbnails."))
+            self.app._queue_ui_task(
+                lambda: dpg.set_value(
+                    "batch_status_msg",
+                    f"Found {total_to_process} assets needing thumbnails.",
+                )
+            )
 
             processed_count = 0
             user_chunk_size = dpg.get_value("batch_size")
             chunk_size = user_chunk_size if user_chunk_size > 0 else 32
-            
-            chunks = [to_process[i:i + chunk_size] for i in range(0, total_to_process, chunk_size)]
+
+            chunks = [
+                to_process[i : i + chunk_size]
+                for i in range(0, total_to_process, chunk_size)
+            ]
             progress_lock = threading.Lock()
 
             def process_one_chunk(chunk_data):
@@ -116,23 +129,32 @@ class BatchController:
                         if os.path.exists(p):
                             paths.append(p)
                             keys.append(k)
-                    
-                    batch_configs.append({
-                        "id": asset_id,
-                        "hash": asset_hash,
-                        "paths": paths,
-                        "keys": keys,
-                        "logical_name": os.path.basename(name)
-                    })
 
-                staging_base = "/dev/shm" if os.path.exists("/dev/shm") and os.access("/dev/shm", os.W_OK) else None
-                
+                    batch_configs.append(
+                        {
+                            "id": asset_id,
+                            "hash": asset_hash,
+                            "paths": paths,
+                            "keys": keys,
+                            "logical_name": os.path.basename(name),
+                        }
+                    )
+
+                staging_base = (
+                    "/dev/shm"
+                    if os.path.exists("/dev/shm") and os.access("/dev/shm", os.W_OK)
+                    else None
+                )
+
                 with tempfile.TemporaryDirectory(dir=staging_base) as chunk_export_dir:
-                    exported_results = UnityLogic.batch_export_to_fbx(batch_configs, chunk_export_dir)
-                    
+                    exported_results = UnityLogic.batch_export_to_fbx(
+                        batch_configs, chunk_export_dir
+                    )
+
                     batch_engine = None
                     try:
                         import f3d
+
                         batch_engine = f3d.Engine.create(offscreen=True)
                     except:
                         pass
@@ -140,35 +162,54 @@ class BatchController:
                     for asset_hash, fbx_path in exported_results:
                         if self.app.batch_stop_event.is_set():
                             break
-                        
+
                         output_filename = f"{asset_hash}.png"
-                        output_path = os.path.join(Config.get_thumbnail_dir(), output_filename)
-                        
-                        if generate_thumbnail(fbx_path, output_path, engine=batch_engine):
+                        output_path = os.path.join(
+                            Config.get_thumbnail_dir(), output_filename
+                        )
+
+                        if generate_thumbnail(
+                            fbx_path, output_path, engine=batch_engine
+                        ):
                             thumb_manager.set_thumbnail(asset_hash, output_path)
-                    
+
                     batch_engine = None
 
                 with progress_lock:
                     processed_count += len(chunk_data)
                     progress = processed_count / total_to_process
-                    self.app._queue_ui_task(lambda p=progress, c=processed_count, t=total_to_process: self._update_batch_progress(p, c, t))
+                    self.app._queue_ui_task(
+                        lambda p=progress, c=processed_count, t=total_to_process: (
+                            self._update_batch_progress(p, c, t)
+                        )
+                    )
 
             with ThreadPoolExecutor(max_workers=2) as chunk_pool:
                 chunk_pool.map(process_one_chunk, chunks)
 
-            self.app._queue_ui_task(lambda: self._finalize_batch(i18n("msg_batch_finished") if not self.app.batch_stop_event.is_set() else i18n("msg_batch_stopped")))
+            self.app._queue_ui_task(
+                lambda: self._finalize_batch(
+                    i18n("msg_batch_finished")
+                    if not self.app.batch_stop_event.is_set()
+                    else i18n("msg_batch_stopped")
+                )
+            )
 
         except Exception as e:
             import traceback
+
             traceback.print_exc()
             err_msg = str(e)
             print(f"Batch worker fatal error: {err_msg}")
-            self.app._queue_ui_task(lambda msg=err_msg: self._finalize_batch(f"Fatal Error: {msg}"))
+            self.app._queue_ui_task(
+                lambda msg=err_msg: self._finalize_batch(f"Fatal Error: {msg}")
+            )
 
     def _update_batch_progress(self, progress, count, total):
         dpg.set_value("batch_progress_bar", progress)
-        dpg.set_value("batch_progress_text", f"{i18n('label_progress')} {count} / {total}")
+        dpg.set_value(
+            "batch_progress_text", f"{i18n('label_progress')} {count} / {total}"
+        )
 
     def _finalize_batch(self, message):
         self.app.is_batch_running = False
@@ -176,6 +217,10 @@ class BatchController:
         dpg.configure_item("btn_start_batch", enabled=True)
         dpg.configure_item("btn_stop_batch", enabled=False)
         if hasattr(self.app, "current_asset_id") and self.app.current_asset_id:
-             for prefix in self.app.preview_controller._detail_prefixes():
-                 self.app.preview_controller._check_and_display_thumbnail(prefix, self.app.current_asset_hash)
-                 self.app.preview_controller._update_thumbnail_button(prefix, self.app.current_asset_id)
+            for prefix in self.app.preview_controller._detail_prefixes():
+                self.app.preview_controller._check_and_display_thumbnail(
+                    prefix, self.app.current_asset_hash
+                )
+                self.app.preview_controller._update_thumbnail_button(
+                    prefix, self.app.current_asset_id
+                )

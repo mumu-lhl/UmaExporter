@@ -1,28 +1,32 @@
 import os
 import sys
 
+
 def generate_thumbnail(model_path, output_path, engine=None):
     """Generates a thumbnail image for a 3D model using f3d.
-    
+
     If engine is provided, it reuses it for faster performance.
     """
     try:
         if engine is None:
             import f3d
+
             # Create engine in offscreen (headless) mode
             engine = f3d.Engine.create(offscreen=True)
-            
+
         scene = engine.scene
         window = engine.window
 
         # Configure options for better look
-        engine.options.update({
-            "render.light.intensity": 2.5,
-            "render.hdri.ambient": True,
-            "render.effect.tone_mapping": True,
-            "ui.axis": False,
-            "render.background.color": [0.1, 0.1, 0.1], # Dark grey
-        })
+        engine.options.update(
+            {
+                "render.light.intensity": 2.5,
+                "render.hdri.ambient": True,
+                "render.effect.tone_mapping": True,
+                "ui.axis": False,
+                "render.background.color": [0.1, 0.1, 0.1],  # Dark grey
+            }
+        )
 
         scene.clear()
         scene.add(model_path)
@@ -79,17 +83,19 @@ def launch_f3d_viewer_stdin():
         interactor = eng.interactor
         window = eng.window
 
-        eng.options.update({
-            "model.scivis.cells": True,
-            "model.scivis.enable": True,
-            "model.scivis.array_name": "Colors",
-            "model.scivis.component": 0,
-            "ui.axis": True,
-            "render.grid.enable": True,
-            "render.light.intensity": 2.5,
-            "render.hdri.ambient": True,
-            "render.effect.tone_mapping": True,
-        })
+        eng.options.update(
+            {
+                "model.scivis.cells": True,
+                "model.scivis.enable": True,
+                "model.scivis.array_name": "Colors",
+                "model.scivis.component": 0,
+                "ui.axis": True,
+                "render.grid.enable": True,
+                "render.light.intensity": 2.5,
+                "render.hdri.ambient": True,
+                "render.effect.tone_mapping": True,
+            }
+        )
 
         def update_scene(path):
             nonlocal current_mesh
@@ -108,7 +114,8 @@ def launch_f3d_viewer_stdin():
             # Set to Isometric view (similar to pressing '9')
             try:
                 import time
-                time.sleep(0.1) # Small delay to ensure model is processed
+
+                time.sleep(0.1)  # Small delay to ensure model is processed
                 interactor.trigger_command("set_camera isometric")
             except Exception as e:
                 print(f"[F3D] Warning: Could not set isometric view: {e}")
@@ -129,7 +136,7 @@ def launch_f3d_viewer_stdin():
             return True
 
         # Initial wait for first mesh (via the queue)
-        line = input_queue.get(timeout=30) # Wait up to 30s for first load
+        line = input_queue.get(timeout=30)  # Wait up to 30s for first load
         if not line or line == "STOP":
             return
 

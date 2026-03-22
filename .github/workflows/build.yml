@@ -86,11 +86,6 @@ jobs:
         mode: standalone
         output-dir: dist-nuitka
         output-file: UmaExporter
-        extra-args: |
-          --no-deployment-flag=self-execution
-          --follow-imports
-          --assume-yes-for-downloads
-          --no-pyi-file
         include-package: |
           dearpygui
           f3d

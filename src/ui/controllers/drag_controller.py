@@ -6,6 +6,7 @@ import dearpygui.dearpygui as dpg
 class DragController:
     def __init__(self, app):
         self.app = app
+
     def _on_mouse_move(self, *args):
         # Fallback initialization for middle-drag
         if dpg.is_mouse_button_down(dpg.mvMouseButton_Middle):
@@ -19,7 +20,7 @@ class DragController:
             self.app.pending_drag_preview = None
             self.app.last_tab_drag_switch_target = None
             return
-            
+
         self._handle_tab_drag_switch()
         now = time.monotonic()
         if now - self.app.last_hover_scan_time < self.app.hover_scan_interval:
@@ -27,7 +28,7 @@ class DragController:
         self.app.last_hover_scan_time = now
 
         hovered_item = self._pick_file_item_under_mouse()
-        
+
         if not hovered_item:
             return
 
@@ -37,7 +38,7 @@ class DragController:
         file_data = self.app.file_item_data.get(hovered_item)
         if not file_data:
             return
-            
+
         if self.app.current_asset_id == file_data.get("id"):
             self.app.last_drag_preview_item = hovered_item
             return
@@ -236,7 +237,13 @@ class DragController:
     def _handle_tab_drag_switch(self):
         mouse_x, mouse_y = dpg.get_mouse_pos(local=False)
         target_tab = None
-        for tab_tag in ["home_tab", "scene_tab", "prop_tab", "actions_tab", "settings_tab"]:
+        for tab_tag in [
+            "home_tab",
+            "scene_tab",
+            "prop_tab",
+            "actions_tab",
+            "settings_tab",
+        ]:
             if not dpg.does_item_exist(tab_tag) or not dpg.is_item_shown(tab_tag):
                 continue
             try:
@@ -267,7 +274,7 @@ class DragController:
     def _pick_file_item_under_mouse(self):
         mouse_pos = dpg.get_mouse_pos(local=False)
         mouse_x, mouse_y = mouse_pos
-        
+
         # 1. Normalize active_tab
         active_tab = dpg.get_value("main_tabs")
         if active_tab and not isinstance(active_tab, str):
@@ -277,7 +284,7 @@ class DragController:
                     active_tab = alias
             except:
                 pass
-        
+
         # print(f"[Drag] Active Tab: {active_tab} ({type(active_tab)}) mouse: {mouse_pos}")
 
         # 2. Determine the active container to narrow search scope
@@ -301,53 +308,59 @@ class DragController:
             children = dpg.get_item_children(parent, slot=1)
             if not children:
                 return None
-                
+
             for child in reversed(children):
                 if not dpg.is_item_shown(child):
                     continue
-                
+
                 # Try direct hovered check (but might fail during drag)
                 if dpg.is_item_hovered(child):
                     if child in self.app.file_item_data:
                         return child
-                
+
                 # Coordinate check
                 try:
                     # Try rect_min/max first
                     mi = dpg.get_item_rect_min(child)
                     ma = dpg.get_item_rect_max(child)
-                    
-                    if (mi[0] <= mouse_x <= ma[0] and mi[1] <= mouse_y <= ma[1]):
+
+                    if mi[0] <= mouse_x <= ma[0] and mi[1] <= mouse_y <= ma[1]:
                         if child in self.app.file_item_data:
                             return child
-                            
+
                         # If it's a container, recurse
                         t = dpg.get_item_type(child)
                         if "mvTreeNode" in t:
-                            if dpg.get_value(child): 
+                            if dpg.get_value(child):
                                 res = find_item_recursive(child)
-                                if res: return res
+                                if res:
+                                    return res
                         elif "mvChildWindow" in t or "mvGroup" in t:
                             res = find_item_recursive(child)
-                            if res: return res
+                            if res:
+                                return res
                 except:
                     # Fallback to get_item_state if rect_min fails
                     try:
                         state = dpg.get_item_state(child)
                         c_mi = state.get("rect_min", [0, 0])
                         c_ma = state.get("rect_max", [0, 0])
-                        if (c_mi[0] <= mouse_x <= c_ma[0] and c_mi[1] <= mouse_y <= c_ma[1]):
+                        if (
+                            c_mi[0] <= mouse_x <= c_ma[0]
+                            and c_mi[1] <= mouse_y <= c_ma[1]
+                        ):
                             if child in self.app.file_item_data:
                                 return child
                             res = find_item_recursive(child)
-                            if res: return res
+                            if res:
+                                return res
                     except:
                         continue
             return None
 
         # No logging during normal operation
         found = find_item_recursive(container)
-        
+
         # BRUTE FORCE FALLBACK for items that might be outside the main hierarchy slot
         if not found:
             for item in list(self.app.file_item_data.keys()):
@@ -355,11 +368,11 @@ class DragController:
                     try:
                         mi = dpg.get_item_rect_min(item)
                         ma = dpg.get_item_rect_max(item)
-                        if (mi[0] <= mouse_x <= ma[0] and mi[1] <= mouse_y <= ma[1]):
+                        if mi[0] <= mouse_x <= ma[0] and mi[1] <= mouse_y <= ma[1]:
                             return item
                     except:
                         continue
-        
+
         return found
 
     def _find_scroll_target_for_item(self, item):

@@ -86,7 +86,7 @@ class UnityLogic:
                 if bundle_key is not None and str(bundle_key).strip() != "":
                     try:
                         decryption_key = int(bundle_key)
-                    except (ValueError, TypeError):
+                    except ValueError, TypeError:
                         pass
 
                 with open(physical_path, "rb") as f:
@@ -193,7 +193,9 @@ class UnityLogic:
             return None
 
     @staticmethod
-    def save_animator_to_tmp(physical_paths, object_name=None, bundle_keys=None, logical_file_name=None):
+    def save_animator_to_tmp(
+        physical_paths, object_name=None, bundle_keys=None, logical_file_name=None
+    ):
         """Export Animator to FBX in a temporary folder using CLI (For Preview)"""
         tmp_export_dir = tempfile.mkdtemp()
         try:
@@ -208,19 +210,27 @@ class UnityLogic:
             if logical_file_name and object_name:
                 sanitized_obj = UnityLogic._sanitize_export_name(object_name)
                 # Try with logical_file_name as provided (might be basename already)
-                direct_path = os.path.join(animator_dir, logical_file_name, f"{sanitized_obj}.fbx")
+                direct_path = os.path.join(
+                    animator_dir, logical_file_name, f"{sanitized_obj}.fbx"
+                )
                 if os.path.exists(direct_path):
                     return direct_path
 
                 # Try with basename of logical_file_name
                 base_logical = os.path.basename(logical_file_name)
-                direct_path = os.path.join(animator_dir, base_logical, f"{sanitized_obj}.fbx")
+                direct_path = os.path.join(
+                    animator_dir, base_logical, f"{sanitized_obj}.fbx"
+                )
                 if os.path.exists(direct_path):
                     return direct_path
 
             # 2. Fallback: Scoped os.walk search (Efficient and Robust)
             fbx_files = []
-            sanitized_obj_lower = UnityLogic._sanitize_export_name(object_name).lower() if object_name else None
+            sanitized_obj_lower = (
+                UnityLogic._sanitize_export_name(object_name).lower()
+                if object_name
+                else None
+            )
 
             for root, _, files in os.walk(animator_dir):
                 for f in files:
@@ -258,7 +268,7 @@ class UnityLogic:
                 return None, 0, 0
 
             img = data.image.convert("RGBA")
-            
+
             # Optional resizing for preview performance
             if max_dim:
                 w, h = img.size
@@ -270,6 +280,7 @@ class UnityLogic:
                         new_h = max_dim
                         new_w = int(w * (max_dim / h))
                     from PIL import Image
+
                     # Use BILINEAR for speed in preview mode
                     img = img.resize((new_w, new_h), resample=Image.BILINEAR)
 
@@ -409,10 +420,10 @@ class UnityLogic:
         """
         results = []
         from concurrent.futures import ThreadPoolExecutor
-        
+
         with tempfile.TemporaryDirectory() as staging_dir:
             # 1. Collect all unique paths to prepare
-            all_unique_tasks = {} # Map path -> (key, target_filename)
+            all_unique_tasks = {}  # Map path -> (key, target_filename)
             for cfg in batch_configs:
                 paths = cfg.get("paths", [])
                 keys = cfg.get("keys", [])
@@ -420,7 +431,7 @@ class UnityLogic:
                     if os.path.exists(p) and p not in all_unique_tasks:
                         all_unique_tasks[p] = (
                             keys[i] if i < len(keys) else None,
-                            os.path.basename(p)
+                            os.path.basename(p),
                         )
 
             # 2. Parallel Staging (Decryption + I/O)
@@ -457,9 +468,9 @@ class UnityLogic:
 
             # 3. Match exported FBX files back to assets
             # AS CLI structure: {export_dir}/FBX_Animator/{logical_name}/{animator_name}.fbx
-            # Since we don't know animator_name here easily without parsing, 
+            # Since we don't know animator_name here easily without parsing,
             # we'll look for files in subfolders that match the logical_name.
-            
+
             animator_base = os.path.join(export_dir, "FBX_Animator")
             if not os.path.exists(animator_base):
                 return results
@@ -469,14 +480,14 @@ class UnityLogic:
                 logical_name = cfg.get("logical_name")
                 if not logical_name:
                     continue
-                
+
                 # Look in {animator_base}/{logical_name}/
                 search_dir = os.path.join(animator_base, logical_name)
                 if os.path.exists(search_dir):
                     for f in os.listdir(search_dir):
                         if f.lower().endswith(".fbx"):
                             results.append((asset_hash, os.path.join(search_dir, f)))
-                            break # Take first one for thumbnail
+                            break  # Take first one for thumbnail
                 else:
                     # Fallback search if logical name mapping failed
                     # This is slower but robust
@@ -488,7 +499,8 @@ class UnityLogic:
                                     results.append((asset_hash, os.path.join(root, f)))
                                     found = True
                                     break
-                        if found: break
+                        if found:
+                            break
 
         return results
 
@@ -506,15 +518,20 @@ class UnityLogic:
             return 0
 
         if os.name != "nt":
-            try: os.chmod(cli_path, 0o755)
-            except: pass
+            try:
+                os.chmod(cli_path, 0o755)
+            except:
+                pass
 
         cmd = [
             cli_path,
             input_path,
-            "--mode", mode,
-            "--output", output_dir,
-            "--fbx-animation", "auto",
+            "--mode",
+            mode,
+            "--output",
+            output_dir,
+            "--fbx-animation",
+            "auto",
         ]
 
         # Prepare creationflags for Windows to hide terminal window
@@ -559,7 +576,7 @@ class UnityLogic:
         else:
             # Deduplicate paths to avoid duplicate link attempts
             unique_paths = list(dict.fromkeys(physical_paths))
-        
+
         exported_count = 0
 
         # Map paths to keys for easier retrieval

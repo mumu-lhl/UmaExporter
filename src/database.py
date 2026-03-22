@@ -33,7 +33,7 @@ class UmaDatabase:
             cursor.execute("SELECT name FROM sqlite_master LIMIT 1")
             Config.DB_ENCRYPTED = False
             return conn
-        except (sqlite3.OperationalError, sqlite3.DatabaseError):
+        except sqlite3.OperationalError, sqlite3.DatabaseError:
             # If standard fails, try encrypted with apsw
             print(
                 f"Standard SQLite failed for {db_path}, trying encrypted with apsw..."
@@ -75,7 +75,7 @@ class UmaDatabase:
                     cursor.execute("SELECT name FROM sqlite_master LIMIT 1")
                     success = True
                     break
-                except (apsw.NotADBError, apsw.AuthError, apsw.ExecutionCompleteError):
+                except apsw.NotADBError, apsw.AuthError, apsw.ExecutionCompleteError:
                     continue
 
             if not success:
@@ -105,7 +105,7 @@ class UmaDatabase:
         for pragma in pragmas:
             try:
                 cursor.execute(pragma)
-            except (sqlite3.DatabaseError, apsw.Error):
+            except sqlite3.DatabaseError, apsw.Error:
                 continue
 
     def load_index(self):
@@ -308,14 +308,14 @@ class UmaDatabase:
         """Retrieves all asset info for specified categories (scene, prop)."""
         cursor = self.conn.cursor()
         cols = "i, n, l, h, e" if Config.DB_ENCRYPTED else "i, n, l, h, NULL as e"
-        
+
         query_base = f"SELECT {cols} FROM a WHERE "
         conditions = []
-        
+
         # Define 3D-related path filters
         scene_filter = "n LIKE '3d/env/%'"
         prop_filters = "(n LIKE '3d/chara/prop/%' OR n LIKE '3d/chara/toonprop/%' OR n LIKE '3d/chara/richprop/%')"
-        
+
         if categories is None or "all" in categories:
             # "All" now specifically means Scenes + Props to avoid scanning 300k+ non-3D assets
             conditions.append(f"({scene_filter} OR {prop_filters})")
@@ -324,10 +324,10 @@ class UmaDatabase:
                 conditions.append(scene_filter)
             if "prop" in categories:
                 conditions.append(prop_filters)
-        
+
         if not conditions:
             return []
-            
+
         cursor.execute(f"{query_base} ({' OR '.join(conditions)})")
         return cursor.fetchall()
 

@@ -14,7 +14,9 @@ class ShortcutController:
             dpg.add_key_press_handler(key=dpg.mvKey_J, callback=self._on_key_press)
             dpg.add_key_press_handler(key=dpg.mvKey_K, callback=self._on_key_press)
             dpg.add_key_release_handler(key=dpg.mvKey_Up, callback=self._on_key_release)
-            dpg.add_key_release_handler(key=dpg.mvKey_Down, callback=self._on_key_release)
+            dpg.add_key_release_handler(
+                key=dpg.mvKey_Down, callback=self._on_key_release
+            )
             dpg.add_key_release_handler(key=dpg.mvKey_J, callback=self._on_key_release)
             dpg.add_key_release_handler(key=dpg.mvKey_K, callback=self._on_key_release)
 
@@ -39,21 +41,33 @@ class ShortcutController:
         except Exception:
             active_tab_alias = ""
 
-        if active_tab_alias == "scene_tab" and dpg.does_item_exist("scene_search_input"):
+        if active_tab_alias == "scene_tab" and dpg.does_item_exist(
+            "scene_search_input"
+        ):
             dpg.focus_item("scene_search_input")
-        elif active_tab_alias == "prop_tab" and dpg.does_item_exist("prop_search_input"):
+        elif active_tab_alias == "prop_tab" and dpg.does_item_exist(
+            "prop_search_input"
+        ):
             dpg.focus_item("prop_search_input")
         elif active_tab_alias == "home_tab" and dpg.does_item_exist("search_input"):
             dpg.focus_item("search_input")
-        elif active_tab_alias == "settings_tab" and dpg.does_item_exist("settings_base_path"):
+        elif active_tab_alias == "settings_tab" and dpg.does_item_exist(
+            "settings_base_path"
+        ):
             dpg.focus_item("settings_base_path")
         elif dpg.does_item_exist("search_input") and dpg.is_item_shown("search_input"):
             dpg.focus_item("search_input")
-        elif dpg.does_item_exist("scene_search_input") and dpg.is_item_shown("scene_search_input"):
+        elif dpg.does_item_exist("scene_search_input") and dpg.is_item_shown(
+            "scene_search_input"
+        ):
             dpg.focus_item("scene_search_input")
-        elif dpg.does_item_exist("prop_search_input") and dpg.is_item_shown("prop_search_input"):
+        elif dpg.does_item_exist("prop_search_input") and dpg.is_item_shown(
+            "prop_search_input"
+        ):
             dpg.focus_item("prop_search_input")
-        elif dpg.does_item_exist("settings_base_path") and dpg.is_item_shown("settings_base_path"):
+        elif dpg.does_item_exist("settings_base_path") and dpg.is_item_shown(
+            "settings_base_path"
+        ):
             dpg.focus_item("settings_base_path")
 
     def _on_ctrl_q(self, sender, app_data, user_data, *args):
@@ -98,7 +112,9 @@ class ShortcutController:
                         self.app.last_selected = child
                         break
 
-        if not self.app.last_selected or not dpg.does_item_exist(self.app.last_selected):
+        if not self.app.last_selected or not dpg.does_item_exist(
+            self.app.last_selected
+        ):
             return
 
         # 3. Handle Navigation Mode (Equivalent to Drag Preview)
@@ -169,7 +185,11 @@ class ShortcutController:
                     scroll_container = "prop_results_parent"
 
                 if not scroll_container or not dpg.does_item_exist(scroll_container):
-                    scroll_container = self.app.drag_controller._find_scroll_target_for_item(target_item)
+                    scroll_container = (
+                        self.app.drag_controller._find_scroll_target_for_item(
+                            target_item
+                        )
+                    )
 
                 if scroll_container:
                     self._scroll_to_item(scroll_container, target_item)

@@ -1,11 +1,14 @@
 import dearpygui.dearpygui as dpg
 from src.ui.i18n import i18n
 
+
 class SearchView:
     def __init__(self, controller):
         self.controller = controller
 
-    def build_search_bar(self, tag, search_callback, clear_callback, scroll_targets=None):
+    def build_search_bar(
+        self, tag, search_callback, clear_callback, scroll_targets=None
+    ):
         def scroll_to_top():
             if not scroll_targets:
                 return

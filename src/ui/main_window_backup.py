@@ -88,9 +88,9 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         self.thumbnail_items = {"scene_": [], "prop_": []}
         self.thumbnail_columns = {"scene_": 0, "prop_": 0}
         # Separated queues for much faster scanning
-        self.lazy_thumb_queues = {"scene_": [], "prop_": []} 
+        self.lazy_thumb_queues = {"scene_": [], "prop_": []}
         self.last_lazy_scan_time = 0.0
-        self.lazy_scan_interval = 0.05 
+        self.lazy_scan_interval = 0.05
 
     def _setup_fonts(self):
         font_paths = []
@@ -168,9 +168,11 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     self.tree_data = tree_data
                     self.is_db_loading = False
                     dpg.hide_item("loading_modal")
-                    
+
                     # 4. Trigger initial renders now that DB is ready
-                    self.executor.submit(self._render_browser_tree_items, "browse_group")
+                    self.executor.submit(
+                        self._render_browser_tree_items, "browse_group"
+                    )
                     self.executor.submit(self._render_scene_results, "")
                     self.executor.submit(self._render_prop_results, "")
 
@@ -187,17 +189,18 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         dpg.create_context()
         self._setup_fonts()
         dpg.add_texture_registry(tag="main_texture_registry")
-        
+
         # Create a placeholder texture for image buttons (matched to 100x100)
         # Using a solid gray (0.5) to indicate loading state visually
         # 100 * 100 * 4 = 40,000 values
         with self.texture_lock:
             placeholder_data = [0.5] * 40000
             dpg.add_static_texture(
-                width=100, height=100,
+                width=100,
+                height=100,
                 default_value=placeholder_data,
                 tag="thumb_placeholder",
-                parent="main_texture_registry"
+                parent="main_texture_registry",
             )
 
         # Create themes before layout
@@ -207,20 +210,33 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 dpg.add_theme_color(dpg.mvThemeCol_Button, [45, 45, 48])
                 dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, [45, 45, 48])
                 dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, [45, 45, 48])
-                dpg.add_theme_style(dpg.mvStyleVar_Alpha, 0.5, category=dpg.mvThemeCat_Core)
+                dpg.add_theme_style(
+                    dpg.mvStyleVar_Alpha, 0.5, category=dpg.mvThemeCat_Core
+                )
 
         with dpg.theme(tag="checkbox_state_theme"):
             with dpg.theme_component(dpg.mvCheckbox, enabled_state=False):
                 dpg.add_theme_color(dpg.mvThemeCol_Text, [128, 128, 128])
                 dpg.add_theme_color(dpg.mvThemeCol_CheckMark, [80, 80, 80])
                 dpg.add_theme_color(dpg.mvThemeCol_FrameBg, [50, 50, 50])
-                dpg.add_theme_style(dpg.mvStyleVar_Alpha, 0.5, category=dpg.mvThemeCat_Core)
+                dpg.add_theme_style(
+                    dpg.mvStyleVar_Alpha, 0.5, category=dpg.mvThemeCat_Core
+                )
 
         self._create_file_dialog()
         self._create_main_layout()
 
         # Add a simple loading modal
-        with dpg.window(label="Loading...", modal=True, show=False, tag="loading_modal", no_title_bar=True, pos=(500, 350), width=200, height=100):
+        with dpg.window(
+            label="Loading...",
+            modal=True,
+            show=False,
+            tag="loading_modal",
+            no_title_bar=True,
+            pos=(500, 350),
+            width=200,
+            height=100,
+        ):
             dpg.add_text("Parsing Database...")
             dpg.add_loading_indicator(style=1)
 
@@ -654,7 +670,10 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                         )
                         with dpg.group(horizontal=True):
                             dpg.add_radio_button(
-                                items=[i18n("label_view_list"), i18n("label_view_thumbnail")],
+                                items=[
+                                    i18n("label_view_list"),
+                                    i18n("label_view_thumbnail"),
+                                ],
                                 default_value=i18n("label_view_list"),
                                 horizontal=True,
                                 callback=self._on_view_mode_change,
@@ -663,9 +682,10 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                         dpg.add_separator()
                         with dpg.child_window(tag="scene_results_parent", border=False):
                             pass
-                        with dpg.child_window(tag="scene_thumbnails_parent", border=False, show=False):
+                        with dpg.child_window(
+                            tag="scene_thumbnails_parent", border=False, show=False
+                        ):
                             pass
-
 
                     # Right Column: Details (same structure as Home)
                     with dpg.child_window(
@@ -685,7 +705,10 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                         )
                         with dpg.group(horizontal=True):
                             dpg.add_radio_button(
-                                items=[i18n("label_view_list"), i18n("label_view_thumbnail")],
+                                items=[
+                                    i18n("label_view_list"),
+                                    i18n("label_view_thumbnail"),
+                                ],
                                 default_value=i18n("label_view_list"),
                                 horizontal=True,
                                 callback=self._on_view_mode_change,
@@ -694,7 +717,9 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                         dpg.add_separator()
                         with dpg.child_window(tag="prop_results_parent", border=False):
                             pass
-                        with dpg.child_window(tag="prop_thumbnails_parent", border=False, show=False):
+                        with dpg.child_window(
+                            tag="prop_thumbnails_parent", border=False, show=False
+                        ):
                             pass
 
                     # Right Column: Details
@@ -744,17 +769,34 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     )
 
                     dpg.add_spacer(height=5)
-                    dpg.add_checkbox(label=i18n("label_force_overwrite"), tag="batch_force_overwrite", default_value=False)
+                    dpg.add_checkbox(
+                        label=i18n("label_force_overwrite"),
+                        tag="batch_force_overwrite",
+                        default_value=False,
+                    )
 
                     dpg.add_spacer(height=20)
                     with dpg.group(horizontal=True):
-                        dpg.add_button(label=i18n("btn_start_batch"), tag="btn_start_batch", callback=self.on_start_batch_click, width=150)
+                        dpg.add_button(
+                            label=i18n("btn_start_batch"),
+                            tag="btn_start_batch",
+                            callback=self.on_start_batch_click,
+                            width=150,
+                        )
                         dpg.bind_item_theme("btn_start_batch", "button_state_theme")
-                        dpg.add_button(label=i18n("btn_stop_batch"), tag="btn_stop_batch", callback=self.on_stop_batch_click, width=100, enabled=False)
+                        dpg.add_button(
+                            label=i18n("btn_stop_batch"),
+                            tag="btn_stop_batch",
+                            callback=self.on_stop_batch_click,
+                            width=100,
+                            enabled=False,
+                        )
                         dpg.bind_item_theme("btn_stop_batch", "button_state_theme")
 
                     dpg.add_spacer(height=20)
-                    dpg.add_text(i18n("label_progress"), tag="batch_progress_text", show=False)
+                    dpg.add_text(
+                        i18n("label_progress"), tag="batch_progress_text", show=False
+                    )
                     dpg.add_progress_bar(tag="batch_progress_bar", width=-1, show=False)
                     dpg.add_text("", tag="batch_status_msg", wrap=600)
 
@@ -899,10 +941,20 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 pass
 
     def _render_browser_tree_items(self, parent):
-        self._queue_ui_task(lambda: dpg.add_text(i18n("dir_browser"), color=[255, 200, 0], parent=parent))
-        
+        self._queue_ui_task(
+            lambda: dpg.add_text(
+                i18n("dir_browser"), color=[255, 200, 0], parent=parent
+            )
+        )
+
         # Sort root items: directories first, then files
-        root_items = sorted(self.tree_data.items(), key=lambda x: (isinstance(x[1], dict) and x[1].get("_is_file", False), x[0]))
+        root_items = sorted(
+            self.tree_data.items(),
+            key=lambda x: (
+                isinstance(x[1], dict) and x[1].get("_is_file", False),
+                x[0],
+            ),
+        )
 
         for name, content in root_items:
             self.render_node(name, content, parent)
@@ -988,14 +1040,17 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
 
     def render_node(self, name, content, parent):
         if isinstance(content, dict) and content.get("_is_file"):
+
             def add_f_item():
                 self._add_file_selectable(
                     label=f"[F] {name}",
                     user_data=content,
                     parent=parent,
                 )
+
             self._queue_ui_task(add_f_item)
         else:
+
             def add_d_node():
                 node = dpg.add_tree_node(
                     label=f"[D] {name}",
@@ -1005,12 +1060,12 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 )
                 self.node_map[node] = content
                 dpg.add_text("Click to load content...", parent=node)
-                
+
                 # Bind handler inside the main-thread task
                 with dpg.item_handler_registry() as handler:
                     dpg.add_item_clicked_handler(callback=self.on_tree_click)
                 dpg.bind_item_handler_registry(node, handler)
-                
+
             self._queue_ui_task(add_d_node)
 
     def on_tree_click(self, sender, app_data, user_data, *args):
@@ -1043,12 +1098,14 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         for sub_name, sub_content in sorted(dirs):
             self.render_node(sub_name, sub_content, node)
         for label, sub_content in sorted(files):
+
             def add_sub_file(l=label, c=sub_content, p=node):
                 self._add_file_selectable(
                     label=l,
                     user_data=c,
                     parent=p,
                 )
+
             self._queue_ui_task(add_sub_file)
 
     def _add_file_selectable(
@@ -1143,11 +1200,16 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         if self.last_selected and dpg.does_item_exist(self.last_selected):
             try:
                 # Reset previous: if it was a selectable
-                if dpg.get_item_type(self.last_selected) == "mvAppItemType::mvSelectable":
+                if (
+                    dpg.get_item_type(self.last_selected)
+                    == "mvAppItemType::mvSelectable"
+                ):
                     dpg.set_value(self.last_selected, False)
                 # Reset previous: if it was a thumbnail image
                 elif dpg.get_item_type(self.last_selected) == "mvAppItemType::mvImage":
-                    dpg.configure_item(self.last_selected, tint_color=[255, 255, 255, 255])
+                    dpg.configure_item(
+                        self.last_selected, tint_color=[255, 255, 255, 255]
+                    )
             except Exception:
                 pass
 
@@ -1158,12 +1220,15 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             elif dpg.get_item_type(sender) == "mvAppItemType::mvImage":
                 # Light blue tint for selected thumbnail
                 dpg.configure_item(sender, tint_color=[150, 200, 255, 255])
-            
+
             self.last_selected = sender
         else:
             self.last_selected = self._select_existing_result_item(user_data["id"])
             # If the fallback found an item, apply the selection color if it's an image
-            if self.last_selected and dpg.get_item_type(self.last_selected) == "mvAppItemType::mvImage":
+            if (
+                self.last_selected
+                and dpg.get_item_type(self.last_selected) == "mvAppItemType::mvImage"
+            ):
                 dpg.configure_item(self.last_selected, tint_color=[150, 200, 255, 255])
 
         for prefix in self._detail_prefixes():
@@ -1221,9 +1286,9 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
-                    bufsize=1, # Line buffered
+                    bufsize=1,  # Line buffered
                     # On Windows, hide the console window
-                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 )
 
                 # Thread to pipe stdout and stderr to the main terminal
@@ -1236,8 +1301,16 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     except:
                         pass
 
-                threading.Thread(target=log_pipe, args=(self.f3d_process.stdout, "[F3D-OUT]"), daemon=True).start()
-                threading.Thread(target=log_pipe, args=(self.f3d_process.stderr, "[F3D-ERR]"), daemon=True).start()
+                threading.Thread(
+                    target=log_pipe,
+                    args=(self.f3d_process.stdout, "[F3D-OUT]"),
+                    daemon=True,
+                ).start()
+                threading.Thread(
+                    target=log_pipe,
+                    args=(self.f3d_process.stderr, "[F3D-ERR]"),
+                    daemon=True,
+                ).start()
 
     def on_search(self, sender, app_data, user_data, *args):
         if not self.db:
@@ -1250,11 +1323,17 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         def run_search():
             self._queue_ui_task(lambda: dpg.configure_item("browse_group", show=False))
             self._queue_ui_task(lambda: dpg.configure_item("search_group", show=True))
-            self._queue_ui_task(lambda: dpg.delete_item("search_results", children_only=True))
+            self._queue_ui_task(
+                lambda: dpg.delete_item("search_results", children_only=True)
+            )
 
             rows = self.db.search_assets(query)
             if not rows:
-                self._queue_ui_task(lambda: dpg.add_text(i18n("label_no_assets"), parent="search_results"))
+                self._queue_ui_task(
+                    lambda: dpg.add_text(
+                        i18n("label_no_assets"), parent="search_results"
+                    )
+                )
             else:
                 first_item = None
                 for i_id, name, size, f_hash, key_val in rows:
@@ -1266,7 +1345,11 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                         "key": key_val,
                     }
 
-                    def add_item(label=os.path.basename(name), tag=f"search_item_{i_id}", data=u_data):
+                    def add_item(
+                        label=os.path.basename(name),
+                        tag=f"search_item_{i_id}",
+                        data=u_data,
+                    ):
                         self._add_file_selectable(
                             label=label,
                             tag=tag,
@@ -1280,7 +1363,9 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                         first_item = (f"search_item_{i_id}", u_data)
 
                 if first_item:
-                    self._queue_ui_task(lambda f=first_item: self.on_file_click(f[0], None, f[1]))
+                    self._queue_ui_task(
+                        lambda f=first_item: self.on_file_click(f[0], None, f[1])
+                    )
 
         self.executor.submit(run_search)
 
@@ -1307,7 +1392,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
     def _on_view_mode_change(self, sender, app_data, user_data):
         prefix = user_data  # "scene_" or "prop_"
         new_mode = "thumbnail" if app_data == i18n("label_view_thumbnail") else "list"
-        
+
         if prefix == "scene_":
             self.scene_view_mode = new_mode
             query = dpg.get_value("scene_search_input").strip()
@@ -1328,30 +1413,40 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         view_mode = self.scene_view_mode
         list_container = "scene_results_parent"
         thumb_container = "scene_thumbnails_parent"
-        
-        self._queue_ui_task(lambda: dpg.configure_item(list_container, show=(view_mode == "list")))
-        self._queue_ui_task(lambda: dpg.configure_item(thumb_container, show=(view_mode == "thumbnail")))
+
+        self._queue_ui_task(
+            lambda: dpg.configure_item(list_container, show=(view_mode == "list"))
+        )
+        self._queue_ui_task(
+            lambda: dpg.configure_item(thumb_container, show=(view_mode == "thumbnail"))
+        )
         self._queue_ui_task(lambda: dpg.delete_item(list_container, children_only=True))
-        self._queue_ui_task(lambda: dpg.delete_item(thumb_container, children_only=True))
+        self._queue_ui_task(
+            lambda: dpg.delete_item(thumb_container, children_only=True)
+        )
         self._clear_search_thumbnails("scene_")
         self.lazy_thumb_queues["scene_"] = []
 
         if not self.db:
-            self._queue_ui_task(lambda: dpg.add_text(
-                i18n("label_db_not_ready"),
-                parent=list_container,
-                color=[200, 120, 120],
-            ))
+            self._queue_ui_task(
+                lambda: dpg.add_text(
+                    i18n("label_db_not_ready"),
+                    parent=list_container,
+                    color=[200, 120, 120],
+                )
+            )
             return
 
         rows = self.db.search_scenes(query)
         if not rows:
             target = list_container if view_mode == "list" else thumb_container
-            self._queue_ui_task(lambda: dpg.add_text(i18n("label_no_scenes"), parent=target))
+            self._queue_ui_task(
+                lambda: dpg.add_text(i18n("label_no_scenes"), parent=target)
+            )
             return
 
         first_item = None
-        
+
         if view_mode == "list":
             for i_id, name, size, f_hash, key_val in rows:
                 u_data = {
@@ -1363,7 +1458,9 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 }
                 display_name = self._scene_display_name(name)
 
-                def add_scene_item(label=display_name, tag=f"scene_item_{i_id}", data=u_data):
+                def add_scene_item(
+                    label=display_name, tag=f"scene_item_{i_id}", data=u_data
+                ):
                     self._add_file_selectable(
                         label=label,
                         tag=tag,
@@ -1381,45 +1478,61 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             for i_id, name, size, f_hash, key_val in rows:
                 if thumb_manager.get_thumbnail(f_hash):
                     items_with_thumb.append((i_id, name, size, f_hash, key_val))
-            
+
             if not items_with_thumb:
                 self.thumbnail_items["scene_"] = []
-                self._queue_ui_task(lambda: dpg.add_text(i18n("label_no_scenes"), parent=thumb_container))
+                self._queue_ui_task(
+                    lambda: dpg.add_text(
+                        i18n("label_no_scenes"), parent=thumb_container
+                    )
+                )
             else:
                 self._render_thumbnail_grid("scene_", items_with_thumb, thumb_container)
                 # In thumb mode, we don't necessarily auto-click the first one as it might be jarring
                 # during a search unless explicitly requested.
 
         if first_item and query and view_mode == "list":
-            self._queue_ui_task(lambda f=first_item: self.on_file_click(f[0], None, f[1]))
+            self._queue_ui_task(
+                lambda f=first_item: self.on_file_click(f[0], None, f[1])
+            )
 
     def _render_prop_results(self, query=""):
         view_mode = self.prop_view_mode
         list_container = "prop_results_parent"
         thumb_container = "prop_thumbnails_parent"
 
-        self._queue_ui_task(lambda: dpg.configure_item(list_container, show=(view_mode == "list")))
-        self._queue_ui_task(lambda: dpg.configure_item(thumb_container, show=(view_mode == "thumbnail")))
+        self._queue_ui_task(
+            lambda: dpg.configure_item(list_container, show=(view_mode == "list"))
+        )
+        self._queue_ui_task(
+            lambda: dpg.configure_item(thumb_container, show=(view_mode == "thumbnail"))
+        )
         self._queue_ui_task(lambda: dpg.delete_item(list_container, children_only=True))
-        self._queue_ui_task(lambda: dpg.delete_item(thumb_container, children_only=True))
+        self._queue_ui_task(
+            lambda: dpg.delete_item(thumb_container, children_only=True)
+        )
         self._clear_search_thumbnails("prop_")
         self.lazy_thumb_queues["prop_"] = []
 
         if not self.db:
-            self._queue_ui_task(lambda: dpg.add_text(
-                i18n("label_db_not_ready"),
-                parent=list_container,
-                color=[200, 120, 120],
-            ))
+            self._queue_ui_task(
+                lambda: dpg.add_text(
+                    i18n("label_db_not_ready"),
+                    parent=list_container,
+                    color=[200, 120, 120],
+                )
+            )
             return
 
         rows = self.db.search_props(query)
         if not rows:
             target = list_container if view_mode == "list" else thumb_container
-            self._queue_ui_task(lambda: dpg.add_text(
-                i18n("label_no_props"),
-                parent=target,
-            ))
+            self._queue_ui_task(
+                lambda: dpg.add_text(
+                    i18n("label_no_props"),
+                    parent=target,
+                )
+            )
             return
 
         if view_mode == "list":
@@ -1432,7 +1545,10 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     "hash": f_hash,
                     "key": key_val,
                 }
-                def add_prop_item(label=os.path.basename(name), tag=f"prop_item_{i_id}", data=u_data):
+
+                def add_prop_item(
+                    label=os.path.basename(name), tag=f"prop_item_{i_id}", data=u_data
+                ):
                     self._add_file_selectable(
                         label=label,
                         tag=tag,
@@ -1440,50 +1556,57 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                         parent=list_container,
                         span_columns=True,
                     )
+
                 self._queue_ui_task(add_prop_item)
                 if first_item is None:
                     first_item = (f"prop_item_{i_id}", u_data)
-            
+
             if first_item and query:
-                self._queue_ui_task(lambda f=first_item: self.on_file_click(f[0], None, f[1]))
+                self._queue_ui_task(
+                    lambda f=first_item: self.on_file_click(f[0], None, f[1])
+                )
         else:
             # Thumbnail mode
             items_with_thumb = []
             for i_id, name, size, f_hash, key_val in rows:
                 if thumb_manager.get_thumbnail(f_hash):
                     items_with_thumb.append((i_id, name, size, f_hash, key_val))
-            
+
             if not items_with_thumb:
                 self.thumbnail_items["prop_"] = []
-                self._queue_ui_task(lambda: dpg.add_text(i18n("label_no_props"), parent=thumb_container))
+                self._queue_ui_task(
+                    lambda: dpg.add_text(i18n("label_no_props"), parent=thumb_container)
+                )
             else:
                 self._render_thumbnail_grid("prop_", items_with_thumb, thumb_container)
 
     def _render_thumbnail_grid(self, prefix, items, parent):
         self.thumbnail_items[prefix] = items
-        
+
         try:
             width = dpg.get_item_rect_size(parent)[0]
             if width <= 0:
                 width = 500
         except Exception:
             width = 500
-            
+
         columns = max(1, int(width / 115))
         self.thumbnail_columns[prefix] = columns
-        
+
         def build_grid():
             if not dpg.does_item_exist(parent):
                 return
-                
+
             dpg.delete_item(parent, children_only=True)
             self._clear_search_thumbnails(prefix)
             self.lazy_thumb_queues[prefix] = []
-            
-            with dpg.table(header_row=False, parent=parent, policy=dpg.mvTable_SizingStretchProp):
+
+            with dpg.table(
+                header_row=False, parent=parent, policy=dpg.mvTable_SizingStretchProp
+            ):
                 for _ in range(columns):
                     dpg.add_table_column()
-                
+
                 for i in range(0, len(items), columns):
                     with dpg.table_row():
                         for j in range(columns):
@@ -1498,27 +1621,32 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                                         "hash": f_hash,
                                         "key": key_val,
                                     }
-                                    
+
                                     img_id = dpg.add_image(
                                         "thumb_placeholder",
-                                        width=100, height=100,
+                                        width=100,
+                                        height=100,
                                     )
-                                    
+
                                     with dpg.item_handler_registry() as handler:
                                         dpg.add_item_clicked_handler(
-                                            callback=lambda s, a, u: self.on_file_click(a[1], a, u),
-                                            user_data=u_data
+                                            callback=lambda s, a, u: self.on_file_click(
+                                                a[1], a, u
+                                            ),
+                                            user_data=u_data,
                                         )
                                     dpg.bind_item_handler_registry(img_id, handler)
 
                                     with dpg.tooltip(img_id):
                                         dpg.add_text(os.path.basename(name))
-                                    
+
                                     thumb_path = thumb_manager.get_thumbnail(f_hash)
                                     if thumb_path:
                                         abs_path = os.path.abspath(thumb_path)
                                         # Include parent tag for buffered coordinate checking
-                                        self.lazy_thumb_queues[prefix].append((abs_path, img_id, parent))
+                                        self.lazy_thumb_queues[prefix].append(
+                                            (abs_path, img_id, parent)
+                                        )
                             else:
                                 dpg.add_spacer()
 
@@ -1530,14 +1658,20 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         if now - self.last_lazy_scan_time < self.lazy_scan_interval:
             return
         self.last_lazy_scan_time = now
-        
+
         raw_tab = dpg.get_value("main_tabs")
-        active_tab = dpg.get_item_alias(raw_tab) if isinstance(raw_tab, int) else raw_tab
+        active_tab = (
+            dpg.get_item_alias(raw_tab) if isinstance(raw_tab, int) else raw_tab
+        )
         tab_to_prefix = {"scene_tab": "scene_", "prop_tab": "prop_"}
         active_prefix = tab_to_prefix.get(active_tab)
-        
+
         if active_prefix:
-            view_mode = self.scene_view_mode if active_prefix == "scene_" else self.prop_view_mode
+            view_mode = (
+                self.scene_view_mode
+                if active_prefix == "scene_"
+                else self.prop_view_mode
+            )
             if view_mode == "thumbnail":
                 container = f"{active_prefix}thumbnails_parent"
                 if dpg.does_item_exist(container):
@@ -1553,7 +1687,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             return
 
         queue = self.lazy_thumb_queues[active_prefix]
-        
+
         # 1. Find the first visible item to use as an anchor
         first_visible_idx = -1
         # Check every few items to speed up scanning of large lists
@@ -1564,7 +1698,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     break
             except:
                 continue
-        
+
         # 2. Determine the batch to load based on the anchor
         if first_visible_idx == -1:
             # Check the very first one as a final fallback
@@ -1586,24 +1720,25 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             # Load a window around the visible anchor: 12 above, 48 below
             start = max(0, first_visible_idx - 12)
             end = min(len(queue), first_visible_idx + 48)
-            
+
             to_load_batch = queue[start:end]
             # Keep items outside this window in the queue
             remaining = queue[:start] + queue[end:]
-            
+
         self.lazy_thumb_queues[active_prefix] = remaining
-        
+
         if to_load_batch:
             # Extract (path, img_id) for the worker
             tasks = [(t[0], t[1]) for t in to_load_batch]
             self._load_search_thumbnails_batch_async(active_prefix, tasks)
-            
+
     def _load_search_thumbnails_batch_async(self, prefix, tasks):
         """Processes a batch of thumbnails in a single worker thread."""
+
         def worker():
             results = []
             resample_filter = getattr(Image, "Resampling", Image).BILINEAR
-            
+
             for path, img_id in tasks:
                 try:
                     if not os.path.exists(path):
@@ -1617,15 +1752,19 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             return results
 
         future = self.executor.submit(worker)
-        
+
         def done(f):
             try:
                 batch_results = f.result()
                 if batch_results:
-                    self._queue_ui_task(lambda: self._apply_search_thumbnails_batch(prefix, batch_results))
+                    self._queue_ui_task(
+                        lambda: self._apply_search_thumbnails_batch(
+                            prefix, batch_results
+                        )
+                    )
             except Exception:
                 pass
-        
+
         future.add_done_callback(done)
 
     def _apply_search_thumbnails_batch(self, prefix, batch_results):
@@ -1634,14 +1773,15 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
             for img_id, data in batch_results:
                 if not dpg.does_item_exist(img_id):
                     continue
-                
+
                 tex_tag = dpg.generate_uuid()
                 try:
                     dpg.add_static_texture(
-                        width=100, height=100,
+                        width=100,
+                        height=100,
                         default_value=data,
                         tag=tex_tag,
-                        parent="main_texture_registry"
+                        parent="main_texture_registry",
                     )
                     dpg.configure_item(img_id, texture_tag=tex_tag)
                     self.search_thumbnail_textures[prefix].append(tex_tag)
@@ -1724,7 +1864,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                 self.cached_recursive_hashes.clear()
                 self.node_map.clear()
                 self.tree_data = self.db.load_index()
-                
+
                 # Re-render UI components that depend on the database
                 self.executor.submit(self._render_browser_tree_items, "browse_group")
                 self.executor.submit(self._render_scene_results, "")
@@ -1843,7 +1983,7 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         try:
             # Step A: Discover all candidate assets
             raw_assets = self.db.get_all_animator_assets(cats)
-            
+
             # Step B: Filter assets needing thumbnails
             force_overwrite = dpg.get_value("batch_force_overwrite")
             to_process = []
@@ -1855,19 +1995,29 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
 
             total_to_process = len(to_process)
             if total_to_process == 0:
-                self._queue_ui_task(lambda: self._finalize_batch(i18n("msg_batch_finished")))
+                self._queue_ui_task(
+                    lambda: self._finalize_batch(i18n("msg_batch_finished"))
+                )
                 return
 
-            self._queue_ui_task(lambda: dpg.set_value("batch_status_msg", f"Found {total_to_process} assets needing thumbnails."))
+            self._queue_ui_task(
+                lambda: dpg.set_value(
+                    "batch_status_msg",
+                    f"Found {total_to_process} assets needing thumbnails.",
+                )
+            )
 
             # Step C: Parallel Chunked Processing
             processed_count = 0
             user_chunk_size = dpg.get_value("batch_size")
             chunk_size = user_chunk_size if user_chunk_size > 0 else 32
-            
+
             # Split to_process into a list of chunks
-            chunks = [to_process[i:i + chunk_size] for i in range(0, total_to_process, chunk_size)]
-            
+            chunks = [
+                to_process[i : i + chunk_size]
+                for i in range(0, total_to_process, chunk_size)
+            ]
+
             # We use a Lock for safe progress updates
             progress_lock = threading.Lock()
 
@@ -1887,27 +2037,36 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                         if os.path.exists(p):
                             paths.append(p)
                             keys.append(k)
-                    
-                    batch_configs.append({
-                        "id": asset_id,
-                        "hash": asset_hash,
-                        "paths": paths,
-                        "keys": keys,
-                        "logical_name": os.path.basename(name)
-                    })
+
+                    batch_configs.append(
+                        {
+                            "id": asset_id,
+                            "hash": asset_hash,
+                            "paths": paths,
+                            "keys": keys,
+                            "logical_name": os.path.basename(name),
+                        }
+                    )
 
                 # 2. Export Chunk FBX in one CLI call
                 # Use /dev/shm on Linux for ultra-fast staging if available
-                staging_base = "/dev/shm" if os.path.exists("/dev/shm") and os.access("/dev/shm", os.W_OK) else None
-                
+                staging_base = (
+                    "/dev/shm"
+                    if os.path.exists("/dev/shm") and os.access("/dev/shm", os.W_OK)
+                    else None
+                )
+
                 with tempfile.TemporaryDirectory(dir=staging_base) as chunk_export_dir:
-                    exported_results = UnityLogic.batch_export_to_fbx(batch_configs, chunk_export_dir)
-                    
+                    exported_results = UnityLogic.batch_export_to_fbx(
+                        batch_configs, chunk_export_dir
+                    )
+
                     # 3. Render thumbnails for the chunk
                     # Initialize the engine ONCE per chunk thread for ultra-fast rendering
                     batch_engine = None
                     try:
                         import f3d
+
                         batch_engine = f3d.Engine.create(offscreen=True)
                     except:
                         pass
@@ -1915,38 +2074,57 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
                     for asset_hash, fbx_path in exported_results:
                         if self.batch_stop_event.is_set():
                             break
-                        
+
                         output_filename = f"{asset_hash}.png"
-                        output_path = os.path.join(Config.get_thumbnail_dir(), output_filename)
-                        
-                        if generate_thumbnail(fbx_path, output_path, engine=batch_engine):
+                        output_path = os.path.join(
+                            Config.get_thumbnail_dir(), output_filename
+                        )
+
+                        if generate_thumbnail(
+                            fbx_path, output_path, engine=batch_engine
+                        ):
                             thumb_manager.set_thumbnail(asset_hash, output_path)
-                    
+
                     # Engine will be cleaned up by GC or we can explicitly delete reference
                     batch_engine = None
 
                 with progress_lock:
                     processed_count += len(chunk_data)
                     progress = processed_count / total_to_process
-                    self._queue_ui_task(lambda p=progress, c=processed_count, t=total_to_process: self._update_batch_progress(p, c, t))
+                    self._queue_ui_task(
+                        lambda p=progress, c=processed_count, t=total_to_process: (
+                            self._update_batch_progress(p, c, t)
+                        )
+                    )
 
-            # Run 2 CLI chunks in parallel. 
+            # Run 2 CLI chunks in parallel.
             # This balances CPU/Disk/RAM usage without overwhelming the system.
             with ThreadPoolExecutor(max_workers=2) as chunk_pool:
                 chunk_pool.map(process_one_chunk, chunks)
 
-            self._queue_ui_task(lambda: self._finalize_batch(i18n("msg_batch_finished") if not self.batch_stop_event.is_set() else i18n("msg_batch_stopped")))
+            self._queue_ui_task(
+                lambda: self._finalize_batch(
+                    i18n("msg_batch_finished")
+                    if not self.batch_stop_event.is_set()
+                    else i18n("msg_batch_stopped")
+                )
+            )
 
         except Exception as e:
             import traceback
+
             traceback.print_exc()
             err_msg = str(e)
             print(f"Batch worker fatal error: {err_msg}")
-            self._queue_ui_task(lambda msg=err_msg: self._finalize_batch(f"Fatal Error: {msg}"))
+            self._queue_ui_task(
+                lambda msg=err_msg: self._finalize_batch(f"Fatal Error: {msg}")
+            )
 
     def _update_batch_progress(self, progress, count, total):
         dpg.set_value("batch_progress_bar", progress)
-        dpg.set_value("batch_progress_text", f"{i18n('label_progress')} {count} / {total}")
+        dpg.set_value(
+            "batch_progress_text", f"{i18n('label_progress')} {count} / {total}"
+        )
 
     def _finalize_batch(self, message):
         self.is_batch_running = False
@@ -1955,6 +2133,6 @@ class UmaExporterApp(DragMixin, NavigationMixin, PreviewMixin):
         dpg.configure_item("btn_stop_batch", enabled=False)
         # Refresh current view if it has an animator
         if hasattr(self, "current_asset_id") and self.current_asset_id:
-             for prefix in self._detail_prefixes():
-                 self._check_and_display_thumbnail(prefix, self.current_asset_hash)
-                 self._update_thumbnail_button(prefix, self.current_asset_id)
+            for prefix in self._detail_prefixes():
+                self._check_and_display_thumbnail(prefix, self.current_asset_hash)
+                self._update_thumbnail_button(prefix, self.current_asset_id)

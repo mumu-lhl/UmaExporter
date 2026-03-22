@@ -1,29 +1,43 @@
 import dearpygui.dearpygui as dpg
 from src.ui.i18n import i18n
 
+
 class BrowserController:
     def __init__(self, app):
         self.app = app
 
     def render_browser_tree_items(self, parent):
-        self.app._queue_ui_task(lambda: dpg.add_text(i18n("dir_browser"), color=[255, 200, 0], parent=parent))
-        
+        self.app._queue_ui_task(
+            lambda: dpg.add_text(
+                i18n("dir_browser"), color=[255, 200, 0], parent=parent
+            )
+        )
+
         # Sort root items: directories first, then files
-        root_items = sorted(self.app.tree_data.items(), key=lambda x: (isinstance(x[1], dict) and x[1].get("_is_file", False), x[0]))
+        root_items = sorted(
+            self.app.tree_data.items(),
+            key=lambda x: (
+                isinstance(x[1], dict) and x[1].get("_is_file", False),
+                x[0],
+            ),
+        )
 
         for name, content in root_items:
             self.render_node(name, content, parent)
 
     def render_node(self, name, content, parent):
         if isinstance(content, dict) and content.get("_is_file"):
+
             def add_f_item():
                 self.app._add_file_selectable(
                     label=f"[F] {name}",
                     user_data=content,
                     parent=parent,
                 )
+
             self.app._queue_ui_task(add_f_item)
         else:
+
             def add_d_node():
                 node = dpg.add_tree_node(
                     label=f"[D] {name}",
@@ -33,12 +47,12 @@ class BrowserController:
                 )
                 self.app.node_map[node] = content
                 dpg.add_text("Click to load content...", parent=node)
-                
+
                 # Bind handler inside the main-thread task
                 with dpg.item_handler_registry() as handler:
                     dpg.add_item_clicked_handler(callback=self.on_tree_click)
                 dpg.bind_item_handler_registry(node, handler)
-                
+
             self.app._queue_ui_task(add_d_node)
 
     def on_tree_click(self, sender, app_data, user_data, *args):
@@ -71,10 +85,12 @@ class BrowserController:
         for sub_name, sub_content in sorted(dirs):
             self.render_node(sub_name, sub_content, node)
         for label, sub_content in sorted(files):
+
             def add_sub_file(l=label, c=sub_content, p=node):
                 self.app._add_file_selectable(
                     label=l,
                     user_data=c,
                     parent=p,
                 )
+
             self.app._queue_ui_task(add_sub_file)
