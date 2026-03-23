@@ -58,6 +58,16 @@ class MainView:
         with dpg.file_dialog(
             directory_selector=True,
             show=False,
+            callback=self.controller.on_export_all_objects,
+            id="export_all_dialog",
+            width=600,
+            height=400,
+        ):
+            dpg.add_file_extension(".*")
+
+        with dpg.file_dialog(
+            directory_selector=True,
+            show=False,
             callback=self.controller.on_settings_dir_selected,
             id="settings_dir_dialog",
             width=600,

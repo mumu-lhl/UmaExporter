@@ -546,7 +546,66 @@ class UmaExporterApp:
         return self.current_asset_id == asset_id
 
     def on_export_selected(self, sender, app_data):
-        print(f"Export to: {app_data['file_path_name']}")
+        target_dir = app_data.get("file_path_name", "")
+        if not target_dir:
+            return
+
+        prefix = ""
+        active_tab = dpg.get_value("main_tabs")
+        try:
+            if active_tab and not isinstance(active_tab, str):
+                active_tab = dpg.get_item_alias(active_tab) or ""
+        except Exception:
+            active_tab = ""
+        if active_tab == "scene_tab":
+            prefix = "scene_"
+        elif active_tab == "prop_tab":
+            prefix = "prop_"
+
+        selected_tag = self.last_unity_selected.get(prefix, None)
+        if not selected_tag or not dpg.does_item_exist(selected_tag):
+            print("No Unity object selected for export.")
+            return
+
+        user_data = dpg.get_item_user_data(selected_tag)
+        if not user_data or len(user_data) < 2:
+            print("Invalid Unity object selection data.")
+            return
+
+        phys_path = user_data[0]
+        path_id = user_data[1]
+        u_type = user_data[2] if len(user_data) > 2 else None
+        object_name = user_data[4] if len(user_data) > 4 else None
+        bundle_key = user_data[5] if len(user_data) > 5 else None
+
+        self.executor.submit(
+            UnityLogic.export_single_unity_object,
+            phys_path,
+            path_id,
+            target_dir,
+            u_type,
+            object_name,
+            bundle_key=bundle_key,
+        )
+
+    def on_export_all_objects(self, sender, app_data):
+        target_dir = app_data.get("file_path_name", "")
+        if not target_dir or not self.current_asset_hash:
+            return
+
+        phys_path = os.path.join(
+            Config.get_data_root(), self.current_asset_hash[:2], self.current_asset_hash
+        )
+        bundle_key = None
+        if self.current_asset_data:
+            bundle_key = self.current_asset_data.get("key")
+
+        self.executor.submit(
+            UnityLogic.export_unity_assets,
+            [phys_path],
+            target_dir,
+            bundle_keys=[bundle_key] if bundle_key is not None else None,
+        )
 
     def on_settings_dir_selected(self, sender, app_data):
         selected_path = app_data["file_path_name"]

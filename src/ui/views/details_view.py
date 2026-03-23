@@ -55,11 +55,17 @@ class DetailsView:
                 dpg.add_group(tag=f"{prefix}ui_thumbnail_image_parent")
 
             dpg.add_spacer(height=5)
-            dpg.add_button(
-                label=i18n("btn_export"),
-                width=200,
-                callback=lambda: dpg.show_item("export_dialog"),
-            )
+            with dpg.group(horizontal=True):
+                dpg.add_button(
+                    label=i18n("btn_export"),
+                    width=200,
+                    callback=lambda: dpg.show_item("export_dialog"),
+                )
+                dpg.add_button(
+                    label=i18n("btn_export_all"),
+                    width=200,
+                    callback=lambda: dpg.show_item("export_all_dialog"),
+                )
 
             dpg.add_spacer(height=20)
             with dpg.group(tag=f"{prefix}ui_unity_section"):
