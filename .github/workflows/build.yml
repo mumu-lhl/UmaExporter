@@ -19,7 +19,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        packager: [pyinstaller, nuitka]
+        # Temporarily disable Nuitka builds
+        packager: [pyinstaller]
 
     steps:
     - uses: actions/checkout@v6
@@ -229,4 +230,3 @@ jobs:
             release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

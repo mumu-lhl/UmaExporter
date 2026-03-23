@@ -293,7 +293,7 @@ class UnityLogic:
     def export_unity_assets(physical_paths, export_dir, bundle_keys=None):
         """Optimized entry point for exporting Unity assets"""
         if not physical_paths:
-            return
+            return 0
 
         try:
             # Map paths to keys for easier retrieval
@@ -313,7 +313,7 @@ class UnityLogic:
                     loaded_data.append(data)
 
             if not loaded_data:
-                return
+                return 0
 
             env = UnityPy.load(*loaded_data)
             os.makedirs(export_dir, exist_ok=True)
@@ -372,8 +372,10 @@ class UnityLogic:
                     except:
                         continue
             print(f"Export completed. Total {count} items saved to {export_dir}")
+            return count
         except Exception as e:
             print(f"Global export error: {e}")
+            return 0
 
     @staticmethod
     def export_single_unity_object(
@@ -386,7 +388,7 @@ class UnityLogic:
     ):
         """Export a single Unity object by path_id from one bundle."""
         if not physical_path or path_id is None or not export_dir:
-            return
+            return False
 
         try:
             data = UnityLogic._load_bundle_data(physical_path, bundle_key=bundle_key)
@@ -416,13 +418,12 @@ class UnityLogic:
                 obj_type = object_type or obj.type.name
 
                 if obj_type == "Animator":
-                    UnityLogic._export_via_cli(
+                    UnityLogic.export_animator_with_dependencies(
                         [physical_path],
                         export_dir,
-                        mode="animator",
                         bundle_keys={physical_path: bundle_key},
                     )
-                    return
+                    return True
 
                 if obj_type in ["Texture2D", "Sprite"] and parsed is not None and hasattr(
                     parsed, "image"
@@ -430,21 +431,21 @@ class UnityLogic:
                     UnityLogic._save_asset(
                         export_dir, obj_type, f"{safe_name}.png", parsed.image
                     )
-                    return
+                    return True
                 if obj_type == "TextAsset" and parsed is not None and hasattr(
                     parsed, "m_Script"
                 ):
                     UnityLogic._save_asset(
                         export_dir, "TextAsset", f"{safe_name}.txt", parsed.m_Script
                     )
-                    return
+                    return True
                 if obj_type == "Mesh" and parsed is not None and hasattr(
                     parsed, "export"
                 ):
                     UnityLogic._save_asset(
                         export_dir, "Mesh", f"{safe_name}.obj", parsed.export()
                     )
-                    return
+                    return True
                 if obj_type == "AudioClip" and parsed is not None and hasattr(
                     parsed, "samples"
                 ):
@@ -456,10 +457,24 @@ class UnityLogic:
                             f"{safe_name}{suffix}.wav",
                             sample,
                         )
-                    return
-                return
+                    return True
+                return False
         except Exception as e:
             print(f"Single export error: {e}")
+            return False
+
+    @staticmethod
+    def export_animator_with_dependencies(physical_paths, export_dir, bundle_keys=None):
+        """Export animator(s) with AssetStudioModCLI using provided dependency paths."""
+        if not physical_paths:
+            return 0
+        try:
+            return UnityLogic._export_via_cli(
+                physical_paths, export_dir, mode="animator", bundle_keys=bundle_keys
+            )
+        except Exception as e:
+            print(f"Animator export error: {e}")
+            return 0
 
     @staticmethod
     def batch_export_animators(export_configs, tmp_root):

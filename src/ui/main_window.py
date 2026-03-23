@@ -545,12 +545,14 @@ class UmaExporterApp:
     def _is_still_selected(self, asset_id):
         return self.current_asset_id == asset_id
 
-    def on_export_selected(self, sender, app_data):
-        target_dir = app_data.get("file_path_name", "")
-        if not target_dir:
-            return
+    def _set_export_status(self, prefix, message, color=None):
+        tag = f"{prefix}ui_export_status"
+        if dpg.does_item_exist(tag):
+            dpg.set_value(tag, message)
+            if color is not None:
+                dpg.configure_item(tag, color=color)
 
-        prefix = ""
+    def _get_active_prefix(self):
         active_tab = dpg.get_value("main_tabs")
         try:
             if active_tab and not isinstance(active_tab, str):
@@ -558,18 +560,29 @@ class UmaExporterApp:
         except Exception:
             active_tab = ""
         if active_tab == "scene_tab":
-            prefix = "scene_"
-        elif active_tab == "prop_tab":
-            prefix = "prop_"
+            return "scene_"
+        if active_tab == "prop_tab":
+            return "prop_"
+        return ""
+
+    def on_export_selected(self, sender, app_data):
+        target_dir = app_data.get("file_path_name", "")
+        if not target_dir:
+            return
+
+        prefix = self._get_active_prefix()
+        self._set_export_status(prefix, i18n("msg_export_started"), [255, 255, 0])
 
         selected_tag = self.last_unity_selected.get(prefix, None)
         if not selected_tag or not dpg.does_item_exist(selected_tag):
             print("No Unity object selected for export.")
+            self._set_export_status(prefix, i18n("msg_export_failed"), [255, 0, 0])
             return
 
         user_data = dpg.get_item_user_data(selected_tag)
         if not user_data or len(user_data) < 2:
             print("Invalid Unity object selection data.")
+            self._set_export_status(prefix, i18n("msg_export_failed"), [255, 0, 0])
             return
 
         phys_path = user_data[0]
@@ -578,7 +591,41 @@ class UmaExporterApp:
         object_name = user_data[4] if len(user_data) > 4 else None
         bundle_key = user_data[5] if len(user_data) > 5 else None
 
-        self.executor.submit(
+        if u_type == "Animator" and self.current_asset_id:
+            results = self.preview_controller._get_recursive_hashes(
+                self.current_asset_id
+            )
+            paths = []
+            bundle_keys = []
+            for h, k in results:
+                p = os.path.join(Config.get_data_root(), h[:2], h)
+                if os.path.exists(p):
+                    paths.append(p)
+                    bundle_keys.append(k)
+
+            if paths:
+                future = self.executor.submit(
+                    UnityLogic.export_animator_with_dependencies,
+                    paths,
+                    target_dir,
+                    bundle_keys=bundle_keys,
+                )
+                future.add_done_callback(
+                    lambda f: self._queue_ui_task(
+                        lambda: self._set_export_status(
+                            prefix,
+                            i18n("msg_export_done")
+                            if (f.exception() is None and (f.result() or 0) > 0)
+                            else i18n("msg_export_failed"),
+                            [0, 255, 0]
+                            if (f.exception() is None and (f.result() or 0) > 0)
+                            else [255, 0, 0],
+                        )
+                    )
+                )
+                return
+
+        future = self.executor.submit(
             UnityLogic.export_single_unity_object,
             phys_path,
             path_id,
@@ -587,11 +634,27 @@ class UmaExporterApp:
             object_name,
             bundle_key=bundle_key,
         )
+        future.add_done_callback(
+            lambda f: self._queue_ui_task(
+                lambda: self._set_export_status(
+                    prefix,
+                    i18n("msg_export_done")
+                    if (f.exception() is None and bool(f.result()))
+                    else i18n("msg_export_failed"),
+                    [0, 255, 0]
+                    if (f.exception() is None and bool(f.result()))
+                    else [255, 0, 0],
+                )
+            )
+        )
 
     def on_export_all_objects(self, sender, app_data):
         target_dir = app_data.get("file_path_name", "")
         if not target_dir or not self.current_asset_hash:
             return
+
+        prefix = self._get_active_prefix()
+        self._set_export_status(prefix, i18n("msg_export_started"), [255, 255, 0])
 
         phys_path = os.path.join(
             Config.get_data_root(), self.current_asset_hash[:2], self.current_asset_hash
@@ -600,11 +663,24 @@ class UmaExporterApp:
         if self.current_asset_data:
             bundle_key = self.current_asset_data.get("key")
 
-        self.executor.submit(
+        future = self.executor.submit(
             UnityLogic.export_unity_assets,
             [phys_path],
             target_dir,
             bundle_keys=[bundle_key] if bundle_key is not None else None,
+        )
+        future.add_done_callback(
+            lambda f: self._queue_ui_task(
+                lambda: self._set_export_status(
+                    prefix,
+                    i18n("msg_export_done")
+                    if (f.exception() is None and (f.result() or 0) > 0)
+                    else i18n("msg_export_failed"),
+                    [0, 255, 0]
+                    if (f.exception() is None and (f.result() or 0) > 0)
+                    else [255, 0, 0],
+                )
+            )
         )
 
     def on_settings_dir_selected(self, sender, app_data):

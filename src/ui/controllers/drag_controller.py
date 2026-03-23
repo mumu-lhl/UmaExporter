@@ -169,7 +169,6 @@ class DragController:
                 == final_data.get("id")
             ):
                 sender_item = final_item
-            print(f"[Drag] Finalizing selection: {final_data.get('id')}")
             self.app.on_file_click(sender_item, None, final_data)
         finally:
             self.app.is_navigating = prev_nav_state
@@ -285,7 +284,6 @@ class DragController:
             except:
                 pass
 
-        # print(f"[Drag] Active Tab: {active_tab} ({type(active_tab)}) mouse: {mouse_pos}")
 
         # 2. Determine the active container to narrow search scope
         container = None
@@ -300,7 +298,6 @@ class DragController:
             container = "prop_results_parent"
 
         if not container or not dpg.does_item_exist(container):
-            # print(f"[Drag] Container not found for tab {active_tab}")
             return None
 
         # 3. Optimized recursive hit-testing

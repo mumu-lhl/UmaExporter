@@ -58,14 +58,15 @@ class DetailsView:
             with dpg.group(horizontal=True):
                 dpg.add_button(
                     label=i18n("btn_export"),
-                    width=200,
+                    width=140,
                     callback=lambda: dpg.show_item("export_dialog"),
                 )
                 dpg.add_button(
                     label=i18n("btn_export_all"),
-                    width=200,
+                    width=140,
                     callback=lambda: dpg.show_item("export_all_dialog"),
                 )
+            dpg.add_text("", tag=f"{prefix}ui_export_status", wrap=500)
 
             dpg.add_spacer(height=20)
             with dpg.group(tag=f"{prefix}ui_unity_section"):
