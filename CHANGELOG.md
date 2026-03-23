@@ -1,3 +1,31 @@
+## [0.2.3] - 2026-03-23
+
+### 🐛 Bug Fixes
+
+- Export animator
+
+### ⚙️ Miscellaneous Tasks
+
+- *(version)* Release v0.2.3
+## [0.2.2] - 2026-03-23
+
+### 🐛 Bug Fixes
+
+- Preview the animator with the same name of file
+- Export objects
+
+### 🚜 Refactor
+
+- Remove useless code
+
+### 📚 Documentation
+
+- *(changelog)* Update CHANGELOG.md for v0.2.1
+
+### ⚙️ Miscellaneous Tasks
+
+- *(nuitka)* Fix
+- *(version)* Release v0.2.2
 ## [0.2.1] - 2026-03-19
 
 ### 🚀 Features
