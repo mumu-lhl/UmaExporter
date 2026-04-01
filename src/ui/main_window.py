@@ -289,8 +289,13 @@ class UmaExporterApp:
 
     def _db_load_worker(self):
         """Asynchronously initialize the database and load its index."""
+        if self.is_db_loading:
+            return
+
         db_path = Config.get_db_path()
         if not Config.BASE_PATH or not os.path.exists(db_path):
+            self.db = None
+            self.tree_data = {}
             self._queue_ui_task(lambda: dpg.set_value("main_tabs", "settings_tab"))
             return
 
@@ -305,21 +310,21 @@ class UmaExporterApp:
 
                 def finalize():
                     self.db = db
-                    self.tree_data = tree_data
                     self.is_db_loading = False
                     dpg.hide_item("loading_modal")
-
-                    self.browser_controller.render_browser_tree_items("browse_group")
-                    self.executor.submit(
-                        self.search_controller.render_scene_results, ""
-                    )
-                    self.executor.submit(self.search_controller.render_prop_results, "")
+                    self._set_database_ready(tree_data)
 
                 self._queue_ui_task(finalize)
 
             except Exception as e:
                 print(f"Failed to load database: {e}")
-                self._queue_ui_task(lambda: dpg.hide_item("loading_modal"))
+
+                def on_error():
+                    dpg.hide_item("loading_modal")
+                    dpg.set_value("settings_status_msg", str(e))
+                    dpg.set_value("main_tabs", "settings_tab")
+
+                self._queue_ui_task(on_error)
                 self.is_db_loading = False
 
         self.executor.submit(run_db_load)
@@ -327,9 +332,17 @@ class UmaExporterApp:
     def _set_database_ready(self, tree_data):
         self.tree_data = tree_data
 
-        if dpg.does_item_exist("home_browse_scroll"):
-            dpg.delete_item("home_browse_scroll", children_only=True)
-            self.browser_controller.render_browser_tree_items("home_browse_scroll")
+        if dpg.does_item_exist("browse_group"):
+            dpg.delete_item("browse_group", children_only=True)
+            self.browser_controller.render_browser_tree_items("browse_group")
+        if dpg.does_item_exist("search_results"):
+            dpg.delete_item("search_results", children_only=True)
+        if dpg.does_item_exist("search_group"):
+            dpg.configure_item("search_group", show=False)
+        if dpg.does_item_exist("browse_group"):
+            dpg.configure_item("browse_group", show=True)
+        if dpg.does_alias_exist("main_tabs"):
+            dpg.set_value("main_tabs", "home_tab")
 
         dpg.set_value(
             "settings_status_msg", i18n("msg_db_ready") + f" ({self.db.db_path})"
@@ -337,6 +350,33 @@ class UmaExporterApp:
 
         self.search_controller.render_scene_results()
         self.search_controller.render_prop_results()
+
+    def _reset_database_state(self):
+        if self.db:
+            try:
+                self.db.close()
+            except Exception:
+                pass
+
+        self.db = None
+        self.tree_data = {}
+        self.node_map = {}
+        self.cached_recursive_hashes = {}
+        self.cached_deps = {}
+        self.cached_rev_deps = {}
+
+        if dpg.does_item_exist("browse_group"):
+            dpg.delete_item("browse_group", children_only=True)
+        if dpg.does_item_exist("search_results"):
+            dpg.delete_item("search_results", children_only=True)
+        if dpg.does_item_exist("scene_results_parent"):
+            dpg.delete_item("scene_results_parent", children_only=True)
+        if dpg.does_item_exist("scene_thumbnails_parent"):
+            dpg.delete_item("scene_thumbnails_parent", children_only=True)
+        if dpg.does_item_exist("prop_results_parent"):
+            dpg.delete_item("prop_results_parent", children_only=True)
+        if dpg.does_item_exist("prop_thumbnails_parent"):
+            dpg.delete_item("prop_thumbnails_parent", children_only=True)
 
     def _queue_ui_task(self, func):
         self.ui_tasks.put(func)
@@ -697,7 +737,9 @@ class UmaExporterApp:
             i18n("region_global"): "global",
         }
         Config.update_config(base_path, region_map.get(region, "jp"), lang)
-        dpg.set_value("settings_status_msg", i18n("msg_restart_required"))
+        self._reset_database_state()
+        dpg.set_value("settings_status_msg", i18n("msg_loading"))
+        self._db_load_worker()
 
     def on_clear_thumbnail_cache(self, sender, app_data, user_data):
         try:

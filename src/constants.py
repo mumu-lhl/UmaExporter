@@ -176,3 +176,13 @@ class Config:
     @classmethod
     def set_base_path(cls, path):
         cls.BASE_PATH = path
+
+    @classmethod
+    def update_config(cls, base_path, region=None, language=None):
+        """Update in-memory config and persist it to disk."""
+        cls.BASE_PATH = (base_path or "").strip()
+        if region is not None:
+            cls.REGION = region
+        if language is not None:
+            cls.LANGUAGE = language
+        cls.save()
