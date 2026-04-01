@@ -1,3 +1,12 @@
+## [0.2.4] - 2026-04-01
+
+### 🐛 Bug Fixes
+
+- 修复首次启动应用设置问题
+
+### 📚 Documentation
+
+- *(changelog)* Update CHANGELOG.md for v0.2.3
 ## [0.2.3] - 2026-03-23
 
 ### 🐛 Bug Fixes
