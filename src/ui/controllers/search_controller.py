@@ -197,7 +197,9 @@ class SearchController:
                 self.app.thumbnail_items["scene_"] = []
                 self.app._queue_ui_task(
                     lambda: dpg.add_text(
-                        i18n("label_no_scenes"), parent=thumb_container
+                        i18n("msg_no_thumbnails_hint"),
+                        parent=thumb_container,
+                        color=[255, 255, 0],
                     )
                 )
             else:
@@ -296,7 +298,11 @@ class SearchController:
             if not items_with_thumb:
                 self.app.thumbnail_items["prop_"] = []
                 self.app._queue_ui_task(
-                    lambda: dpg.add_text(i18n("label_no_props"), parent=thumb_container)
+                    lambda: dpg.add_text(
+                        i18n("msg_no_thumbnails_hint"),
+                        parent=thumb_container,
+                        color=[255, 255, 0],
+                    )
                 )
             else:
                 self.render_thumbnail_grid("prop_", items_with_thumb, thumb_container)
