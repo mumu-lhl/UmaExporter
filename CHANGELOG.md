@@ -1,12 +1,18 @@
+## [0.2.5] - 2026-04-05
+
+### 🚜 Refactor
+
+- 增加更多文本提示
+
+### ⚙️ Miscellaneous Tasks
+
+- 日志不显示日志更新commit
+- *(release)* V0.2.5
 ## [0.2.4] - 2026-04-01
 
 ### 🐛 Bug Fixes
 
 - 修复首次启动应用设置问题
-
-### 📚 Documentation
-
-- *(changelog)* Update CHANGELOG.md for v0.2.3
 ## [0.2.3] - 2026-03-23
 
 ### 🐛 Bug Fixes
@@ -27,10 +33,6 @@
 
 - Remove useless code
 
-### 📚 Documentation
-
-- *(changelog)* Update CHANGELOG.md for v0.2.1
-
 ### ⚙️ Miscellaneous Tasks
 
 - *(nuitka)* Fix
@@ -40,10 +42,6 @@
 ### 🚀 Features
 
 - Empty thumbmail when have not loaded
-
-### 📚 Documentation
-
-- *(changelog)* Update CHANGELOG.md for v0.2.0 [skip ci]
 
 ### ⚙️ Miscellaneous Tasks
 
