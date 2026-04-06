@@ -1194,7 +1194,7 @@ class PreviewController:
             dpg.add_table_column(label="Type", width_fixed=True)
             dpg.add_table_column(label="Asset Path")
             for name, d_type, asset_id, size, f_hash, key_val in data:
-                with dpg.table_row():
+                with dpg.table_row() as row:
                     dpg.add_text(f"Type {d_type}")
                     asset_info = {
                         "id": asset_id,
@@ -1207,8 +1207,7 @@ class PreviewController:
                     self.app._add_file_selectable(
                         name,
                         asset_info,
-                        parent,
-                        span_columns=True,
+                        row,
                     )
 
     def _is_still_selected(self, asset_id):
