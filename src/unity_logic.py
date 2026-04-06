@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import json
 from functools import lru_cache
 
 import numpy as np
@@ -288,6 +289,101 @@ class UnityLogic:
 
             traceback.print_exc()
             raise e
+
+    @staticmethod
+    def get_monobehaviour_preview(physical_path, path_id, bundle_key=None):
+        """Build a readable MonoBehaviour preview using its m_Script reference."""
+        try:
+            env = UnityLogic._load_env(physical_path, bundle_key=bundle_key)
+            target_obj = None
+            for asset in env.assets:
+                if path_id in asset.objects:
+                    target_obj = asset.objects[path_id]
+                    break
+
+            if not target_obj or target_obj.type.name != "MonoBehaviour":
+                return None
+
+            parsed = target_obj.read()
+            lines = ["Type: MonoBehaviour"]
+
+            mono_name = getattr(parsed, "m_Name", None)
+            if mono_name:
+                lines.append(f"Name: {mono_name}")
+
+            script_ptr = getattr(parsed, "m_Script", None)
+            script_reader = None
+            if script_ptr:
+                try:
+                    script_reader = script_ptr.deref()
+                except Exception:
+                    script_reader = None
+
+            if script_reader:
+                lines.append("")
+                lines.append("[m_Script]")
+
+                script_name = None
+                try:
+                    script_name = script_reader.peek_name()
+                except Exception:
+                    script_name = None
+                if script_name:
+                    lines.append(f"Name: {script_name}")
+
+                script_tree = None
+                try:
+                    script_tree = script_reader.read_typetree(wrap=False)
+                except Exception:
+                    script_tree = None
+
+                if isinstance(script_tree, dict):
+                    for label, key in (
+                        ("Class", "m_ClassName"),
+                        ("Namespace", "m_Namespace"),
+                        ("Assembly", "m_AssemblyName"),
+                    ):
+                        value = script_tree.get(key)
+                        if value not in (None, ""):
+                            lines.append(f"{label}: {value}")
+
+                    script_body = (
+                        script_tree.get("m_Script")
+                        or script_tree.get("m_Text")
+                        or script_tree.get("m_Source")
+                    )
+                    if script_body not in (None, ""):
+                        lines.append("")
+                        lines.append("[Script Content]")
+                        lines.append(str(script_body))
+                else:
+                    lines.append("Unable to read MonoScript typetree.")
+            else:
+                lines.append("")
+                lines.append("m_Script: <missing or unresolved>")
+
+            behaviour_tree = None
+            try:
+                behaviour_tree = target_obj.read_typetree(wrap=False)
+            except Exception:
+                behaviour_tree = None
+
+            if behaviour_tree:
+                lines.append("")
+                lines.append("[MonoBehaviour Data]")
+                lines.append(
+                    json.dumps(
+                        behaviour_tree,
+                        indent=2,
+                        ensure_ascii=False,
+                        default=str,
+                    )
+                )
+
+            return "\n".join(lines)
+        except Exception as e:
+            print(f"MonoBehaviour preview error: {e}")
+            return None
 
     @staticmethod
     def export_unity_assets(physical_paths, export_dir, bundle_keys=None):

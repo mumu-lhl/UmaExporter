@@ -159,15 +159,15 @@ wheels = [
 
 [[package]]
 name = "f3d"
-version = "3.4.1"
+version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ae/90/daca0f867cfeb77eabfb2eabdf7540298c25196a999eb96edc5e28870c5b/f3d-3.4.1-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:a988d7066cd11bf65e58c06cad0986bfb85bc5bd1bd4499a89a99684f97238c8", size = 31605457, upload-time = "2026-01-08T12:59:15.068Z" },
-    { url = "https://files.pythonhosted.org/packages/ea/05/6d995bca3a0fe8e92ce1916ef086c06f612e42648a7dbe5e54f3b5da3a9e/f3d-3.4.1-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:66c2e22d6a9b8e5091750488dd74225c274e5eaa83af998bfe2d56cfa0d207f0", size = 47236243, upload-time = "2026-01-08T12:59:19.33Z" },
-    { url = "https://files.pythonhosted.org/packages/ea/be/7d90f478db0432b36e576b7fef55f596bb7124e95e7e73fafb7e7becec22/f3d-3.4.1-cp314-cp314-win_amd64.whl", hash = "sha256:6167b805ef62de5499e8b67088d3bd540fdc036a112fa094308812c215bf2797", size = 20193832, upload-time = "2026-01-08T12:59:22.089Z" },
-    { url = "https://files.pythonhosted.org/packages/f9/4d/3acdadb6bdeafe0f0d6c22f6ff5ddeb3b6940ee0d28c9ccfd70013c11cc1/f3d-3.4.1-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:8870d504136afa80eba8156a40788578f731e8f4e43e33618e19f1105dcb9348", size = 31627246, upload-time = "2026-01-08T12:59:24.556Z" },
-    { url = "https://files.pythonhosted.org/packages/f4/7b/58f7a9ff8be04af98ab12ff9a35f145c538310f5d85a0bd764b5f6f439e4/f3d-3.4.1-cp314-cp314t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:647f6811e838bfa49bcc26dc7af8f257dc2437f1f990823c489a440f4f437ff9", size = 47241245, upload-time = "2026-01-08T13:41:03.035Z" },
-    { url = "https://files.pythonhosted.org/packages/15/c1/ec4528c2ed2e71bc7f915c9c6c15a8138a051b7af2337038e24e834f07f2/f3d-3.4.1-cp314-cp314t-win_amd64.whl", hash = "sha256:94ec3180bd70ce011c90be892fca17f3a7f182ec6c46675b94daa6004abc8f5f", size = 20223849, upload-time = "2026-01-08T13:41:05.587Z" },
+    { url = "https://files.pythonhosted.org/packages/bf/02/c288fa69a14dd101f184410817fd1e4733161ccb4df3d8bcda46a7f5de50/f3d-3.5.0-cp314-cp314-macosx_14_0_arm64.whl", hash = "sha256:c782d38ebab8bc409565a6ff2a9b3d0a538bbb74c2b0d64ed3e6b80336ba1f49", size = 31477576, upload-time = "2026-04-05T17:32:29.281Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/94/2edbd1ddceb02cf4a4e1fdede1667ca6e63a5f9158c04848a74faf531760/f3d-3.5.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:0781a2a05ba3d10bf8b913fe088e76e702588d508cffb23122a62f3fadadee28", size = 47299533, upload-time = "2026-04-05T17:32:32.345Z" },
+    { url = "https://files.pythonhosted.org/packages/13/ba/aaa97a1ca0b93da80290438d57db81ce87724aec76dcecf85780feffac8b/f3d-3.5.0-cp314-cp314-win_amd64.whl", hash = "sha256:d4001bbb6f8aa361ddfdcac506887266ec4f49aa6336316708aec51b63d89680", size = 20464948, upload-time = "2026-04-05T17:32:36.026Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/81/e1a45569ac1cd64f2b2fbf323fc90242bea689053e6609b1ae2a64a8de84/f3d-3.5.0-cp314-cp314t-macosx_14_0_arm64.whl", hash = "sha256:e507ed2713565c9f3cfbb954489d01f5b86e0128f67b2f42d64dd867fbce67cb", size = 31499348, upload-time = "2026-04-05T17:32:38.499Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/4f/66eb74e4ed2be3a85b5c373e8d550dd91a9d140dbd157e05888dfde870f9/f3d-3.5.0-cp314-cp314t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:0629efc7d22caa6e50db8b1e88f75a3b2b90166eaa6bf47b1323bf587683aa8b", size = 47305274, upload-time = "2026-04-05T17:32:41.792Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/6a/75c13468375be298ab9f3b87731743b01c8d82fe3c65c985bd84e3471db0/f3d-3.5.0-cp314-cp314t-win_amd64.whl", hash = "sha256:5db1224af00ee8cc3a9effedca23b3c83c0eb88338589e18043cb23853c293c3", size = 20495789, upload-time = "2026-04-05T17:32:44.807Z" },
 ]
 
 [[package]]
@@ -331,7 +331,7 @@ wheels = [
 
 [[package]]
 name = "uma-exporter"
-version = "0.2.4"
+version = "0.2.5"
 source = { virtual = "." }
 dependencies = [
     { name = "apsw-sqlite3mc" },

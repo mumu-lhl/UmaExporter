@@ -580,6 +580,27 @@ class PreviewController:
             self.on_animator_preview_click(
                 None, None, (phys_path, path_id, prefix, object_name, bundle_key)
             )
+        elif u_type == "MonoBehaviour":
+            dpg.add_spacer(height=5, parent=image_container_tag)
+            dpg.add_text(
+                i18n("label_monobehaviour_preview"),
+                color=[0, 255, 255],
+                parent=image_container_tag,
+            )
+            dpg.add_text(
+                i18n("msg_loading"),
+                parent=image_container_tag,
+                tag=preview_loading_tag,
+            )
+            dpg.configure_item(image_container_tag, show=True)
+            self._load_monobehaviour_preview_async(
+                phys_path,
+                path_id,
+                prefix,
+                self.app.current_asset_id,
+                self.app.selection_request_id,
+                bundle_key=bundle_key,
+            )
 
     def _update_thumbnail_button(self, prefix, asset_id):
         thumbnail_container = f"{prefix}ui_thumbnail_container"
@@ -829,6 +850,81 @@ class PreviewController:
             "Failed to export FBX for preview.",
             parent=image_container_tag,
             color=[255, 0, 0],
+        )
+
+    def _load_monobehaviour_preview_async(
+        self, phys_path, path_id, prefix, asset_id, request_id, bundle_key=None
+    ):
+        future = self.app.executor.submit(
+            UnityLogic.get_monobehaviour_preview,
+            phys_path,
+            path_id,
+            bundle_key,
+        )
+
+        def done_callback(f):
+            try:
+                preview_text = f.result()
+                error = None
+            except Exception as e:
+                preview_text = None
+                error = str(e)
+
+            self.app._queue_ui_task(
+                lambda: self._apply_monobehaviour_preview_result(
+                    preview_text,
+                    error,
+                    prefix,
+                    asset_id,
+                    request_id,
+                )
+            )
+
+        future.add_done_callback(done_callback)
+
+    def _apply_monobehaviour_preview_result(
+        self, preview_text, error, prefix, asset_id, request_id
+    ):
+        if (
+            request_id != self.app.selection_request_id
+            or asset_id != self.app.current_asset_id
+        ):
+            return
+
+        preview_loading_tag = f"{prefix}ui_preview_loading"
+        image_container_tag = f"{prefix}ui_unity_image_container"
+        preview_text_tag = f"{prefix}ui_monobehaviour_preview_text"
+
+        if dpg.does_item_exist(preview_loading_tag):
+            dpg.delete_item(preview_loading_tag)
+
+        if dpg.does_item_exist(preview_text_tag):
+            dpg.delete_item(preview_text_tag)
+
+        if error:
+            dpg.add_text(
+                f"Error: {error}",
+                parent=image_container_tag,
+                color=[255, 0, 0],
+            )
+            return
+
+        if not preview_text:
+            dpg.add_text(
+                "Failed to load MonoBehaviour preview.",
+                parent=image_container_tag,
+                color=[255, 0, 0],
+            )
+            return
+
+        dpg.add_input_text(
+            parent=image_container_tag,
+            tag=preview_text_tag,
+            multiline=True,
+            readonly=True,
+            width=-1,
+            height=320,
+            default_value=preview_text,
         )
 
     def _load_texture_preview_async(
