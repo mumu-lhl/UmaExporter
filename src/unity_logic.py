@@ -291,6 +291,123 @@ class UnityLogic:
             raise e
 
     @staticmethod
+    def export_named_texture_to_png(
+        physical_path, texture_name, output_path, bundle_key=None
+    ):
+        """Export a Texture2D whose m_Name matches the file name to a PNG cache."""
+        try:
+            env = UnityLogic._load_env(physical_path, bundle_key=bundle_key)
+            for asset in env.assets:
+                for obj in asset.objects.values():
+                    if obj.type.name != "Texture2D":
+                        continue
+                    try:
+                        data = obj.read()
+                    except Exception:
+                        continue
+
+                    if getattr(data, "m_Name", None) != texture_name:
+                        continue
+                    if not hasattr(data, "image"):
+                        continue
+
+                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                    data.image.save(output_path)
+                    return output_path
+            return None
+        except Exception as e:
+            print(f"Named texture export error for {texture_name}: {e}")
+            return None
+
+    @staticmethod
+    def get_named_texture_data(
+        physical_path, texture_name, bundle_key=None, max_size=None
+    ):
+        """Extract a named Texture2D and return RGBA float data for immediate UI display."""
+        try:
+            env = UnityLogic._load_env(physical_path, bundle_key=bundle_key)
+            for asset in env.assets:
+                for obj in asset.objects.values():
+                    if obj.type.name != "Texture2D":
+                        continue
+                    try:
+                        data = obj.read()
+                    except Exception:
+                        continue
+
+                    if getattr(data, "m_Name", None) != texture_name:
+                        continue
+                    if not hasattr(data, "image"):
+                        continue
+
+                    img = data.image.convert("RGBA")
+                    if max_size:
+                        from PIL import Image, ImageOps
+
+                        resample_filter = getattr(Image, "Resampling", Image).BILINEAR
+                        img = ImageOps.contain(
+                            img, (max_size, max_size), method=resample_filter
+                        )
+                        canvas = Image.new(
+                            "RGBA", (max_size, max_size), (0, 0, 0, 0)
+                        )
+                        paste_x = (max_size - img.width) // 2
+                        paste_y = (max_size - img.height) // 2
+                        canvas.paste(img, (paste_x, paste_y), img)
+                        img = canvas
+
+                    width, height = img.size
+                    data_np = np.array(img, dtype=np.float32)
+                    data_np /= 255.0
+                    return data_np.ravel().tolist(), width, height
+            return None, 0, 0
+        except Exception as e:
+            print(f"Named texture load error for {texture_name}: {e}")
+            return None, 0, 0
+
+    @staticmethod
+    def find_named_animator(physical_path, animator_name, bundle_key=None):
+        """Find an Animator by m_Name within a bundle."""
+        try:
+            env = UnityLogic._load_env(physical_path, bundle_key=bundle_key)
+            animator_candidates = []
+            for asset in env.assets:
+                for obj in asset.objects.values():
+                    if obj.type.name != "Animator":
+                        continue
+                    try:
+                        data = obj.parse_as_object()
+                    except Exception:
+                        continue
+
+                    current_name = getattr(data, "m_Name", None)
+                    game_object_name = None
+                    game_object = getattr(data, "m_GameObject", None)
+                    if game_object:
+                        try:
+                            game_object_name = game_object.deref().peek_name()
+                        except Exception:
+                            game_object_name = None
+
+                    animator_candidates.append(
+                        {
+                            "path_id": obj.path_id,
+                            "m_name": current_name,
+                            "game_object_name": game_object_name,
+                        }
+                    )
+
+                    if current_name == animator_name or game_object_name == animator_name:
+                        return obj.path_id
+
+            if len(animator_candidates) == 1:
+                return animator_candidates[0]["path_id"]
+            return None
+        except Exception as e:
+            print(f"Find animator error for {animator_name}: {e}")
+            return None
+
+    @staticmethod
     def get_monobehaviour_preview(physical_path, path_id, bundle_key=None):
         """Build a readable MonoBehaviour preview using its m_Script reference."""
         try:
@@ -578,10 +695,7 @@ class UnityLogic:
         High-performance batch export.
         export_configs: List of dicts { "physical_paths": [], "bundle_keys": [] }
         """
-        staging_dir = os.path.join(tmp_root, "batch_staging")
-        export_dir = os.path.join(tmp_root, "batch_output")
-        os.makedirs(staging_dir, exist_ok=True)
-        os.makedirs(export_dir, exist_ok=True)
+        os.makedirs(tmp_root, exist_ok=True)
 
         all_physical_paths = []
         all_bundle_keys = {}
@@ -597,12 +711,36 @@ class UnityLogic:
                         all_bundle_keys[p] = keys[i]
 
         # 2. Run CLI on the collected paths
-        # _export_via_cli handles decryption and staging internally
-        UnityLogic._export_via_cli(
-            all_physical_paths, export_dir, mode="animator", bundle_keys=all_bundle_keys
-        )
+        # _export_via_cli handles decryption and staging internally.
+        # Export to a temporary directory first, then flatten all files into tmp_root.
+        with tempfile.TemporaryDirectory() as export_dir:
+            UnityLogic._export_via_cli(
+                all_physical_paths,
+                export_dir,
+                mode="animator",
+                bundle_keys=all_bundle_keys,
+            )
 
-        return export_dir
+            exported_files = 0
+            for root, _, files in os.walk(export_dir):
+                for file_name in files:
+                    source_path = os.path.join(root, file_name)
+                    target_path = os.path.join(tmp_root, file_name)
+
+                    if os.path.exists(target_path):
+                        base, ext = os.path.splitext(file_name)
+                        counter = 1
+                        while True:
+                            candidate = os.path.join(tmp_root, f"{base}_{counter}{ext}")
+                            if not os.path.exists(candidate):
+                                target_path = candidate
+                                break
+                            counter += 1
+
+                    shutil.move(source_path, target_path)
+                    exported_files += 1
+
+        return exported_files
 
     @staticmethod
     def batch_export_to_fbx(batch_configs, export_dir):

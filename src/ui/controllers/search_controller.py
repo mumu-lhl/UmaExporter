@@ -3,6 +3,7 @@ import dearpygui.dearpygui as dpg
 from src.constants import Config
 from src.ui.i18n import i18n
 from src.thumbnail_manager import ThumbnailManager as thumb_manager
+from src.unity_logic import UnityLogic
 
 
 class SearchController:
@@ -93,6 +94,174 @@ class SearchController:
     def clear_prop_search(self, *args):
         dpg.set_value("prop_search_input", "")
         self.render_prop_results("")
+
+    def render_character_results(self):
+        list_container = "character_list_scroll"
+        outfits_container = "character_outfits_content"
+
+        self.app._queue_ui_task(lambda: dpg.delete_item(list_container, children_only=True))
+        self.app._queue_ui_task(
+            lambda: dpg.delete_item(outfits_container, children_only=True)
+        )
+        self.clear_search_thumbnails("character_icons")
+        self.clear_search_thumbnails("character_outfits")
+        self.app.lazy_thumb_queues["character_icons"] = []
+        self.app.lazy_thumb_queues["character_outfits"] = []
+        self.app.thumbnail_items["character_outfits"] = []
+
+        if not self.app.db:
+            self.app._queue_ui_task(
+                lambda: dpg.add_text(
+                    i18n("label_db_not_ready"),
+                    parent=list_container,
+                    color=[200, 120, 120],
+                )
+            )
+            self.app._queue_ui_task(
+                lambda: dpg.add_text(
+                    i18n("label_character_panel_hint"), parent=outfits_container
+                )
+            )
+            return
+
+        self.app._queue_ui_task(
+            lambda: (
+                dpg.delete_item(list_container, children_only=True),
+                dpg.add_text(i18n("msg_loading"), parent=list_container),
+                dpg.delete_item(outfits_container, children_only=True),
+                dpg.add_text(
+                    i18n("label_character_panel_hint"), parent=outfits_container
+                ),
+            )
+        )
+
+        entries = self.app.db.get_character_entries()
+        self.app.character_entries = entries
+        self.app.thumbnail_request_ids["character_icons"] += 1
+        request_id = self.app.thumbnail_request_ids["character_icons"]
+
+        if not entries:
+            self.app._queue_ui_task(
+                lambda: dpg.add_text(i18n("label_no_characters"), parent=list_container)
+            )
+            self.app._queue_ui_task(
+                lambda: dpg.add_text(
+                    i18n("label_character_panel_hint"), parent=outfits_container
+                )
+            )
+            return
+
+        def build_character_list():
+            if not dpg.does_item_exist(list_container):
+                return
+            if request_id != self.app.thumbnail_request_ids.get("character_icons"):
+                return
+
+            dpg.delete_item(list_container, children_only=True)
+            ui_entries = []
+
+            for entry in entries:
+                entry_data = dict(entry)
+                with dpg.group(parent=list_container):
+                    img_id = dpg.add_image(
+                        "thumb_placeholder",
+                        width=88,
+                        height=88,
+                    )
+                    entry_data["item_tag"] = img_id
+
+                    with dpg.item_handler_registry() as handler:
+                        dpg.add_item_clicked_handler(
+                            callback=lambda s, a, u, item=img_id: self.on_character_selected(
+                                item, a, u
+                            ),
+                            user_data=entry_data,
+                        )
+                    dpg.bind_item_handler_registry(img_id, handler)
+
+                    with dpg.tooltip(img_id):
+                        dpg.add_text(entry_data["texture_name"])
+                        dpg.add_text(f"ID: {entry_data['chara_id']}")
+
+                    dpg.add_text(f"ID {entry_data['chara_id']}")
+
+                ui_entries.append(entry_data)
+                cache_path = thumb_manager.get_character_cache_path(
+                    entry_data["cache_name"]
+                )
+                self.app.lazy_thumb_queues["character_icons"].append(
+                    {
+                        "img_id": img_id,
+                        "cache_name": entry_data["cache_name"],
+                        "cache_path": cache_path,
+                        "hash": entry_data["hash"],
+                        "key": entry_data["key"],
+                        "texture_name": entry_data["texture_name"],
+                        "size": 88,
+                    }
+                )
+
+            self.app.character_entries = ui_entries
+
+            selected_entry = next(
+                (
+                    item
+                    for item in ui_entries
+                    if item["chara_id"] == self.app.current_character_id
+                ),
+                ui_entries[0],
+            )
+            self.on_character_selected(
+                selected_entry.get("item_tag"), None, selected_entry
+            )
+
+        self.app._queue_ui_task(build_character_list)
+
+    def on_character_selected(self, sender, app_data, user_data, *args):
+        previous = self.app.last_selected_character_logo
+        if previous and previous != sender and dpg.does_item_exist(previous):
+            dpg.configure_item(previous, tint_color=[255, 255, 255, 255])
+
+        if sender and dpg.does_item_exist(sender):
+            dpg.configure_item(sender, tint_color=[150, 200, 255, 255])
+            self.app.last_selected_character_logo = sender
+        else:
+            self.app.last_selected_character_logo = user_data.get("item_tag")
+            if self.app.last_selected_character_logo and dpg.does_item_exist(
+                self.app.last_selected_character_logo
+            ):
+                dpg.configure_item(
+                    self.app.last_selected_character_logo,
+                    tint_color=[150, 200, 255, 255],
+                )
+
+        self.app.current_character_id = user_data["chara_id"]
+        self.app.current_character_outfit = None
+        self.app.last_selected_character_outfit = None
+        self.app._queue_ui_task(
+            lambda: dpg.configure_item("character_export_button", enabled=False)
+        )
+        self.app.thumbnail_request_ids["character_outfits"] += 1
+        request_id = self.app.thumbnail_request_ids["character_outfits"]
+        self.clear_search_thumbnails("character_outfits")
+        self.app.lazy_thumb_queues["character_outfits"] = []
+        self.app.thumbnail_items["character_outfits"] = []
+        self.app._queue_ui_task(
+            lambda: (
+                dpg.delete_item("character_outfits_content", children_only=True),
+                dpg.add_text(i18n("msg_loading"), parent="character_outfits_content"),
+            )
+        )
+
+        def load_outfits_worker():
+            outfits = self.app.db.get_character_outfit_assets(user_data["chara_id"])
+            self.app._queue_ui_task(
+                lambda: self._render_character_outfit_grid(
+                    user_data["chara_id"], outfits, request_id=request_id
+                )
+            )
+
+        self.app.executor.submit(load_outfits_worker)
 
     def on_view_mode_change(self, sender, app_data, user_data):
         prefix = user_data  # "scene_" or "prop_"
@@ -379,6 +548,274 @@ class SearchController:
 
         self.app._queue_ui_task(build_grid)
 
+    def _render_character_outfit_grid(self, chara_id, items, request_id=None):
+        parent = "character_outfits_content"
+        if request_id is None:
+            self.app.thumbnail_request_ids["character_outfits"] += 1
+            request_id = self.app.thumbnail_request_ids["character_outfits"]
+        else:
+            if request_id != self.app.thumbnail_request_ids.get("character_outfits"):
+                return
+
+        try:
+            width = dpg.get_item_rect_size(parent)[0]
+            if width <= 0:
+                width = 800
+        except Exception:
+            width = 800
+
+        columns = max(1, int(width / 220))
+        self.app.thumbnail_columns["character_outfits"] = columns
+
+        def build_grid():
+            if not dpg.does_item_exist(parent):
+                return
+            if request_id != self.app.thumbnail_request_ids.get("character_outfits"):
+                return
+            if chara_id != self.app.current_character_id:
+                return
+
+            self.app.thumbnail_items["character_outfits"] = items
+            dpg.delete_item(parent, children_only=True)
+            self.clear_search_thumbnails("character_outfits")
+            self.app.lazy_thumb_queues["character_outfits"] = []
+
+            dpg.add_text(
+                f"{i18n('label_character_outfits')} {chara_id}",
+                parent=parent,
+                color=[0, 255, 0],
+            )
+            dpg.set_value("character_export_status", i18n("msg_select_outfit"))
+            dpg.add_separator(parent=parent)
+
+            if not items:
+                dpg.add_text(i18n("label_no_character_outfits"), parent=parent)
+                return
+
+            with dpg.table(
+                header_row=False, parent=parent, policy=dpg.mvTable_SizingStretchProp
+            ):
+                for _ in range(columns):
+                    dpg.add_table_column()
+
+                for i in range(0, len(items), columns):
+                    with dpg.table_row():
+                        for j in range(columns):
+                            idx = i + j
+                            if idx >= len(items):
+                                dpg.add_spacer()
+                                continue
+
+                            item = items[idx]
+                            display_name = os.path.basename(item["full_path"])
+                            if display_name.startswith("chara_stand_"):
+                                display_name = display_name[len("chara_stand_") :]
+                            chara_prefix = f"{chara_id}_"
+                            if display_name.startswith(chara_prefix):
+                                display_name = display_name[len(chara_prefix) :]
+                            with dpg.group():
+                                img_id = dpg.add_image(
+                                    "thumb_placeholder",
+                                    width=180,
+                                    height=180,
+                                )
+                                item["item_tag"] = img_id
+                                with dpg.item_handler_registry() as handler:
+                                    dpg.add_item_clicked_handler(
+                                        callback=lambda s, a, u, item_id=img_id: self.on_character_outfit_selected(
+                                            item_id, a, u
+                                        ),
+                                        user_data=item,
+                                    )
+                                dpg.bind_item_handler_registry(img_id, handler)
+                                with dpg.tooltip(img_id):
+                                    dpg.add_text(os.path.basename(item["full_path"]))
+                                dpg.add_text(display_name, wrap=180)
+
+                                self.app.lazy_thumb_queues["character_outfits"].append(
+                                    {
+                                        "img_id": img_id,
+                                        "cache_name": item["cache_name"],
+                                        "cache_path": thumb_manager.get_character_cache_path(
+                                            item["cache_name"]
+                                        ),
+                                        "hash": item["hash"],
+                                        "key": item["key"],
+                                        "texture_name": item["texture_name"],
+                                        "size": 180,
+                                    }
+                                )
+
+        self.app._queue_ui_task(build_grid)
+
+    def on_character_outfit_selected(self, sender, app_data, user_data, *args):
+        previous = self.app.last_selected_character_outfit
+        if previous and previous != sender and dpg.does_item_exist(previous):
+            dpg.configure_item(previous, tint_color=[255, 255, 255, 255])
+
+        if sender and dpg.does_item_exist(sender):
+            dpg.configure_item(sender, tint_color=[150, 200, 255, 255])
+            self.app.last_selected_character_outfit = sender
+        else:
+            self.app.last_selected_character_outfit = user_data.get("item_tag")
+            if self.app.last_selected_character_outfit and dpg.does_item_exist(
+                self.app.last_selected_character_outfit
+            ):
+                dpg.configure_item(
+                    self.app.last_selected_character_outfit,
+                    tint_color=[150, 200, 255, 255],
+                )
+
+        self.app.current_character_outfit = user_data
+        dpg.configure_item("character_export_button", enabled=True)
+        dpg.set_value("character_export_status", os.path.basename(user_data["full_path"]))
+
+    def _load_character_texture_batch_async(self, domain, tasks, request_id):
+        def worker():
+            import numpy as np
+            from PIL import Image, ImageOps
+
+            results = []
+            resample_filter = getattr(Image, "Resampling", Image).BILINEAR
+
+            for task in tasks:
+                cache_path = task["cache_path"]
+                if not os.path.exists(cache_path):
+                    phys_path = os.path.join(
+                        Config.get_data_root(),
+                        task["hash"][:2],
+                        task["hash"],
+                    )
+                    data, _, _ = UnityLogic.get_named_texture_data(
+                        phys_path,
+                        task["texture_name"],
+                        bundle_key=task["key"],
+                        max_size=task["size"],
+                    )
+                    if data is not None:
+                        results.append((task["img_id"], data, task["size"]))
+                        self._schedule_character_cache_write(task)
+                    continue
+
+                try:
+                    img = Image.open(cache_path).convert("RGBA")
+                    img = ImageOps.contain(
+                        img, (task["size"], task["size"]), method=resample_filter
+                    )
+                    canvas = Image.new("RGBA", (task["size"], task["size"]), (0, 0, 0, 0))
+                    paste_x = (task["size"] - img.width) // 2
+                    paste_y = (task["size"] - img.height) // 2
+                    canvas.paste(img, (paste_x, paste_y), img)
+                    data = np.array(canvas).flatten().astype(np.float32) / 255.0
+                    results.append((task["img_id"], data.tolist(), task["size"]))
+                except Exception:
+                    continue
+
+            return results
+
+        future = self.app.executor.submit(worker)
+
+        def done(f):
+            try:
+                batch_results = f.result()
+                if batch_results:
+                    self.app._queue_ui_task(
+                        lambda: self._apply_character_texture_batch(
+                            domain, request_id, batch_results
+                        )
+                    )
+            except Exception:
+                pass
+
+        future.add_done_callback(done)
+
+    def _schedule_character_cache_write(self, task):
+        cache_name = task["cache_name"]
+        if cache_name in self.app.character_cache_pending:
+            return
+
+        self.app.character_cache_pending.add(cache_name)
+
+        def worker():
+            try:
+                cache_path = task["cache_path"]
+                if os.path.exists(cache_path):
+                    return
+
+                phys_path = os.path.join(
+                    Config.get_data_root(),
+                    task["hash"][:2],
+                    task["hash"],
+                )
+                UnityLogic.export_named_texture_to_png(
+                    phys_path,
+                    task["texture_name"],
+                    cache_path,
+                    bundle_key=task["key"],
+                )
+            finally:
+                self.app.character_cache_pending.discard(cache_name)
+
+        self.app.executor.submit(worker)
+
+    def _apply_character_texture_batch(self, domain, request_id, batch_results):
+        if request_id != self.app.thumbnail_request_ids.get(domain):
+            return
+
+        with self.app.texture_lock:
+            for img_id, data, size in batch_results:
+                if not dpg.does_item_exist(img_id):
+                    continue
+
+                tex_tag = dpg.generate_uuid()
+                try:
+                    dpg.add_static_texture(
+                        width=size,
+                        height=size,
+                        default_value=data,
+                        tag=tex_tag,
+                        parent="main_texture_registry",
+                    )
+                    dpg.configure_item(img_id, texture_tag=tex_tag)
+                    self.app.search_thumbnail_textures[domain].append(tex_tag)
+                except Exception:
+                    pass
+
+    def _process_character_lazy_queue(self, domain, batch_size):
+        queue = self.app.lazy_thumb_queues.get(domain, [])
+        if not queue:
+            return False
+
+        first_visible_idx = -1
+        for idx, task in enumerate(queue):
+            try:
+                if dpg.is_item_visible(task["img_id"]):
+                    first_visible_idx = idx
+                    break
+            except Exception:
+                continue
+
+        if first_visible_idx == -1:
+            to_load_batch = queue[:batch_size]
+            remaining = queue[batch_size:]
+        else:
+            start = max(0, first_visible_idx - batch_size // 2)
+            end = min(len(queue), start + batch_size)
+            to_load_batch = queue[start:end]
+            remaining = queue[:start] + queue[end:]
+
+        self.app.lazy_thumb_queues[domain] = remaining
+
+        if to_load_batch:
+            self._load_character_texture_batch_async(
+                domain,
+                to_load_batch,
+                self.app.thumbnail_request_ids.get(domain, 0),
+            )
+            return True
+
+        return False
+
     def process_lazy_thumbnails(self):
         import time
 
@@ -391,6 +828,30 @@ class SearchController:
         active_tab = (
             dpg.get_item_alias(raw_tab) if isinstance(raw_tab, int) else raw_tab
         )
+        if active_tab == "character_tab":
+            try:
+                width = dpg.get_item_rect_size("character_outfits_panel")[0]
+                expected_columns = max(1, int(max(width, 1) / 220))
+            except Exception:
+                expected_columns = self.app.thumbnail_columns.get("character_outfits", 0)
+
+            if expected_columns != self.app.thumbnail_columns.get("character_outfits", 0):
+                items = self.app.thumbnail_items.get("character_outfits", [])
+                if items and self.app.current_character_id:
+                    self._render_character_outfit_grid(
+                        self.app.current_character_id,
+                        items,
+                        request_id=self.app.thumbnail_request_ids.get(
+                            "character_outfits", 0
+                        ),
+                    )
+                    return
+
+            if self._process_character_lazy_queue("character_icons", 12):
+                return
+            self._process_character_lazy_queue("character_outfits", 16)
+            return
+
         tab_to_prefix = {"scene_tab": "scene_", "prop_tab": "prop_"}
         active_prefix = tab_to_prefix.get(active_tab)
 

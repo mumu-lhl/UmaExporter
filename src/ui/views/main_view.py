@@ -75,6 +75,16 @@ class MainView:
         ):
             dpg.add_file_extension(".*")
 
+        with dpg.file_dialog(
+            directory_selector=True,
+            show=False,
+            callback=self.controller.on_character_export_selected,
+            id="character_export_dialog",
+            width=600,
+            height=400,
+        ):
+            dpg.add_file_extension(".*")
+
     def create_main_layout(self):
         # Create a theme for disabled buttons
         if not dpg.does_alias_exist("disabled_btn_theme"):
@@ -194,6 +204,40 @@ class MainView:
                         tag="prop_details_scroll", width=-1, border=True
                     ):
                         self.details_view.build_details_panel(prefix="prop_")
+
+            with dpg.tab(label=i18n("tab_character"), tag="character_tab"):
+                with dpg.group(horizontal=True):
+                    with dpg.child_window(
+                        tag="character_list_panel",
+                        width=260,
+                        border=True,
+                        resizable_x=True,
+                    ):
+                        with dpg.child_window(
+                            tag="character_list_scroll", border=False, autosize_x=True
+                        ):
+                            dpg.add_text(i18n("msg_loading"))
+
+                    with dpg.child_window(
+                        tag="character_outfits_panel", width=-1, border=True
+                    ):
+                        with dpg.group(horizontal=True):
+                            dpg.add_button(
+                                label=i18n("btn_export"),
+                                tag="character_export_button",
+                                callback=lambda: dpg.show_item(
+                                    "character_export_dialog"
+                                ),
+                                enabled=False,
+                            )
+                            dpg.add_text("", tag="character_export_status")
+                        dpg.add_separator()
+                        with dpg.child_window(
+                            tag="character_outfits_content",
+                            border=False,
+                            autosize_x=True,
+                        ):
+                            dpg.add_text(i18n("label_character_panel_hint"))
 
             with dpg.tab(label=i18n("tab_actions"), tag="actions_tab"):
                 with dpg.group(indent=20):

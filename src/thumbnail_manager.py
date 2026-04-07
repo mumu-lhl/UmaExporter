@@ -5,6 +5,36 @@ from src.constants import Config
 
 class ThumbnailManager:
     @staticmethod
+    def get_character_cache_dir():
+        """Returns the directory where character images are stored."""
+        path = os.path.join(Config.get_thumbnail_dir(), "characters")
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+        return path
+
+    @staticmethod
+    def get_character_cache(cache_name):
+        """Returns the cache path for a character image filename."""
+        if not cache_name:
+            return None
+
+        path = os.path.join(
+            ThumbnailManager.get_character_cache_dir(), f"{cache_name}.png"
+        )
+        if os.path.exists(path):
+            return path
+        return None
+
+    @staticmethod
+    def get_character_cache_path(cache_name):
+        """Returns the standard cache path for a character image filename."""
+        if not cache_name:
+            return None
+        return os.path.join(
+            ThumbnailManager.get_character_cache_dir(), f"{cache_name}.png"
+        )
+
+    @staticmethod
     def get_thumbnail(asset_hash):
         """Returns the thumbnail path for the given asset hash, if it exists."""
         if not asset_hash:

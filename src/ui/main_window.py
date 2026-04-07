@@ -73,7 +73,13 @@ class UmaExporterApp:
         # Preview State
         self.selection_request_id = 0
         self.texture_request_ids = {}
-        self.thumbnail_request_ids = {"": 0, "scene_": 0, "prop_": 0}
+        self.thumbnail_request_ids = {
+            "": 0,
+            "scene_": 0,
+            "prop_": 0,
+            "character_icons": 0,
+            "character_outfits": 0,
+        }
         self.last_unity_selected = {}
         self.thumbnail_texture_tags = {}
         self.preview_texture_tags = {}
@@ -91,10 +97,30 @@ class UmaExporterApp:
         # View Modes
         self.scene_view_mode = "list"
         self.prop_view_mode = "list"
-        self.search_thumbnail_textures = {"scene_": [], "prop_": []}
-        self.thumbnail_columns = {"scene_": 0, "prop_": 0}
-        self.thumbnail_items = {"scene_": [], "prop_": []}
-        self.lazy_thumb_queues = {"scene_": [], "prop_": []}
+        self.search_thumbnail_textures = {
+            "scene_": [],
+            "prop_": [],
+            "character_icons": [],
+            "character_outfits": [],
+        }
+        self.thumbnail_columns = {
+            "scene_": 0,
+            "prop_": 0,
+            "character_outfits": 0,
+        }
+        self.thumbnail_items = {"scene_": [], "prop_": [], "character_outfits": []}
+        self.lazy_thumb_queues = {
+            "scene_": [],
+            "prop_": [],
+            "character_icons": [],
+            "character_outfits": [],
+        }
+        self.character_entries = []
+        self.current_character_id = None
+        self.last_selected_character_logo = None
+        self.character_cache_pending = set()
+        self.last_selected_character_outfit = None
+        self.current_character_outfit = None
 
         # Batch Processor State
         self.is_batch_running = False
@@ -128,6 +154,8 @@ class UmaExporterApp:
         self.clear_scene_search = self.search_controller.clear_scene_search
         self.on_prop_search = self.search_controller.on_prop_search
         self.clear_prop_search = self.search_controller.clear_prop_search
+        self.on_character_selected = self.search_controller.on_character_selected
+        self.on_character_outfit_selected = self.search_controller.on_character_outfit_selected
         self._on_view_mode_change = self.search_controller.on_view_mode_change
         self._on_batch_cat_all_change = self.batch_controller.on_batch_cat_all_change
         self.on_start_batch_click = self.batch_controller.on_start_batch_click
@@ -350,6 +378,7 @@ class UmaExporterApp:
 
         self.search_controller.render_scene_results()
         self.search_controller.render_prop_results()
+        self.search_controller.render_character_results()
 
     def _reset_database_state(self):
         if self.db:
@@ -377,6 +406,20 @@ class UmaExporterApp:
             dpg.delete_item("prop_results_parent", children_only=True)
         if dpg.does_item_exist("prop_thumbnails_parent"):
             dpg.delete_item("prop_thumbnails_parent", children_only=True)
+        if dpg.does_item_exist("character_list_scroll"):
+            dpg.delete_item("character_list_scroll", children_only=True)
+        if dpg.does_item_exist("character_outfits_content"):
+            dpg.delete_item("character_outfits_content", children_only=True)
+
+        self.character_entries = []
+        self.current_character_id = None
+        self.last_selected_character_logo = None
+        self.character_cache_pending.clear()
+        self.last_selected_character_outfit = None
+        self.current_character_outfit = None
+        self.thumbnail_items["character_outfits"] = []
+        self.lazy_thumb_queues["character_icons"] = []
+        self.lazy_thumb_queues["character_outfits"] = []
 
     def _queue_ui_task(self, func):
         self.ui_tasks.put(func)
@@ -592,6 +635,117 @@ class UmaExporterApp:
             if color is not None:
                 dpg.configure_item(tag, color=color)
 
+    def _set_character_export_status(self, message, color=None):
+        tag = "character_export_status"
+        if dpg.does_item_exist(tag):
+            dpg.set_value(tag, message)
+            if color is not None:
+                dpg.configure_item(tag, color=color)
+
+    def _build_character_export_targets(self, chara_id, outfit_id):
+        if not chara_id or not outfit_id or len(outfit_id) != 6:
+            return []
+
+        outfit_main = outfit_id[:4]
+        outfit_suffix = outfit_id[4:]
+
+        return [
+            {
+                "label": "body",
+                "logical_path": f"3d/chara/body/bdy{outfit_main}_{outfit_suffix}/pfb_bdy{outfit_main}_{outfit_suffix}",
+                "animator_name": f"pfb_bdy{outfit_main}_{outfit_suffix}",
+            },
+            {
+                "label": "head",
+                "logical_path": f"3d/chara/head/chr{chara_id}_{outfit_suffix}/pfb_chr{chara_id}_{outfit_suffix}",
+                "animator_name": f"pfb_chr{chara_id}_{outfit_suffix}",
+            },
+            {
+                "label": "tail",
+                "logical_path": f"3d/chara/tail/tail{outfit_main}_{outfit_suffix}/pfb_tail{outfit_main}_{outfit_suffix}",
+                "animator_name": f"pfb_tail{outfit_main}_{outfit_suffix}",
+                "fallback_logical_path": "3d/chara/tail/tail0001_00/pfb_tail0001_00",
+                "fallback_animator_name": "pfb_tail0001_00",
+            },
+        ]
+
+    def _get_recursive_export_inputs(self, asset_id):
+        if not asset_id or not self.db:
+            return [], []
+
+        results = self.preview_controller._get_recursive_hashes(asset_id)
+        paths = []
+        bundle_keys = []
+
+        for asset_hash, bundle_key in results:
+            phys_path = os.path.join(Config.get_data_root(), asset_hash[:2], asset_hash)
+            if not os.path.exists(phys_path):
+                continue
+            paths.append(phys_path)
+            bundle_keys.append(bundle_key)
+
+        return paths, bundle_keys
+
+    def _export_character_animator_group(self, target_dir, chara_id, outfit_id):
+        targets = self._build_character_export_targets(chara_id, outfit_id)
+        if not targets or not self.db:
+            return False
+
+        export_configs = []
+
+        for target in targets:
+            asset = self.db.get_asset_by_path(target["logical_path"])
+            animator_name = target["animator_name"]
+            if asset is None and target["label"] == "tail":
+                asset = self.db.get_asset_by_path(target["fallback_logical_path"])
+                animator_name = target["fallback_animator_name"]
+
+            if asset is None:
+                candidates = self.db.find_character_component_candidates(
+                    target["label"], chara_id, outfit_id
+                )
+                if candidates:
+                    asset = candidates[0]
+                    animator_name = asset["full_path"].rsplit("/", 1)[-1]
+
+            if asset is None:
+                return False
+
+            phys_path = os.path.join(
+                Config.get_data_root(),
+                asset["hash"][:2],
+                asset["hash"],
+            )
+            if (
+                UnityLogic.find_named_animator(
+                phys_path,
+                animator_name,
+                bundle_key=asset.get("key"),
+                )
+                is None
+            ):
+                return False
+
+            export_paths, export_bundle_keys = self._get_recursive_export_inputs(
+                asset.get("id")
+            )
+            if not export_paths:
+                export_paths = [phys_path]
+                export_bundle_keys = [asset.get("key")]
+
+            export_configs.append(
+                {
+                    "physical_paths": export_paths,
+                    "bundle_keys": export_bundle_keys,
+                }
+            )
+
+        if not export_configs:
+            return False
+
+        exported_count = UnityLogic.batch_export_animators(export_configs, target_dir)
+        return exported_count > 0
+
     def _get_active_prefix(self):
         active_tab = dpg.get_value("main_tabs")
         try:
@@ -680,6 +834,50 @@ class UmaExporterApp:
                     prefix,
                     i18n("msg_export_done")
                     if (f.exception() is None and bool(f.result()))
+                    else i18n("msg_export_failed"),
+                    [0, 255, 0]
+                    if (f.exception() is None and bool(f.result()))
+                    else [255, 0, 0],
+                )
+            )
+        )
+
+    def on_character_export_selected(self, sender, app_data):
+        target_dir = app_data.get("file_path_name", "")
+        if not target_dir:
+            return
+
+        selected_outfit = self.current_character_outfit
+        if not selected_outfit:
+            self._set_character_export_status(
+                i18n("msg_select_outfit"), [255, 120, 120]
+            )
+            return
+
+        chara_id = selected_outfit.get("chara_id")
+        outfit_id = selected_outfit.get("outfit_id")
+        if not chara_id or not outfit_id:
+            self._set_character_export_status(
+                i18n("msg_export_failed"), [255, 0, 0]
+            )
+            return
+
+        self._set_character_export_status(i18n("msg_export_started"), [255, 255, 0])
+
+        future = self.executor.submit(
+            self._export_character_animator_group,
+            target_dir,
+            chara_id,
+            outfit_id,
+        )
+
+        future.add_done_callback(
+            lambda f: self._queue_ui_task(
+                lambda: self._set_character_export_status(
+                    i18n("msg_export_done")
+                    if (f.exception() is None and bool(f.result()))
+                    else i18n("msg_character_export_missing")
+                    if f.exception() is None
                     else i18n("msg_export_failed"),
                     [0, 255, 0]
                     if (f.exception() is None and bool(f.result()))
