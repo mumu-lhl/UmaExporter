@@ -86,6 +86,7 @@ class UmaExporterApp:
         self.cached_recursive_hashes = {}
         self.cached_deps = {}
         self.cached_rev_deps = {}
+        UnityLogic.clear_runtime_caches()
         self.scene_auto_preview_request = None
         self.prop_auto_preview_request = None
 
@@ -400,6 +401,7 @@ class UmaExporterApp:
         self.cached_recursive_hashes = {}
         self.cached_deps = {}
         self.cached_rev_deps = {}
+        UnityLogic.clear_runtime_caches()
 
         if dpg.does_item_exist("browse_group"):
             dpg.delete_item("browse_group", children_only=True)

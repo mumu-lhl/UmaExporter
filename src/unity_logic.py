@@ -55,6 +55,11 @@ class UnityLogic:
         UnityLogic._key_provider = provider
 
     @staticmethod
+    def clear_runtime_caches():
+        UnityLogic._load_env.cache_clear()
+        UnityLogic.get_unity_assets.cache_clear()
+
+    @staticmethod
     def get_key_for_path(physical_path):
         if UnityLogic._key_provider:
             # Extract hash from path (it's the filename)
@@ -100,7 +105,7 @@ class UnityLogic:
             return None
 
     @staticmethod
-    @lru_cache(maxsize=8)
+    @lru_cache(maxsize=2)
     def _load_env(physical_path, bundle_key=None):
         """Internal cached loader for Unity environments"""
         data = UnityLogic._load_bundle_data(physical_path, bundle_key=bundle_key)
@@ -109,7 +114,7 @@ class UnityLogic:
         return UnityPy.load(data)
 
     @staticmethod
-    @lru_cache(maxsize=64)
+    @lru_cache(maxsize=16)
     def get_unity_assets(physical_path, bundle_key=None):
         """Analyze Unity AssetBundle and return object list"""
         try:
@@ -359,7 +364,7 @@ class UnityLogic:
                     width, height = img.size
                     data_np = np.array(img, dtype=np.float32)
                     data_np /= 255.0
-                    return data_np.ravel().tolist(), width, height
+                    return data_np.ravel(), width, height
             return None, 0, 0
         except Exception as e:
             print(f"Named texture load error for {texture_name}: {e}")

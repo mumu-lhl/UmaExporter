@@ -23,7 +23,7 @@ class ThumbnailService:
                     img = Image.open(path).convert("RGBA")
                     img = img.resize((100, 100), resample_filter)
                     data = np.array(img).flatten().astype(np.float32) / 255.0
-                    results.append((img_id, data.tolist()))
+                    results.append((img_id, data))
                 except Exception:
                     pass
             return results

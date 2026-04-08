@@ -228,10 +228,11 @@ class SearchController:
                     dpg.bind_item_handler_registry(img_id, handler)
 
                     with dpg.tooltip(img_id):
-                        dpg.add_text(entry_data["texture_name"])
+                        dpg.add_text(entry_data["chara_name"])
                         dpg.add_text(f"ID: {entry_data['chara_id']}")
 
-                    dpg.add_text(f"ID {entry_data['chara_id']}")
+                    dpg.add_text(entry_data["chara_name"])
+                    dpg.add_text(f"ID {entry_data['chara_id']}", color=[150, 150, 150])
 
                 ui_entries.append(entry_data)
                 cache_path = thumb_manager.get_character_cache_path(
@@ -783,7 +784,7 @@ class SearchController:
                     paste_y = (task["size"] - img.height) // 2
                     canvas.paste(img, (paste_x, paste_y), img)
                     data = np.array(canvas).flatten().astype(np.float32) / 255.0
-                    results.append((task["img_id"], data.tolist(), task["size"]))
+                    results.append((task["img_id"], data, task["size"]))
                 except Exception:
                     continue
 

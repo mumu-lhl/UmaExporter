@@ -1,9 +1,66 @@
 import sqlite3
 import threading
 import re
+import os
 import apsw
+from collections import OrderedDict
 from src.constants import Config
 from src.decryptor import get_db_hex_key
+
+
+class MasterDatabase:
+    def __init__(self, db_path=None):
+        self.db_path = db_path or Config.get_master_db_path()
+        self.conn = self._connect(self.db_path)
+
+    def _connect(self, db_path):
+        if not db_path or not os.path.exists(db_path):
+            return None
+        try:
+            # master.mdb can be encrypted or not.
+            # If the user says it's unencrypted, we try sqlite3 first.
+            # But usually it's encrypted with the same key.
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master LIMIT 1")
+                return conn
+            except sqlite3.DatabaseError:
+                # Try encrypted
+                hex_key = get_db_hex_key(Config.REGION)
+                conn = apsw.Connection(db_path)
+                conn.pragma("hexkey", hex_key)
+                # Test connection
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master LIMIT 1")
+                return conn
+        except Exception as e:
+            print(f"Failed to connect to master database: {e}")
+            return None
+
+    def get_text(self, category, index):
+        if not self.conn:
+            return None
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "SELECT text FROM text_data WHERE category = ? AND [index] = ?",
+                (category, index),
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+        except Exception:
+            return None
+
+    def get_character_name(self, chara_id):
+        return self.get_text(6, int(chara_id))
+
+    def get_dress_name(self, dress_id):
+        return self.get_text(14, int(dress_id))
+
+    def close(self):
+        if self.conn:
+            self.conn.close()
 
 
 class UmaDatabase:
@@ -11,10 +68,12 @@ class UmaDatabase:
         self.db_path = db_path or Config.get_db_path()
         self.conn = self._connect(self.db_path)
         self._apply_read_pragmas()
-        self._asset_info_by_id = {}
+        self.master_db = MasterDatabase()
+        self._asset_info_by_id = OrderedDict()
         self._deps_by_from = None
         self._deps_by_to = None
         self._dep_graph_lock = threading.Lock()
+        self._asset_info_cache_limit = 16384
 
     def _connect(self, db_path):
         if not db_path:
@@ -79,7 +138,7 @@ class UmaDatabase:
         pragmas = [
             "PRAGMA query_only=ON",
             "PRAGMA temp_store=MEMORY",
-            "PRAGMA cache_size=-131072",  # ~128MB page cache
+            "PRAGMA cache_size=-32768",  # ~32MB page cache
         ]
         # mmap_size might not be supported or needed for encrypted?
         if not isinstance(self.conn, apsw.Connection):
@@ -121,7 +180,6 @@ class UmaDatabase:
                         "full_path": name,
                         "key": key_val,
                     }
-                    self._asset_info_by_id[str(i_id)] = (name, size, f_hash, key_val)
                     if part in current:
                         # Handle collision if a directory has the same name as a file
                         if isinstance(current[part], dict) and not current[part].get(
@@ -147,51 +205,70 @@ class UmaDatabase:
         print(f"Parsing complete. Total assets: {count}")
         return tree_data
 
-    def _ensure_dependency_graph(self):
-        if self._deps_by_from is not None and self._deps_by_to is not None:
+    def _ensure_dependency_graph(self, include_reverse=False):
+        if self._deps_by_from is not None and (
+            not include_reverse or self._deps_by_to is not None
+        ):
             return
 
         with self._dep_graph_lock:
-            if self._deps_by_from is not None and self._deps_by_to is not None:
+            if self._deps_by_from is not None and (
+                not include_reverse or self._deps_by_to is not None
+            ):
                 return
 
-            print("Building in-memory dependency graph...")
+            print(
+                "Building in-memory dependency graph..."
+                if include_reverse
+                else "Building in-memory forward dependency graph..."
+            )
             cursor = self.conn.cursor()
             cursor.execute("SELECT f, t, d FROM r WHERE d != '0'")
             deps_by_from = {}
-            deps_by_to = {}
+            deps_by_to = {} if include_reverse else None
 
             for source_id, target_id, dep_type in cursor:
-                src = str(source_id)
-                tgt = str(target_id)
+                src = int(source_id)
+                tgt = int(target_id)
                 rel = (tgt, dep_type)
                 deps_by_from.setdefault(src, []).append(rel)
-                deps_by_to.setdefault(tgt, []).append((src, dep_type))
+                if include_reverse:
+                    deps_by_to.setdefault(tgt, []).append((src, dep_type))
 
             self._deps_by_from = deps_by_from
-            self._deps_by_to = deps_by_to
-            print(
-                f"Dependency graph ready. from-keys={len(deps_by_from)}, to-keys={len(deps_by_to)}"
-            )
+            if include_reverse:
+                self._deps_by_to = deps_by_to
+                print(
+                    f"Dependency graph ready. from-keys={len(deps_by_from)}, to-keys={len(deps_by_to)}"
+                )
+            else:
+                print(f"Forward dependency graph ready. from-keys={len(deps_by_from)}")
+
+    def _cache_asset_info(self, asset_id, info):
+        self._asset_info_by_id[asset_id] = info
+        self._asset_info_by_id.move_to_end(asset_id)
+        if len(self._asset_info_by_id) > self._asset_info_cache_limit:
+            self._asset_info_by_id.popitem(last=False)
 
     def _get_asset_info(self, asset_id):
         """Fetch basic asset info (name, size, hash, key) and cache it"""
-        key = str(asset_id)
+        key = int(asset_id)
         info = self._asset_info_by_id.get(key)
         if info is not None:
+            self._asset_info_by_id.move_to_end(key)
             return info
         cursor = self.conn.cursor()
         cols = "n, l, h, e"
         cursor.execute(f"SELECT {cols} FROM a WHERE i = ? LIMIT 1", (key,))
         row = cursor.fetchone()
         if row:
-            self._asset_info_by_id[key] = row
+            self._cache_asset_info(key, row)
         return row
 
     def get_dependencies(self, asset_id):
         """Fetch forward dependencies"""
         self._ensure_dependency_graph()
-        source_key = str(asset_id)
+        source_key = int(asset_id)
         rows = []
         for target_id, dep_type in self._deps_by_from.get(source_key, []):
             info = self._get_asset_info(target_id)
@@ -203,8 +280,8 @@ class UmaDatabase:
 
     def get_reverse_dependencies(self, asset_id):
         """Fetch reverse dependencies"""
-        self._ensure_dependency_graph()
-        target_key = str(asset_id)
+        self._ensure_dependency_graph(include_reverse=True)
+        target_key = int(asset_id)
         rows = []
         for source_id, dep_type in self._deps_by_to.get(target_key, []):
             info = self._get_asset_info(source_id)
@@ -227,7 +304,7 @@ class UmaDatabase:
     def get_all_recursive_dependencies(self, asset_id):
         """Recursively fetch all dependencies for an asset"""
         self._ensure_dependency_graph()
-        start = str(asset_id)
+        start = int(asset_id)
         visited = set()
         stack = [start]
         results = []  # List of (hash, key)
@@ -319,10 +396,13 @@ class UmaDatabase:
             if chara_id == "0000":
                 continue
 
+            name_en = self.master_db.get_character_name(chara_id) if self.master_db else None
+
             rows.append(
                 {
                     "id": i_id,
                     "chara_id": chara_id,
+                    "chara_name": name_en or f"Chara {chara_id}",
                     "full_path": name,
                     "size": size,
                     "hash": f_hash,
@@ -354,6 +434,9 @@ class UmaDatabase:
             outfit_match = re.fullmatch(
                 rf"chara_stand_{re.escape(chara_id)}_(\d{{6}})", texture_name
             )
+            outfit_id = outfit_match.group(1) if outfit_match else None
+            dress_name = self.master_db.get_dress_name(outfit_id) if self.master_db and outfit_id else None
+
             rows.append(
                 {
                     "id": i_id,
@@ -364,7 +447,8 @@ class UmaDatabase:
                     "key": key_val,
                     "texture_name": texture_name,
                     "cache_name": texture_name,
-                    "outfit_id": outfit_match.group(1) if outfit_match else None,
+                    "outfit_id": outfit_id,
+                    "dress_name": dress_name or f"Outfit {outfit_id}" if outfit_id else "Unknown",
                 }
             )
 
@@ -536,6 +620,9 @@ class UmaDatabase:
         return cursor.fetchall()
 
     def close(self):
+        self._asset_info_by_id.clear()
+        self._deps_by_from = None
+        self._deps_by_to = None
         self.conn.close()
 
     def get_key_by_hash(self, f_hash):

@@ -170,6 +170,10 @@ class Config:
         return os.path.join(cls.BASE_PATH, "meta") if cls.BASE_PATH else ""
 
     @classmethod
+    def get_master_db_path(cls):
+        return os.path.join(cls.BASE_PATH, "master", "master.mdb") if cls.BASE_PATH else ""
+
+    @classmethod
     def get_data_root(cls):
         return os.path.join(cls.BASE_PATH, "dat") if cls.BASE_PATH else ""
 
