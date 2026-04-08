@@ -387,10 +387,33 @@ class UmaDatabase:
             "key": key_val,
         }
 
+    def get_assets_by_prefix(self, logical_prefix):
+        cursor = self.conn.cursor()
+        cols = "i, n, l, h, e"
+        cursor.execute(
+            f"SELECT {cols} FROM a WHERE n LIKE ? ORDER BY n",
+            (f"{logical_prefix}%",),
+        )
+
+        rows = []
+        for i_id, name, size, f_hash, key_val in cursor.fetchall():
+            rows.append(
+                {
+                    "id": i_id,
+                    "full_path": name,
+                    "size": size,
+                    "hash": f_hash,
+                    "key": key_val,
+                }
+            )
+        return rows
+
     def debug_find_related_paths(self, category, chara_id, outfit_id, limit=40):
         cursor = self.conn.cursor()
         outfit_main = outfit_id[:4] if outfit_id else ""
-        outfit_suffix = outfit_id[4:] if outfit_id and len(outfit_id) >= 6 else ""
+        outfit_suffix = outfit_id[-2:] if outfit_id and len(outfit_id) >= 6 else ""
+        if outfit_suffix == "01":
+            outfit_suffix = "00"
 
         patterns = []
         if category == "body":
@@ -433,7 +456,9 @@ class UmaDatabase:
     def find_character_component_candidates(self, category, chara_id, outfit_id):
         cursor = self.conn.cursor()
         outfit_main = outfit_id[:4] if outfit_id else ""
-        outfit_suffix = outfit_id[4:] if outfit_id and len(outfit_id) >= 6 else ""
+        outfit_suffix = outfit_id[-2:] if outfit_id and len(outfit_id) >= 6 else ""
+        if outfit_suffix == "01":
+            outfit_suffix = "00"
 
         if category == "body":
             patterns = [

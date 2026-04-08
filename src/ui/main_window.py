@@ -649,12 +649,24 @@ class UmaExporterApp:
             if color is not None:
                 dpg.configure_item(tag, color=color)
 
-    def _build_character_export_targets(self, chara_id, outfit_id):
-        if not chara_id or not outfit_id or len(outfit_id) != 6:
-            return []
+    def _get_character_outfit_main_suffix(self, outfit_id):
+        if not outfit_id or len(outfit_id) < 6:
+            return None, None
 
         outfit_main = outfit_id[:4]
-        outfit_suffix = outfit_id[4:]
+        outfit_suffix = outfit_id[-2:]
+        if outfit_suffix == "01":
+            outfit_suffix = "00"
+
+        return outfit_main, outfit_suffix
+
+    def _build_character_export_targets(self, chara_id, outfit_id):
+        if not chara_id or not outfit_id:
+            return []
+
+        outfit_main, outfit_suffix = self._get_character_outfit_main_suffix(outfit_id)
+        if not outfit_main or not outfit_suffix:
+            return []
 
         return [
             {
@@ -667,14 +679,27 @@ class UmaExporterApp:
                 "logical_path": f"3d/chara/head/chr{chara_id}_{outfit_suffix}/pfb_chr{chara_id}_{outfit_suffix}",
                 "animator_name": f"pfb_chr{chara_id}_{outfit_suffix}",
             },
-            {
-                "label": "tail",
-                "logical_path": f"3d/chara/tail/tail{outfit_main}_{outfit_suffix}/pfb_tail{outfit_main}_{outfit_suffix}",
-                "animator_name": f"pfb_tail{outfit_main}_{outfit_suffix}",
-                "fallback_logical_path": "3d/chara/tail/tail0001_00/pfb_tail0001_00",
-                "fallback_animator_name": "pfb_tail0001_00",
-            },
         ]
+
+    def _resolve_character_tail_target(self, chara_id):
+        if not chara_id or not self.db:
+            return None
+
+        for tail_id in ("0001", "0002"):
+            texture_name = f"tex_tail{tail_id}_00_{chara_id}_diff"
+            texture_path = f"3d/chara/tail/tail{tail_id}_00/textures/{texture_name}"
+            texture_asset = self.db.get_asset_by_path(texture_path)
+            if texture_asset is None:
+                continue
+
+            return {
+                "label": "tail",
+                "logical_path": f"3d/chara/tail/tail{tail_id}_00/pfb_tail{tail_id}_00",
+                "animator_name": f"pfb_tail{tail_id}_00",
+                "texture_prefix": f"tex_tail{tail_id}_00_{chara_id}_",
+            }
+
+        return None
 
     def _get_recursive_export_inputs(self, asset_id):
         if not asset_id or not self.db:
@@ -693,21 +718,79 @@ class UmaExporterApp:
 
         return paths, bundle_keys
 
+    def _build_character_texture_output_path(self, target_dir, label, texture_name):
+        safe_name = UnityLogic._sanitize_export_name(texture_name) or "texture"
+        file_name = f"{safe_name}.png"
+        output_path = os.path.join(target_dir, file_name)
+
+        if not os.path.exists(output_path):
+            return output_path
+
+        base, ext = os.path.splitext(file_name)
+        counter = 1
+        while True:
+            candidate = os.path.join(target_dir, f"{base}_{counter}{ext}")
+            if not os.path.exists(candidate):
+                return candidate
+            counter += 1
+
+    def _export_character_component_textures(
+        self, target_dir, label, asset, texture_prefix_filter=None
+    ):
+        if not asset or not self.db:
+            return 0
+
+        base_dir = asset["full_path"].rsplit("/", 1)[0]
+        texture_prefix = f"{base_dir}/textures/"
+        texture_assets = self.db.get_assets_by_prefix(texture_prefix)
+        exported_count = 0
+
+        for texture_asset in texture_assets:
+            texture_name = texture_asset["full_path"].rsplit("/", 1)[-1]
+            texture_hash = texture_asset.get("hash")
+            if not texture_name or not texture_hash:
+                continue
+            if texture_prefix_filter and not texture_name.startswith(texture_prefix_filter):
+                continue
+
+            phys_path = os.path.join(
+                Config.get_data_root(),
+                texture_hash[:2],
+                texture_hash,
+            )
+            if not os.path.exists(phys_path):
+                continue
+
+            output_path = self._build_character_texture_output_path(
+                target_dir, label, texture_name
+            )
+            exported = UnityLogic.export_named_texture_to_png(
+                phys_path,
+                texture_name,
+                output_path,
+                bundle_key=texture_asset.get("key"),
+            )
+            if exported:
+                exported_count += 1
+
+        return exported_count
+
     def _export_character_animator_group(self, target_dir, chara_id, outfit_id):
         targets = self._build_character_export_targets(chara_id, outfit_id)
+        tail_target = self._resolve_character_tail_target(chara_id)
+        if tail_target is not None:
+            targets.append(tail_target)
         if not targets or not self.db:
             return False
 
         export_configs = []
+        texture_exports = 0
 
         for target in targets:
             asset = self.db.get_asset_by_path(target["logical_path"])
             animator_name = target["animator_name"]
-            if asset is None and target["label"] == "tail":
-                asset = self.db.get_asset_by_path(target["fallback_logical_path"])
-                animator_name = target["fallback_animator_name"]
 
-            if asset is None:
+            if asset is None and target["label"] != "tail":
                 candidates = self.db.find_character_component_candidates(
                     target["label"], chara_id, outfit_id
                 )
@@ -746,12 +829,18 @@ class UmaExporterApp:
                     "bundle_keys": export_bundle_keys,
                 }
             )
+            texture_exports += self._export_character_component_textures(
+                target_dir,
+                target["label"],
+                asset,
+                texture_prefix_filter=target.get("texture_prefix"),
+            )
 
         if not export_configs:
             return False
 
         exported_count = UnityLogic.batch_export_animators(export_configs, target_dir)
-        return exported_count > 0
+        return (exported_count + texture_exports) > 0
 
     def _get_active_prefix(self):
         active_tab = dpg.get_value("main_tabs")
