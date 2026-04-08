@@ -10,6 +10,84 @@ class SearchController:
     def __init__(self, app):
         self.app = app
 
+    def _add_global_search_result_item(self, row):
+        i_id, name, size, f_hash, key_val = row
+        u_data = {
+            "id": i_id,
+            "full_path": name,
+            "size": size,
+            "hash": f_hash,
+            "key": key_val,
+        }
+
+        def add_item(
+            label=os.path.basename(name),
+            tag=f"search_item_{i_id}",
+            data=u_data,
+        ):
+            self.app._add_file_selectable(
+                label,
+                data,
+                "search_results",
+                span_columns=True,
+                tag=tag,
+            )
+
+        self.app._queue_ui_task(add_item)
+        return f"search_item_{i_id}", u_data
+
+    def _set_global_search_loading_indicator(self, show):
+        def update():
+            if show:
+                if not dpg.does_item_exist("search_load_more_status"):
+                    dpg.add_text(
+                        i18n("msg_loading"),
+                        parent="search_results",
+                        tag="search_load_more_status",
+                    )
+            elif dpg.does_item_exist("search_load_more_status"):
+                dpg.delete_item("search_load_more_status")
+
+        self.app._queue_ui_task(update)
+
+    def _load_global_search_page(self, query, request_id, reset=False):
+        rows = self.app.db.search_assets(
+            query,
+            limit=self.app.global_search_limit,
+            offset=self.app.global_search_offset,
+        )
+        if request_id != self.app.global_search_request_id:
+            return
+
+        self.app.global_search_has_more = len(rows) == self.app.global_search_limit
+        self.app.global_search_offset += len(rows)
+
+        if reset:
+            self.app._queue_ui_task(
+                lambda: dpg.delete_item("search_results", children_only=True)
+            )
+
+        if not rows and reset:
+            self.app._queue_ui_task(
+                lambda: dpg.add_text(i18n("label_no_assets"), parent="search_results")
+            )
+            self.app.global_search_loading_more = False
+            return
+
+        first_item = None
+        for row in rows:
+            added = self._add_global_search_result_item(row)
+            if first_item is None:
+                first_item = added
+
+        if reset and first_item:
+            self.app._queue_ui_task(
+                lambda f=first_item: self.app.on_file_click(f[0], None, f[1])
+            )
+
+        self.app.global_search_loading_more = False
+        self._set_global_search_loading_indicator(False)
+
     def on_search(self, sender, app_data, user_data, *args):
         if not self.app.db:
             return
@@ -19,55 +97,20 @@ class SearchController:
             return
 
         def run_search():
+            self.app.global_search_query = query
+            self.app.global_search_offset = 0
+            self.app.global_search_has_more = False
+            self.app.global_search_loading_more = True
+            self.app.global_search_request_id += 1
+            request_id = self.app.global_search_request_id
             self.app._queue_ui_task(
                 lambda: dpg.configure_item("browse_group", show=False)
             )
             self.app._queue_ui_task(
                 lambda: dpg.configure_item("search_group", show=True)
             )
-            self.app._queue_ui_task(
-                lambda: dpg.delete_item("search_results", children_only=True)
-            )
-
-            rows = self.app.db.search_assets(query)
-            if not rows:
-                self.app._queue_ui_task(
-                    lambda: dpg.add_text(
-                        i18n("label_no_assets"), parent="search_results"
-                    )
-                )
-            else:
-                first_item = None
-                for i_id, name, size, f_hash, key_val in rows:
-                    u_data = {
-                        "id": i_id,
-                        "full_path": name,
-                        "size": size,
-                        "hash": f_hash,
-                        "key": key_val,
-                    }
-
-                    def add_item(
-                        label=os.path.basename(name),
-                        tag=f"search_item_{i_id}",
-                        data=u_data,
-                    ):
-                        self.app._add_file_selectable(
-                            label,
-                            data,
-                            "search_results",
-                            span_columns=True,
-                            tag=tag,
-                        )
-
-                    self.app._queue_ui_task(add_item)
-                    if first_item is None:
-                        first_item = (f"search_item_{i_id}", u_data)
-
-                if first_item:
-                    self.app._queue_ui_task(
-                        lambda f=first_item: self.app.on_file_click(f[0], None, f[1])
-                    )
+            self._set_global_search_loading_indicator(True)
+            self._load_global_search_page(query, request_id, reset=True)
 
         self.app.executor.submit(run_search)
 
@@ -82,6 +125,11 @@ class SearchController:
         dpg.set_value("search_input", "")
         dpg.configure_item("browse_group", show=True)
         dpg.configure_item("search_group", show=False)
+        self.app.global_search_query = ""
+        self.app.global_search_offset = 0
+        self.app.global_search_has_more = False
+        self.app.global_search_loading_more = False
+        self.app.global_search_request_id += 1
 
     def clear_scene_search(self, *args):
         dpg.set_value("scene_search_input", "")
@@ -282,6 +330,34 @@ class SearchController:
                 if dpg.does_item_exist(tag):
                     dpg.delete_item(tag)
             self.app.search_thumbnail_textures[prefix] = []
+
+    def process_global_search_load_more(self):
+        if not self.app.global_search_query or self.app.global_search_loading_more:
+            return
+        if not self.app.global_search_has_more:
+            return
+        if not dpg.does_item_exist("search_group") or not dpg.is_item_shown("search_group"):
+            return
+        if not dpg.does_item_exist("search_results"):
+            return
+
+        try:
+            scroll_y = dpg.get_y_scroll("search_results")
+            max_scroll_y = dpg.get_y_scroll_max("search_results")
+        except Exception:
+            return
+
+        if max_scroll_y <= 0:
+            return
+
+        if scroll_y < max_scroll_y - self.app.global_search_scroll_threshold:
+            return
+
+        self.app.global_search_loading_more = True
+        request_id = self.app.global_search_request_id
+        query = self.app.global_search_query
+        self._set_global_search_loading_indicator(True)
+        self.app.executor.submit(self._load_global_search_page, query, request_id, False)
 
     def render_scene_results(self, query=""):
         view_mode = self.app.scene_view_mode

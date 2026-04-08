@@ -121,6 +121,13 @@ class UmaExporterApp:
         self.character_cache_pending = set()
         self.last_selected_character_outfit = None
         self.current_character_outfit = None
+        self.global_search_query = ""
+        self.global_search_limit = 500
+        self.global_search_offset = 0
+        self.global_search_has_more = False
+        self.global_search_loading_more = False
+        self.global_search_request_id = 0
+        self.global_search_scroll_threshold = 24
 
         # Batch Processor State
         self.is_batch_running = False
@@ -954,6 +961,7 @@ class UmaExporterApp:
             while dpg.is_dearpygui_running():
                 self._drain_ui_tasks()
                 self.search_controller.process_lazy_thumbnails()
+                self.search_controller.process_global_search_load_more()
                 dpg.render_dearpygui_frame()
         except KeyboardInterrupt:
             pass

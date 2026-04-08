@@ -214,12 +214,13 @@ class UmaDatabase:
             rows.append((name, dep_type, source_id, size, f_hash, key_val))
         return rows
 
-    def search_assets(self, query, limit=100):
+    def search_assets(self, query, limit=500, offset=0):
         """Search assets via database LIKE query"""
         cursor = self.conn.cursor()
         cols = "i, n, l, h, e"
         cursor.execute(
-            f"SELECT {cols} FROM a WHERE n LIKE ? LIMIT ?", (f"%{query}%", limit)
+            f"SELECT {cols} FROM a WHERE n LIKE ? ORDER BY n LIMIT ? OFFSET ?",
+            (f"%{query}%", limit, offset),
         )
         return cursor.fetchall()
 
