@@ -171,7 +171,17 @@ class Config:
 
     @classmethod
     def get_master_db_path(cls):
-        return os.path.join(cls.BASE_PATH, "master", "master.mdb") if cls.BASE_PATH else ""
+        if not cls.BASE_PATH:
+            return ""
+        # Try multiple common locations for master.mdb
+        candidates = [
+            os.path.join(cls.BASE_PATH, "master", "master.mdb"),
+            os.path.join(cls.BASE_PATH, "master.mdb"),
+        ]
+        for p in candidates:
+            if os.path.exists(p):
+                return p
+        return candidates[0]
 
     @classmethod
     def get_data_root(cls):

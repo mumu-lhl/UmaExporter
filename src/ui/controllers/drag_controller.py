@@ -284,7 +284,6 @@ class DragController:
             except:
                 pass
 
-
         # 2. Determine the active container to narrow search scope
         container = None
         if active_tab == "home_tab":

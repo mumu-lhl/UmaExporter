@@ -17,39 +17,47 @@ class MasterDatabase:
         if not db_path or not os.path.exists(db_path):
             return None
         try:
-            # master.mdb can be encrypted or not.
-            # If the user says it's unencrypted, we try sqlite3 first.
-            # But usually it's encrypted with the same key.
+            # Try plain sqlite first, then fallback to encrypted
             try:
-                conn = sqlite3.connect(db_path)
-                cursor = conn.cursor()
-                cursor.execute("SELECT name FROM sqlite_master LIMIT 1")
+                conn = sqlite3.connect(db_path, check_same_thread=False)
+                conn.execute("SELECT name FROM sqlite_master LIMIT 1")
                 return conn
             except sqlite3.DatabaseError:
-                # Try encrypted
-                hex_key = get_db_hex_key(Config.REGION)
                 conn = apsw.Connection(db_path)
-                conn.pragma("hexkey", hex_key)
-                # Test connection
-                cursor = conn.cursor()
-                cursor.execute("SELECT name FROM sqlite_master LIMIT 1")
+                conn.pragma("hexkey", get_db_hex_key(Config.REGION))
+                conn.cursor().execute("SELECT name FROM sqlite_master LIMIT 1")
                 return conn
-        except Exception as e:
-            print(f"Failed to connect to master database: {e}")
+        except Exception:
             return None
 
-    def get_text(self, category, index):
+    def get_text(self, category_id, index):
         if not self.conn:
             return None
         try:
+            # According to the provided C# logic:
+            # 'id' is the category (6=chara, 14=dress, 59=mob)
+            # 'index' is the specific ID within that category
             cursor = self.conn.cursor()
             cursor.execute(
-                "SELECT text FROM text_data WHERE category = ? AND [index] = ?",
-                (category, index),
+                "SELECT text FROM text_data WHERE id = ? AND [index] = ?",
+                (category_id, index),
             )
             row = cursor.fetchone()
-            return row[0] if row else None
-        except Exception:
+            if row:
+                return row[0]
+            
+            # Fallback for Mob characters if it's a mob ID (usually higher range or different)
+            if category_id == 6:
+                cursor.execute(
+                    "SELECT text FROM text_data WHERE id = 59 AND [index] = ?",
+                    (index,),
+                )
+                row = cursor.fetchone()
+                return row[0] if row else None
+                
+            return None
+        except Exception as e:
+            print(f"MasterDB query error: {e}")
             return None
 
     def get_character_name(self, chara_id):
@@ -396,7 +404,9 @@ class UmaDatabase:
             if chara_id == "0000":
                 continue
 
-            name_en = self.master_db.get_character_name(chara_id) if self.master_db else None
+            name_en = (
+                self.master_db.get_character_name(chara_id) if self.master_db else None
+            )
 
             rows.append(
                 {
@@ -412,6 +422,7 @@ class UmaDatabase:
                 }
             )
 
+        rows.sort(key=lambda x: int(x["chara_id"]))
         return rows
 
     def get_character_outfit_assets(self, chara_id):
@@ -435,7 +446,11 @@ class UmaDatabase:
                 rf"chara_stand_{re.escape(chara_id)}_(\d{{6}})", texture_name
             )
             outfit_id = outfit_match.group(1) if outfit_match else None
-            dress_name = self.master_db.get_dress_name(outfit_id) if self.master_db and outfit_id else None
+            dress_name = (
+                self.master_db.get_dress_name(outfit_id)
+                if self.master_db and outfit_id
+                else None
+            )
 
             rows.append(
                 {
@@ -448,7 +463,9 @@ class UmaDatabase:
                     "texture_name": texture_name,
                     "cache_name": texture_name,
                     "outfit_id": outfit_id,
-                    "dress_name": dress_name or f"Outfit {outfit_id}" if outfit_id else "Unknown",
+                    "dress_name": dress_name or f"Outfit {outfit_id}"
+                    if outfit_id
+                    else "Unknown",
                 }
             )
 
@@ -583,7 +600,11 @@ class UmaDatabase:
                         "hash": f_hash,
                         "key": key_val,
                         "suffix": suffix,
-                        "preferred": 0 if suffix == outfit_suffix else 1 if suffix == "00" else 2,
+                        "preferred": 0
+                        if suffix == outfit_suffix
+                        else 1
+                        if suffix == "00"
+                        else 2,
                     }
                 )
 
@@ -623,6 +644,8 @@ class UmaDatabase:
         self._asset_info_by_id.clear()
         self._deps_by_from = None
         self._deps_by_to = None
+        if self.master_db:
+            self.master_db.close()
         self.conn.close()
 
     def get_key_by_hash(self, f_hash):

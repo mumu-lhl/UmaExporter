@@ -147,7 +147,9 @@ class SearchController:
         list_container = "character_list_scroll"
         outfits_container = "character_outfits_content"
 
-        self.app._queue_ui_task(lambda: dpg.delete_item(list_container, children_only=True))
+        self.app._queue_ui_task(
+            lambda: dpg.delete_item(list_container, children_only=True)
+        )
         self.app._queue_ui_task(
             lambda: dpg.delete_item(outfits_container, children_only=True)
         )
@@ -220,8 +222,8 @@ class SearchController:
 
                     with dpg.item_handler_registry() as handler:
                         dpg.add_item_clicked_handler(
-                            callback=lambda s, a, u, item=img_id: self.on_character_selected(
-                                item, a, u
+                            callback=lambda s, a, u, item=img_id: (
+                                self.on_character_selected(item, a, u)
                             ),
                             user_data=entry_data,
                         )
@@ -337,7 +339,9 @@ class SearchController:
             return
         if not self.app.global_search_has_more:
             return
-        if not dpg.does_item_exist("search_group") or not dpg.is_item_shown("search_group"):
+        if not dpg.does_item_exist("search_group") or not dpg.is_item_shown(
+            "search_group"
+        ):
             return
         if not dpg.does_item_exist("search_results"):
             return
@@ -358,7 +362,9 @@ class SearchController:
         request_id = self.app.global_search_request_id
         query = self.app.global_search_query
         self._set_global_search_loading_indicator(True)
-        self.app.executor.submit(self._load_global_search_page, query, request_id, False)
+        self.app.executor.submit(
+            self._load_global_search_page, query, request_id, False
+        )
 
     def render_scene_results(self, query=""):
         view_mode = self.app.scene_view_mode
@@ -586,7 +592,7 @@ class SearchController:
                             idx = i + j
                             if idx < len(items):
                                 i_id, name, size, f_hash, key_val = items[idx]
-                                with dpg.group() as cell_group:
+                                with dpg.group():
                                     u_data = {
                                         "id": i_id,
                                         "full_path": name,
@@ -699,15 +705,21 @@ class SearchController:
                                 item["item_tag"] = img_id
                                 with dpg.item_handler_registry() as handler:
                                     dpg.add_item_clicked_handler(
-                                        callback=lambda s, a, u, item_id=img_id: self.on_character_outfit_selected(
-                                            item_id, a, u
+                                        callback=lambda s, a, u, item_id=img_id: (
+                                            self.on_character_outfit_selected(
+                                                item_id, a, u
+                                            )
                                         ),
                                         user_data=item,
                                     )
                                 dpg.bind_item_handler_registry(img_id, handler)
                                 with dpg.tooltip(img_id):
+                                    dpg.add_text(item["dress_name"])
                                     dpg.add_text(os.path.basename(item["full_path"]))
-                                dpg.add_text(display_name, wrap=180)
+                                dpg.add_text(item["dress_name"], wrap=180)
+                                dpg.add_text(
+                                    display_name, wrap=180, color=[150, 150, 150]
+                                )
 
                                 self.app.lazy_thumb_queues["character_outfits"].append(
                                     {
@@ -745,7 +757,9 @@ class SearchController:
 
         self.app.current_character_outfit = user_data
         dpg.configure_item("character_export_button", enabled=True)
-        dpg.set_value("character_export_status", os.path.basename(user_data["full_path"]))
+        status_text = f"{user_data.get('dress_name', '')} ({os.path.basename(user_data['full_path'])})"
+        dpg.set_value("character_export_status", status_text)
+
 
     def _load_character_texture_batch_async(self, domain, tasks, request_id):
         def worker():
@@ -779,7 +793,9 @@ class SearchController:
                     img = ImageOps.contain(
                         img, (task["size"], task["size"]), method=resample_filter
                     )
-                    canvas = Image.new("RGBA", (task["size"], task["size"]), (0, 0, 0, 0))
+                    canvas = Image.new(
+                        "RGBA", (task["size"], task["size"]), (0, 0, 0, 0)
+                    )
                     paste_x = (task["size"] - img.width) // 2
                     paste_y = (task["size"] - img.height) // 2
                     canvas.paste(img, (paste_x, paste_y), img)
@@ -910,9 +926,13 @@ class SearchController:
                 width = dpg.get_item_rect_size("character_outfits_panel")[0]
                 expected_columns = max(1, int(max(width, 1) / 220))
             except Exception:
-                expected_columns = self.app.thumbnail_columns.get("character_outfits", 0)
+                expected_columns = self.app.thumbnail_columns.get(
+                    "character_outfits", 0
+                )
 
-            if expected_columns != self.app.thumbnail_columns.get("character_outfits", 0):
+            if expected_columns != self.app.thumbnail_columns.get(
+                "character_outfits", 0
+            ):
                 items = self.app.thumbnail_items.get("character_outfits", [])
                 if items and self.app.current_character_id:
                     self._render_character_outfit_grid(

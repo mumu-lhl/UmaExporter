@@ -163,7 +163,9 @@ class UmaExporterApp:
         self.on_prop_search = self.search_controller.on_prop_search
         self.clear_prop_search = self.search_controller.clear_prop_search
         self.on_character_selected = self.search_controller.on_character_selected
-        self.on_character_outfit_selected = self.search_controller.on_character_outfit_selected
+        self.on_character_outfit_selected = (
+            self.search_controller.on_character_outfit_selected
+        )
         self._on_view_mode_change = self.search_controller.on_view_mode_change
         self._on_batch_cat_all_change = self.batch_controller.on_batch_cat_all_change
         self.on_start_batch_click = self.batch_controller.on_start_batch_click
@@ -355,9 +357,9 @@ class UmaExporterApp:
             except Exception as e:
                 print(f"Failed to load database: {e}")
 
-                def on_error():
+                def on_error(err=str(e)):
                     dpg.hide_item("loading_modal")
-                    dpg.set_value("settings_status_msg", str(e))
+                    dpg.set_value("settings_status_msg", err)
                     dpg.set_value("main_tabs", "settings_tab")
 
                 self._queue_ui_task(on_error)
@@ -752,7 +754,9 @@ class UmaExporterApp:
             texture_hash = texture_asset.get("hash")
             if not texture_name or not texture_hash:
                 continue
-            if texture_prefix_filter and not texture_name.startswith(texture_prefix_filter):
+            if texture_prefix_filter and not texture_name.startswith(
+                texture_prefix_filter
+            ):
                 continue
 
             phys_path = os.path.join(
@@ -810,9 +814,9 @@ class UmaExporterApp:
             )
             if (
                 UnityLogic.find_named_animator(
-                phys_path,
-                animator_name,
-                bundle_key=asset.get("key"),
+                    phys_path,
+                    animator_name,
+                    bundle_key=asset.get("key"),
                 )
                 is None
             ):
@@ -955,9 +959,7 @@ class UmaExporterApp:
         chara_id = selected_outfit.get("chara_id")
         outfit_id = selected_outfit.get("outfit_id")
         if not chara_id or not outfit_id:
-            self._set_character_export_status(
-                i18n("msg_export_failed"), [255, 0, 0]
-            )
+            self._set_character_export_status(i18n("msg_export_failed"), [255, 0, 0])
             return
 
         self._set_character_export_status(i18n("msg_export_started"), [255, 255, 0])

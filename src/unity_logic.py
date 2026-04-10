@@ -353,9 +353,7 @@ class UnityLogic:
                         img = ImageOps.contain(
                             img, (max_size, max_size), method=resample_filter
                         )
-                        canvas = Image.new(
-                            "RGBA", (max_size, max_size), (0, 0, 0, 0)
-                        )
+                        canvas = Image.new("RGBA", (max_size, max_size), (0, 0, 0, 0))
                         paste_x = (max_size - img.width) // 2
                         paste_y = (max_size - img.height) // 2
                         canvas.paste(img, (paste_x, paste_y), img)
@@ -402,7 +400,10 @@ class UnityLogic:
                         }
                     )
 
-                    if current_name == animator_name or game_object_name == animator_name:
+                    if (
+                        current_name == animator_name
+                        or game_object_name == animator_name
+                    ):
                         return obj.path_id
 
             if len(animator_candidates) == 1:
@@ -632,7 +633,9 @@ class UnityLogic:
                 if not name:
                     name = f"Unnamed_{path_id}"
 
-                safe_name = UnityLogic._sanitize_export_name(name) or f"Unnamed_{path_id}"
+                safe_name = (
+                    UnityLogic._sanitize_export_name(name) or f"Unnamed_{path_id}"
+                )
                 obj_type = object_type or obj.type.name
 
                 if obj_type == "Animator":
@@ -643,29 +646,37 @@ class UnityLogic:
                     )
                     return True
 
-                if obj_type in ["Texture2D", "Sprite"] and parsed is not None and hasattr(
-                    parsed, "image"
+                if (
+                    obj_type in ["Texture2D", "Sprite"]
+                    and parsed is not None
+                    and hasattr(parsed, "image")
                 ):
                     UnityLogic._save_asset(
                         export_dir, obj_type, f"{safe_name}.png", parsed.image
                     )
                     return True
-                if obj_type == "TextAsset" and parsed is not None and hasattr(
-                    parsed, "m_Script"
+                if (
+                    obj_type == "TextAsset"
+                    and parsed is not None
+                    and hasattr(parsed, "m_Script")
                 ):
                     UnityLogic._save_asset(
                         export_dir, "TextAsset", f"{safe_name}.txt", parsed.m_Script
                     )
                     return True
-                if obj_type == "Mesh" and parsed is not None and hasattr(
-                    parsed, "export"
+                if (
+                    obj_type == "Mesh"
+                    and parsed is not None
+                    and hasattr(parsed, "export")
                 ):
                     UnityLogic._save_asset(
                         export_dir, "Mesh", f"{safe_name}.obj", parsed.export()
                     )
                     return True
-                if obj_type == "AudioClip" and parsed is not None and hasattr(
-                    parsed, "samples"
+                if (
+                    obj_type == "AudioClip"
+                    and parsed is not None
+                    and hasattr(parsed, "samples")
                 ):
                     for idx, sample in enumerate(parsed.samples):
                         suffix = f"_{idx}" if len(parsed.samples) > 1 else ""
