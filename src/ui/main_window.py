@@ -16,6 +16,7 @@ from src.ui.views.main_view import MainView
 # Services
 from src.ui.services.f3d_service import F3dService
 from src.ui.services.thumbnail_service import ThumbnailService
+from src.ui.services.translation_service import TranslationService
 
 # Controllers
 from src.ui.controllers.preview_controller import PreviewController
@@ -137,6 +138,8 @@ class UmaExporterApp:
         # Initialize Services
         self.f3d_service = F3dService()
         self.thumbnail_service = ThumbnailService(self.executor, self)
+        self.translation_service = TranslationService(self)
+        self.translation_service.load_cached()
 
         # Initialize Controllers
         self.preview_controller = PreviewController(self)
@@ -342,7 +345,9 @@ class UmaExporterApp:
                 self.is_db_loading = True
                 self._queue_ui_task(lambda: dpg.show_item("loading_modal"))
 
-                db = UmaDatabase(Config.get_db_path())
+                db = UmaDatabase(
+                    Config.get_db_path(), translation_service=self.translation_service
+                )
                 UnityLogic.set_key_provider(db.get_key_by_hash)
                 tree_data = db.load_index()
 
@@ -1045,6 +1050,28 @@ class UmaExporterApp:
             dpg.set_value("settings_status_msg", i18n("msg_clear_cache_success"))
         except Exception as e:
             dpg.set_value("settings_status_msg", f"Failed to clear cache: {e}")
+
+    def on_update_translations(self, sender, app_data, user_data):
+        dpg.set_value("settings_translation_status", i18n("msg_updating_translations"))
+        dpg.configure_item(sender, enabled=False)
+
+        def callback(success):
+            def finalize():
+                if success:
+                    dpg.set_value(
+                        "settings_translation_status", i18n("msg_translations_updated")
+                    )
+                    # Reload character list to show new names
+                    self.search_controller.render_character_results()
+                else:
+                    dpg.set_value(
+                        "settings_translation_status", i18n("msg_translations_failed")
+                    )
+                dpg.configure_item(sender, enabled=True)
+
+            self._queue_ui_task(finalize)
+
+        self.translation_service.download_translations(callback)
 
     def _on_app_exit(self):
         self.f3d_service.cleanup()

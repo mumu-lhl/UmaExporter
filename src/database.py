@@ -9,9 +9,10 @@ from src.decryptor import get_db_hex_key
 
 
 class MasterDatabase:
-    def __init__(self, db_path=None):
+    def __init__(self, db_path=None, translation_service=None):
         self.db_path = db_path or Config.get_master_db_path()
         self.conn = self._connect(self.db_path)
+        self.translation_service = translation_service
 
     def _connect(self, db_path):
         if not db_path or not os.path.exists(db_path):
@@ -31,6 +32,11 @@ class MasterDatabase:
             return None
 
     def get_text(self, category_id, index):
+        if self.translation_service:
+            translated = self.translation_service.get_text(category_id, index)
+            if translated:
+                return translated
+
         if not self.conn:
             return None
         try:
@@ -45,7 +51,7 @@ class MasterDatabase:
             row = cursor.fetchone()
             if row:
                 return row[0]
-            
+
             # Fallback for Mob characters if it's a mob ID (usually higher range or different)
             if category_id == 6:
                 cursor.execute(
@@ -54,7 +60,7 @@ class MasterDatabase:
                 )
                 row = cursor.fetchone()
                 return row[0] if row else None
-                
+
             return None
         except Exception as e:
             print(f"MasterDB query error: {e}")
@@ -72,11 +78,11 @@ class MasterDatabase:
 
 
 class UmaDatabase:
-    def __init__(self, db_path=None):
+    def __init__(self, db_path=None, translation_service=None):
         self.db_path = db_path or Config.get_db_path()
         self.conn = self._connect(self.db_path)
         self._apply_read_pragmas()
-        self.master_db = MasterDatabase()
+        self.master_db = MasterDatabase(translation_service=translation_service)
         self._asset_info_by_id = OrderedDict()
         self._deps_by_from = None
         self._deps_by_to = None

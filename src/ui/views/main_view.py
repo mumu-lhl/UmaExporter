@@ -355,6 +355,15 @@ class MainView:
                         width=200,
                     )
 
+                    dpg.add_spacer(height=10)
+                    with dpg.group(horizontal=True):
+                        dpg.add_button(
+                            label=i18n("btn_update_translations"),
+                            width=300,
+                            callback=self.controller.on_update_translations,
+                        )
+                        dpg.add_text("", tag="settings_translation_status")
+
                     dpg.add_spacer(height=20)
                     with dpg.group(horizontal=True):
                         dpg.add_button(

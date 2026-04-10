@@ -715,11 +715,8 @@ class SearchController:
                                 dpg.bind_item_handler_registry(img_id, handler)
                                 with dpg.tooltip(img_id):
                                     dpg.add_text(item["dress_name"])
-                                    dpg.add_text(os.path.basename(item["full_path"]))
                                 dpg.add_text(item["dress_name"], wrap=180)
-                                dpg.add_text(
-                                    display_name, wrap=180, color=[150, 150, 150]
-                                )
+                                dpg.add_text("", wrap=180, color=[150, 150, 150])
 
                                 self.app.lazy_thumb_queues["character_outfits"].append(
                                     {
@@ -757,9 +754,7 @@ class SearchController:
 
         self.app.current_character_outfit = user_data
         dpg.configure_item("character_export_button", enabled=True)
-        status_text = f"{user_data.get('dress_name', '')} ({os.path.basename(user_data['full_path'])})"
-        dpg.set_value("character_export_status", status_text)
-
+        dpg.set_value("character_export_status", user_data.get("dress_name", ""))
 
     def _load_character_texture_batch_async(self, domain, tasks, request_id):
         def worker():
