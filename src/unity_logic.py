@@ -414,6 +414,28 @@ class UnityLogic:
             return None
 
     @staticmethod
+    def find_monobehaviour_by_name(physical_path, monobehaviour_name, bundle_key=None):
+        """Find a MonoBehaviour by m_Name within a bundle."""
+        try:
+            env = UnityLogic._load_env(physical_path, bundle_key=bundle_key)
+            for asset in env.assets:
+                for obj in asset.objects.values():
+                    if obj.type.name != "MonoBehaviour":
+                        continue
+                    try:
+                        data = obj.read()
+                    except Exception:
+                        continue
+
+                    current_name = getattr(data, "m_Name", None)
+                    if current_name == monobehaviour_name:
+                        return obj.path_id
+            return None
+        except Exception as e:
+            print(f"Find monobehaviour error for {monobehaviour_name}: {e}")
+            return None
+
+    @staticmethod
     def get_monobehaviour_preview(physical_path, path_id, bundle_key=None):
         """Build a readable MonoBehaviour preview using its m_Script reference."""
         try:
@@ -687,6 +709,22 @@ class UnityLogic:
                             sample,
                         )
                     return True
+                if obj_type == "MonoBehaviour" and parsed is not None:
+                    # Export MonoBehaviour data as JSON directly to export_dir
+                    try:
+                        import json
+
+                        type_tree = obj.read_typetree(wrap=False)
+                        json_data = json.dumps(
+                            type_tree, indent=2, ensure_ascii=False, default=str
+                        )
+                        save_path = os.path.join(export_dir, f"{safe_name}.json")
+                        with open(save_path, "w", encoding="utf-8") as f:
+                            f.write(json_data)
+                        return True
+                    except Exception as e:
+                        print(f"MonoBehaviour export error: {e}")
+                        return False
                 return False
         except Exception as e:
             print(f"Single export error: {e}")

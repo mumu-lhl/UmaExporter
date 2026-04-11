@@ -720,6 +720,8 @@ class UmaExporterApp:
                 height = chara_data.get("height", "00")
                 shape = chara_data.get("shape", "00")
                 bust = chara_data.get("bust", "00")
+                skin = chara_data.get("skin", "00")
+                socks = chara_data.get("socks", "00")
 
                 # Construct compound costume ID: {bodyType}_{bodyTypeSub}_{setting}_{height}_{shape}_{bust}
                 costume_id_compound = f"{body_type}_{body_type_sub}_{body_setting}_{height}_{shape}_{bust}"
@@ -733,7 +735,16 @@ class UmaExporterApp:
                     f"3d/chara/body/bdy{costume_id_short}/pfb_bdy{costume_id_compound}"
                 )
                 body_animator = f"pfb_bdy{costume_id_compound}"
-                body_texture_prefix = f"tex_bdy{costume_id_compound}_"
+
+                # Texture prefix depends on body_type
+                if body_type == "0001":
+                    body_texture_prefix = f"tex_bdy{costume_id_short}_00_{skin}_{bust}_0{socks}_"
+                elif body_type == "0003":
+                    body_texture_prefix = f"tex_bdy{costume_id_short}_00_{skin}_{bust}_"
+                elif body_type == "0006":
+                    body_texture_prefix = f"tex_bdy{costume_id_compound}_{skin}_{bust}_00_"
+                else:
+                    body_texture_prefix = f"tex_bdy{costume_id_compound}_{skin}_{bust}_"
             else:
                 # Fallback to standard pattern if data not available
                 body_path = f"3d/chara/body/bdy{outfit_main}_{outfit_suffix}/pfb_bdy{outfit_main}_{outfit_suffix}"
@@ -916,11 +927,58 @@ class UmaExporterApp:
                 texture_prefix_filter=target.get("texture_prefix"),
             )
 
+            # Export facial_target MonoBehaviour for head component
+            if target["label"] == "head":
+                texture_exports += self._export_head_facial_target(
+                    target_dir, phys_path, asset, target
+                )
+
         if not export_configs:
             return False
 
         exported_count = UnityLogic.batch_export_animators(export_configs, target_dir)
         return (exported_count + texture_exports) > 0
+
+    def _export_head_facial_target(self, target_dir, phys_path, asset, target):
+        """Export the facial_target MonoBehaviour from the head asset file."""
+        try:
+            # Extract folder name from the logical path to build facial_target name
+            # Example: 3d/chara/head/chr1001_00/pfb_chr1001_00 -> chr1001_00
+            logical_path = target.get("logical_path", "")
+            # logical_path is like "3d/chara/head/chr1001_00/pfb_chr1001_00"
+            path_parts = logical_path.rsplit("/", 1)
+            if len(path_parts) < 2:
+                return 0
+
+            folder_path = path_parts[0]  # "3d/chara/head/chr1001_00"
+            folder_name = folder_path.split("/")[-1]  # "chr1001_00"
+            facial_target_name = f"ast_{folder_name}_facial_target"
+
+            # Find the MonoBehaviour by name
+            path_id = UnityLogic.find_monobehaviour_by_name(
+                phys_path, facial_target_name, bundle_key=asset.get("key")
+            )
+
+            if path_id is None:
+                return 0
+
+            # Export the MonoBehaviour as a JSON file
+            export_dir = target_dir
+            os.makedirs(export_dir, exist_ok=True)
+
+            success = UnityLogic.export_single_unity_object(
+                phys_path,
+                path_id,
+                export_dir,
+                object_type="MonoBehaviour",
+                object_name=facial_target_name,
+                bundle_key=asset.get("key"),
+            )
+
+            return 1 if success else 0
+        except Exception as e:
+            print(f"Failed to export facial_target: {e}")
+            return 0
 
     def _get_active_prefix(self):
         active_tab = dpg.get_value("main_tabs")
