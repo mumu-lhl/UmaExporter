@@ -184,7 +184,9 @@ class UmaExporterApp:
         self.on_character_export_selected = (
             self.export_controller.on_character_export_selected
         )
-        self.on_settings_dir_selected = self.settings_controller.on_settings_dir_selected
+        self.on_settings_dir_selected = (
+            self.settings_controller.on_settings_dir_selected
+        )
         self.apply_settings = self.settings_controller.apply_settings
         self.on_clear_thumbnail_cache = (
             self.settings_controller.on_clear_thumbnail_cache

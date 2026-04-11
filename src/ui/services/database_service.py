@@ -23,9 +23,7 @@ class DatabaseService:
         if not Config.BASE_PATH or not os.path.exists(db_path):
             self.app.db = None
             self.app.tree_data = {}
-            self.app._queue_ui_task(
-                lambda: dpg.set_value("main_tabs", "settings_tab")
-            )
+            self.app._queue_ui_task(lambda: dpg.set_value("main_tabs", "settings_tab"))
             return
 
         def run_db_load():

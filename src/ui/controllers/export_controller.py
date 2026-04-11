@@ -172,14 +172,10 @@ class ExportController:
         chara_id = selected_outfit.get("chara_id")
         outfit_id = selected_outfit.get("outfit_id")
         if not chara_id or not outfit_id:
-            self._set_character_export_status(
-                i18n("msg_export_failed"), [255, 0, 0]
-            )
+            self._set_character_export_status(i18n("msg_export_failed"), [255, 0, 0])
             return
 
-        self._set_character_export_status(
-            i18n("msg_export_started"), [255, 255, 0]
-        )
+        self._set_character_export_status(i18n("msg_export_started"), [255, 255, 0])
 
         future = self.app.executor.submit(
             self._export_character_animator_group,
@@ -259,9 +255,7 @@ class ExportController:
                 skin = chara_data.get("skin", "00")
                 socks = chara_data.get("socks", "00")
 
-                costume_id_compound = (
-                    f"{body_type}_{body_type_sub}_{body_setting}_{height}_{shape}_{bust}"
-                )
+                costume_id_compound = f"{body_type}_{body_type_sub}_{body_setting}_{height}_{shape}_{bust}"
                 costume_id_short = f"{body_type}_{body_type_sub}"
 
                 body_path = (
@@ -280,9 +274,7 @@ class ExportController:
                         f"tex_bdy{costume_id_compound}_{skin}_{bust}_00_"
                     )
                 else:
-                    body_texture_prefix = (
-                        f"tex_bdy{costume_id_compound}_{skin}_{bust}_"
-                    )
+                    body_texture_prefix = f"tex_bdy{costume_id_compound}_{skin}_{bust}_"
             else:
                 body_path = f"3d/chara/body/bdy{outfit_main}_{outfit_suffix}/pfb_bdy{outfit_main}_{outfit_suffix}"
                 body_animator = f"pfb_bdy{outfit_main}_{outfit_suffix}"
@@ -335,9 +327,7 @@ class ExportController:
         bundle_keys = []
 
         for asset_hash, bundle_key in results:
-            phys_path = os.path.join(
-                Config.get_data_root(), asset_hash[:2], asset_hash
-            )
+            phys_path = os.path.join(Config.get_data_root(), asset_hash[:2], asset_hash)
             if not os.path.exists(phys_path):
                 continue
             paths.append(phys_path)
@@ -473,9 +463,7 @@ class ExportController:
         if not export_configs:
             return False
 
-        exported_count = UnityLogic.batch_export_animators(
-            export_configs, target_dir
-        )
+        exported_count = UnityLogic.batch_export_animators(export_configs, target_dir)
         return (exported_count + texture_exports) > 0
 
     def _export_head_facial_target(self, target_dir, phys_path, asset, target):

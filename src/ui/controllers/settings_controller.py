@@ -35,9 +35,7 @@ class SettingsController:
             dpg.set_value("settings_status_msg", f"Failed to clear cache: {e}")
 
     def on_update_translations(self, sender, app_data, user_data):
-        dpg.set_value(
-            "settings_translation_status", i18n("msg_updating_translations")
-        )
+        dpg.set_value("settings_translation_status", i18n("msg_updating_translations"))
         dpg.configure_item(sender, enabled=False)
 
         def callback(success):

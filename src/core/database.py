@@ -77,7 +77,7 @@ class MasterDatabase:
         Query dress data from dress_data table in master.mdb.
         Returns a dict with dress metadata (id, chara_id, body_type, body_type_sub, body_setting).
         Uses the outfit/dress ID to look up body type information.
-        
+
         The dress_id is a 6-digit string (e.g., "000001") that should be converted
         to an integer (e.g., 1) when querying dress_data.id.
         """

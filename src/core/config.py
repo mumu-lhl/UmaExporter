@@ -5,11 +5,19 @@ import locale
 import sys
 
 from src.core.utils import is_nuitka
+from src.core.version import VERSION, HASH
 
 CONFIG_FILE = "config.json"
 
 
 class Config:
+    @staticmethod
+    def get_version_string():
+        """Returns the formatted version string."""
+        if HASH:
+            return f"v{VERSION}-dev ({HASH})"
+        return f"v{VERSION}"
+
     @staticmethod
     def get_bundle_dir():
         """Returns the base directory of the application, handling PyInstaller and Nuitka bundles.

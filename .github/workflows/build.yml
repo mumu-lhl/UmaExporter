@@ -63,7 +63,7 @@ jobs:
       if: matrix.packager == 'nuitka'
       id: nuitka-prep
       run: |
-        just build-cython check-as-cli
+        just build-cython update-version check-as-cli
         
         archspec_path=$(uv run python -c "import archspec, os; print(os.path.dirname(archspec.__file__))")
         echo "archspec_path=$archspec_path" >> $GITHUB_OUTPUT

@@ -31,6 +31,7 @@ class MainView:
         ):
             dpg.add_text("Uma Musume Exporter", color=[0, 255, 255])
             dpg.add_spacer(height=10)
+            dpg.add_text(f"{i18n('label_version')}{Config.get_version_string()}")
             dpg.add_text(f"{i18n('label_author')}Mumulhl (沐沐13号)")
             dpg.add_text(f"{i18n('label_license')}GPL-3.0")
             dpg.add_spacer(height=10)

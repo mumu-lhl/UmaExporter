@@ -17,8 +17,12 @@ check-as-cli:
 build-cython:
     @uv run python -c "import glob, sys; sys.exit(0 if glob.glob('src/core/uma_decryptor*.so') or glob.glob('src/core/uma_decryptor*.pyd') else 1)" || (uv run python setup.py build_ext --inplace && uv run python -c "import shutil, glob, os; [shutil.move(f, os.path.join('src/core', os.path.basename(f))) for f in glob.glob('src/uma_decryptor*.so') if not os.path.exists(os.path.join('src/core', os.path.basename(f)))]")
 
+# Update version info
+update-version:
+    @uv run python scripts/update_version.py
+
 # Package the application using PyInstaller via uv
-package: build-cython check-as-cli
+package: build-cython update-version check-as-cli
     @echo "Packaging with PyInstaller..."
     uv run --with pyinstaller pyinstaller --noconfirm UmaExporter.spec
     @echo "Placing as_cli next to the binary..."
@@ -27,7 +31,7 @@ package: build-cython check-as-cli
     @echo "Build complete! Check the 'dist/UmaExporter' directory."
 
 # Debug package using Nuitka (FASTEST)
-debug-nuitka: build-cython check-as-cli
+debug-nuitka: build-cython update-version check-as-cli
     @echo "Packaging with Nuitka (DEBUG/FAST)..."
     uv run nuitka \
         --standalone \
@@ -67,7 +71,7 @@ debug-nuitka: build-cython check-as-cli
     @echo "Debug build complete! Run: ./dist-debug/main.dist/UmaExporter"
 
 # Package the application using Nuitka via uv
-package-nuitka: build-cython check-as-cli
+package-nuitka: build-cython update-version check-as-cli
     @echo "Packaging with Nuitka..."
     uv run nuitka \
         --standalone \
