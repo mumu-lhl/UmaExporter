@@ -1,31 +1,32 @@
-import dearpygui.dearpygui as dpg
 import os
-import threading
 import queue
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
-from src.database import UmaDatabase
-from src.constants import Config
-from src.ui.i18n import i18n
-from src.unity_logic import UnityLogic
-from src.thumbnail_manager import ThumbnailManager as thumb_manager
+import dearpygui.dearpygui as dpg
 
-# Views
-from src.ui.views.main_view import MainView
+from src.constants import Config
+from src.database import UmaDatabase
+from src.thumbnail_manager import ThumbnailManager as thumb_manager
+from src.ui.controllers.batch_controller import BatchController
+from src.ui.controllers.browser_controller import BrowserController
+from src.ui.controllers.drag_controller import DragController
+from src.ui.controllers.navigation_controller import NavigationController
+
+# Controllers
+from src.ui.controllers.preview_controller import PreviewController
+from src.ui.controllers.search_controller import SearchController
+from src.ui.controllers.shortcut_controller import ShortcutController
+from src.ui.i18n import i18n
 
 # Services
 from src.ui.services.f3d_service import F3dService
 from src.ui.services.thumbnail_service import ThumbnailService
 from src.ui.services.translation_service import TranslationService
 
-# Controllers
-from src.ui.controllers.preview_controller import PreviewController
-from src.ui.controllers.drag_controller import DragController
-from src.ui.controllers.navigation_controller import NavigationController
-from src.ui.controllers.search_controller import SearchController
-from src.ui.controllers.browser_controller import BrowserController
-from src.ui.controllers.shortcut_controller import ShortcutController
-from src.ui.controllers.batch_controller import BatchController
+# Views
+from src.ui.views.main_view import MainView
+from src.unity_logic import UnityLogic
 
 
 class UmaExporterApp:
@@ -669,6 +670,15 @@ class UmaExporterApp:
 
         return outfit_main, outfit_suffix
 
+    def _is_generic_costume(self, chara_id, outfit_id):
+        """
+        Check if the outfit is a generic/universal costume.
+        A generic costume is when the 6-digit outfit_id doesn't start with the 4-digit chara_id.
+        """
+        if not chara_id or not outfit_id or len(outfit_id) < 4:
+            return False
+        return outfit_id[:4] != chara_id
+
     def _build_character_export_targets(self, chara_id, outfit_id):
         if not chara_id or not outfit_id:
             return []
@@ -677,11 +687,70 @@ class UmaExporterApp:
         if not outfit_main or not outfit_suffix:
             return []
 
+        is_generic = self._is_generic_costume(chara_id, outfit_id)
+
+        if is_generic:
+            # Generic costume: construct compound costume ID and build special body path
+            # Compound format: {bodyType}_{bodyTypeSub}_{setting}_{height}_{shape}_{bust}
+            #
+            # Step 1: Query dress_data to get body_type, body_type_sub, body_setting
+            dress_data = None
+            if self.db and self.db.master_db:
+                dress_data = self.db.master_db.get_dress_data(outfit_id)
+
+            # Step 2: Query chara_data (using current character's 4-digit ID) to get height, shape, bust
+            chara_data = None
+            if self.db and self.db.master_db:
+                chara_data = self.db.master_db.get_chara_data(chara_id)
+
+            if dress_data and chara_data:
+                # Extract body type parameters from dress_data
+                # body_type: pad to 4 digits (e.g., "1" → "0001")
+                body_type = dress_data.get("body_type", outfit_main)
+                body_type = body_type.zfill(4)
+
+                # body_type_sub: pad to 2 digits (e.g., "0" → "00")
+                body_type_sub = dress_data.get("body_type_sub", "00")
+                body_type_sub = body_type_sub.zfill(2)
+
+                body_setting = dress_data.get("body_setting", "00")
+                body_setting = body_setting.zfill(2)
+
+                # Extract body measurements from chara_data
+                height = chara_data.get("height", "00")
+                shape = chara_data.get("shape", "00")
+                bust = chara_data.get("bust", "00")
+
+                # Construct compound costume ID: {bodyType}_{bodyTypeSub}_{setting}_{height}_{shape}_{bust}
+                costume_id_compound = f"{body_type}_{body_type_sub}_{body_setting}_{height}_{shape}_{bust}"
+
+                # costumeIdShort: only {body_type}_{body_type_sub}
+                # e.g., "0001_00"
+                costume_id_short = f"{body_type}_{body_type_sub}"
+
+                # Body path: 3d/chara/body/bdy{costumeIdShort}/pfb_bdy{costumeIdCompound}
+                body_path = (
+                    f"3d/chara/body/bdy{costume_id_short}/pfb_bdy{costume_id_compound}"
+                )
+                body_animator = f"pfb_bdy{costume_id_compound}"
+                body_texture_prefix = f"tex_bdy{costume_id_compound}_"
+            else:
+                # Fallback to standard pattern if data not available
+                body_path = f"3d/chara/body/bdy{outfit_main}_{outfit_suffix}/pfb_bdy{outfit_main}_{outfit_suffix}"
+                body_animator = f"pfb_bdy{outfit_main}_{outfit_suffix}"
+                body_texture_prefix = f"tex_bdy{outfit_main}_{outfit_suffix}_"
+        else:
+            # Character-specific costume: standard pattern
+            body_path = f"3d/chara/body/bdy{outfit_main}_{outfit_suffix}/pfb_bdy{outfit_main}_{outfit_suffix}"
+            body_animator = f"pfb_bdy{outfit_main}_{outfit_suffix}"
+            body_texture_prefix = f"tex_bdy{outfit_main}_{outfit_suffix}_"
+
         return [
             {
                 "label": "body",
-                "logical_path": f"3d/chara/body/bdy{outfit_main}_{outfit_suffix}/pfb_bdy{outfit_main}_{outfit_suffix}",
-                "animator_name": f"pfb_bdy{outfit_main}_{outfit_suffix}",
+                "logical_path": body_path,
+                "animator_name": body_animator,
+                "texture_prefix": body_texture_prefix,
             },
             {
                 "label": "head",

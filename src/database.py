@@ -72,6 +72,70 @@ class MasterDatabase:
     def get_dress_name(self, dress_id):
         return self.get_text(14, int(dress_id))
 
+    def get_dress_data(self, dress_id):
+        """
+        Query dress data from dress_data table in master.mdb.
+        Returns a dict with dress metadata (id, chara_id, body_type, body_type_sub, body_setting).
+        Uses the outfit/dress ID to look up body type information.
+        
+        The dress_id is a 6-digit string (e.g., "000001") that should be converted
+        to an integer (e.g., 1) when querying dress_data.id.
+        """
+        if not self.conn or not dress_id:
+            return None
+        try:
+            cursor = self.conn.cursor()
+            # Convert the full 6-digit outfit_id to integer for querying dress_data
+            # e.g., "000001" → 1, "000011" → 11
+            dress_id_int = int(dress_id)
+            cursor.execute(
+                "SELECT id, chara_id, body_type, body_type_sub, body_setting FROM dress_data WHERE id = ?",
+                (dress_id_int,),
+            )
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "id": str(row[0]) if row[0] is not None else None,
+                    "chara_id": str(row[1]) if row[1] is not None else None,
+                    "body_type": str(row[2]) if row[2] is not None else None,
+                    "body_type_sub": str(row[3]) if row[3] is not None else None,
+                    "body_setting": str(row[4]) if row[4] is not None else None,
+                }
+            return None
+        except Exception as e:
+            print(f"MasterDB dress_data query error: {e}")
+            return None
+
+    def get_chara_data(self, chara_id):
+        """
+        Query character data from chara_data table in master.mdb.
+        Returns a dict with character attributes (skin, height, socks, bust, sex, shape).
+        Uses the 4-digit character ID.
+        """
+        if not self.conn:
+            return None
+        try:
+            cursor = self.conn.cursor()
+            # Query chara_data table using the 4-digit character ID
+            cursor.execute(
+                "SELECT skin, height, socks, bust, sex, shape FROM chara_data WHERE id = ?",
+                (int(chara_id),),
+            )
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "skin": str(row[0]) if row[0] is not None else None,
+                    "height": str(row[1]) if row[1] is not None else None,
+                    "socks": str(row[2]) if row[2] is not None else None,
+                    "bust": str(row[3]) if row[3] is not None else None,
+                    "sex": str(row[4]) if row[4] is not None else None,
+                    "shape": str(row[5]) if row[5] is not None else None,
+                }
+            return None
+        except Exception as e:
+            print(f"MasterDB chara_data query error: {e}")
+            return None
+
     def close(self):
         if self.conn:
             self.conn.close()
