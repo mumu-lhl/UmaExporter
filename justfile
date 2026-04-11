@@ -13,9 +13,9 @@ as-cli-setup:
 check-as-cli:
     @uv run python -c "import os, sys; d='as_cli'; sys.exit(0 if os.path.exists(d) and os.listdir(d) else 1)" || just as-cli-setup
 
-# Build Cython extension using uv environment (skip if exists)
+# Build Cython extension (skip if already in src/core/)
 build-cython:
-    @uv run python -c "import glob, os; exit(0 if glob.glob('src/uma_decryptor*.so') or glob.glob('src/uma_decryptor*.pyd') else 1)" || uv run python setup.py build_ext --inplace
+    @uv run python -c "import glob, sys; sys.exit(0 if glob.glob('src/core/uma_decryptor*.so') or glob.glob('src/core/uma_decryptor*.pyd') else 1)" || (uv run python setup.py build_ext --inplace && uv run python -c "import shutil, glob, os; [shutil.move(f, os.path.join('src/core', os.path.basename(f))) for f in glob.glob('src/uma_decryptor*.so') if not os.path.exists(os.path.join('src/core', os.path.basename(f)))]")
 
 # Package the application using PyInstaller via uv
 package: build-cython check-as-cli
@@ -57,7 +57,7 @@ debug-nuitka: build-cython check-as-cli
         --include-package=PIL \
         --include-package=numpy \
         --include-package=apsw \
-        --include-module=src.uma_decryptor \
+        --include-module=src.core.uma_decryptor \
         --nofollow-import-to=tkinter \
         --nofollow-import-to=matplotlib \
         --nofollow-import-to=unittest \
@@ -97,7 +97,7 @@ package-nuitka: build-cython check-as-cli
         --include-package=PIL \
         --include-package=numpy \
         --include-package=apsw \
-        --include-module=src.uma_decryptor \
+        --include-module=src.core.uma_decryptor \
         --windows-disable-console \
         --nofollow-import-to=tkinter \
         --nofollow-import-to=matplotlib \

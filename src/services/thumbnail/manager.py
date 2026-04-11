@@ -1,6 +1,6 @@
 import os
 import shutil
-from src.constants import Config
+from src.core.config import Config
 
 
 class ThumbnailManager:

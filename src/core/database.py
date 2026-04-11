@@ -4,8 +4,8 @@ import re
 import os
 import apsw
 from collections import OrderedDict
-from src.constants import Config
-from src.decryptor import get_db_hex_key
+from src.core.config import Config
+from src.core.decryptor import get_db_hex_key
 
 
 class MasterDatabase:

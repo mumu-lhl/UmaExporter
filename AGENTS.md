@@ -15,29 +15,36 @@ A high-performance desktop application built with Python and Dear PyGui for expl
 
 ## Architecture
 
-The system utilizes a specialized MVC pattern optimized for Dear PyGui's immediate mode paradigm, ensuring responsiveness even during heavy I/O.
+The system follows Clean Architecture principles, organized into three layers:
 
-### 1. Presentation Layer (MVC)
-- **Root Coordinator (`src/ui/main_window.py`)**: `UmaExporterApp` initializes the application, manages global state (navigation history, specialized stores), and orchestrates the main event loop.
-- **Controllers (`src/ui/controllers/`)**: Encapsulate distinct functional logic.
-    - `PreviewController`: Manages the asset inspector, texture loading, and f3d integration.
-    - `SearchController`: Handles asynchronous SQL queries and result filtering.
-    - `DragController`: Implements complex drag-and-drop interactions (e.g., drag-to-preview).
-    - **Mixin Pattern**: Shared behaviors (like navigation or preview helpers) are composed via Mixins (`preview_mixin.py`).
-- **Services (`src/ui/services/`)**: Handle long-running background tasks to keep the main thread free.
-    - `ThumbnailService`: Asynchronously loads, resizes, and caches textures using `ThreadPoolExecutor`.
-    - `F3dService`: Manages the lifecycle of the external 3D viewer process.
-- **Views (`src/ui/views/`)**: Define UI layout and hierarchy, decoupling rendering code from logic.
+### 1. Domain Layer (`src/core/`)
+Pure business logic, zero UI dependencies.
+- **`config.py`**: Application configuration and path resolution.
+- **`database.py`**: SQLite-backed `UmaDatabase` for persistent metadata; in-memory bidirectional dependency graph for O(1) asset relationship traversal.
+- **`decryptor.py`**: Pythonic wrapper around compiled **Cython extension** (`uma_decryptor.pyx`) for in-place game asset decryption.
+- **`unity.py`**: Abstraction layer over `UnityPy` for extracting raw `Texture2D` data and metadata.
+- **`i18n.py`**: Internationalization support (English/Chinese).
 
-### 2. Core Logic & Data
-- **High-Performance Decryption**:
-    - Game assets are decrypted in-place using a compiled **Cython extension** (`src/uma_decryptor.pyx`) to minimize memory overhead and CPU usage.
-    - `src/decryptor.py` provides a Pythonic wrapper for the low-level Cython routines.
-- **Unity Logic (`src/unity_logic.py`)**: Abstraction layer over `UnityPy` for extracting raw `Texture2D` data and metadata.
-- **Thumbnail Manager (`src/thumbnail_manager.py`)**: Global cache for asset thumbnails, preventing redundant processing.
-- **Data Layer (`src/database.py`)**:
-    - SQLite-backed `UmaDatabase` for persistent metadata.
-    - In-memory bidirectional dependency graph for O(1) asset relationship traversal.
+### 2. Application Services Layer (`src/services/`)
+Reusable services independent of UI framework.
+- **`f3d/`**: F3D 3D viewer worker (`worker.py`) and process management (`service.py`).
+- **`thumbnail/`**: Thumbnail caching (`manager.py`) and async loading (`service.py`).
+- **`translation/`**: Character name translation download and caching.
+
+### 3. Presentation Layer (`src/ui/`)
+Dear PyGui-based UI using MVC pattern.
+- **Root Coordinator (`main_window.py`)**: `UmaExporterApp` initializes the application, manages global state, and orchestrates the main event loop (~570 lines).
+- **Controllers (`controllers/`)**: Encapsulate distinct functional logic.
+    - `PreviewController`: Asset inspector, texture loading, f3d integration.
+    - `SearchController`: Async SQL queries and result filtering.
+    - `DragController`: Drag-and-drop interactions (drag-to-preview).
+    - `ExportController`: Export logic for assets and characters.
+    - `SettingsController`: Settings management and cache operations.
+    - `NavigationController`: Back/Forward history navigation.
+    - `BatchController`: Batch thumbnail generation.
+    - `ShortcutController`: Keyboard shortcuts.
+- **UI Services (`services/`)**: DPG-aware wrappers (e.g., `database_service.py` bridges domain DB with UI task queue).
+- **Views (`views/`)**: Define UI layout hierarchy, decoupled from logic.
 
 ## Key Features
 

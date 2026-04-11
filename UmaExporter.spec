@@ -26,8 +26,8 @@ tex_binaries = collect_dynamic_libs('texture2ddecoder') + collect_dynamic_libs('
 
 extension_files = []
 for ext in ['*.so', '*.pyd']:
-    for f in glob.glob(os.path.join('src', f'uma_decryptor{ext}')):
-        extension_files.append((f, 'src'))
+    for f in glob.glob(os.path.join('src/core', f'uma_decryptor{ext}')):
+        extension_files.append((f, 'src/core'))
         extension_files.append((f, '.'))
 
 datas = f3d_datas + unitypy_datas + fmod_datas + archspec_datas

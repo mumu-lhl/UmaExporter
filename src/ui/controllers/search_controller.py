@@ -1,9 +1,9 @@
 import os
 import dearpygui.dearpygui as dpg
-from src.constants import Config
-from src.ui.i18n import i18n
-from src.thumbnail_manager import ThumbnailManager as thumb_manager
-from src.unity_logic import UnityLogic
+from src.core.config import Config
+from src.core.i18n import i18n
+from src.services.thumbnail.manager import ThumbnailManager as thumb_manager
+from src.core.unity import UnityLogic
 
 
 class SearchController:

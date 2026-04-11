@@ -1,6 +1,6 @@
 import dearpygui.dearpygui as dpg
-from src.constants import Config
-from src.ui.i18n import i18n
+from src.core.config import Config
+from src.core.i18n import i18n
 import webbrowser
 
 from .browser_view import BrowserView

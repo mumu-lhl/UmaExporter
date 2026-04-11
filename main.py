@@ -1,7 +1,7 @@
 import os
 import sys
 
-from src.utils import is_nuitka
+from src.core.utils import is_nuitka
 
 # Fix archspec JSON discovery in Nuitka standalone builds.
 # Must be set BEFORE importing any module that uses archspec.
@@ -16,7 +16,7 @@ def main():
     # 1. HARD GUARD: Check for our custom viewer flag first.
     # This is 100% reliable for child processes in all packaged environments.
     if "--f3d-viewer" in sys.argv:
-        from src.ui.f3d_worker import launch_f3d_viewer_stdin
+        from src.services.f3d.worker import launch_f3d_viewer_stdin
 
         launch_f3d_viewer_stdin()
         return

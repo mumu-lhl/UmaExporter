@@ -9,9 +9,9 @@ import numpy as np
 
 import UnityPy
 
-from src.decryptor import decrypt_bundle, DEFAULT_KEY
-from src.constants import Config
-from src.utils import is_nuitka
+from src.core.decryptor import decrypt_bundle, DEFAULT_KEY
+from src.core.config import Config
+from src.core.utils import is_nuitka
 
 # Store original load_file to wrap it
 _orig_load_file = UnityPy.Environment.load_file

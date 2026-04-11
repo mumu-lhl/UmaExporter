@@ -1,5 +1,5 @@
 import dearpygui.dearpygui as dpg
-from src.ui.i18n import i18n
+from src.core.i18n import i18n
 
 
 class BrowserView:

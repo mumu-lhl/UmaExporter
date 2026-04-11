@@ -2,7 +2,7 @@ import os
 import json
 import requests
 import threading
-from src.constants import Config
+from src.core.config import Config
 
 
 class TranslationService:

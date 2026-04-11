@@ -5,28 +5,29 @@ from concurrent.futures import ThreadPoolExecutor
 
 import dearpygui.dearpygui as dpg
 
-from src.constants import Config
-from src.database import UmaDatabase
-from src.thumbnail_manager import ThumbnailManager as thumb_manager
+from src.core.config import Config
+from src.core.i18n import i18n
+from src.core.unity import UnityLogic
+
+# Controllers
 from src.ui.controllers.batch_controller import BatchController
 from src.ui.controllers.browser_controller import BrowserController
 from src.ui.controllers.drag_controller import DragController
+from src.ui.controllers.export_controller import ExportController
 from src.ui.controllers.navigation_controller import NavigationController
-
-# Controllers
 from src.ui.controllers.preview_controller import PreviewController
 from src.ui.controllers.search_controller import SearchController
+from src.ui.controllers.settings_controller import SettingsController
 from src.ui.controllers.shortcut_controller import ShortcutController
-from src.ui.i18n import i18n
 
 # Services
-from src.ui.services.f3d_service import F3dService
-from src.ui.services.thumbnail_service import ThumbnailService
-from src.ui.services.translation_service import TranslationService
+from src.services.f3d.service import F3dService
+from src.services.thumbnail.service import ThumbnailService
+from src.services.translation.service import TranslationService
+from src.ui.services.database_service import DatabaseService
 
 # Views
 from src.ui.views.main_view import MainView
-from src.unity_logic import UnityLogic
 
 
 class UmaExporterApp:
@@ -141,6 +142,7 @@ class UmaExporterApp:
         self.thumbnail_service = ThumbnailService(self.executor, self)
         self.translation_service = TranslationService(self)
         self.translation_service.load_cached()
+        self.database_service = DatabaseService(self)
 
         # Initialize Controllers
         self.preview_controller = PreviewController(self)
@@ -150,16 +152,16 @@ class UmaExporterApp:
         self.browser_controller = BrowserController(self)
         self.shortcut_controller = ShortcutController(self)
         self.batch_controller = BatchController(self)
+        self.export_controller = ExportController(self)
+        self.settings_controller = SettingsController(self)
 
         # Build UI Structure
         self._setup_dearpygui()
 
         # Initialize Views
-        self.main_view = MainView(
-            self
-        )  # We pass self as controller proxy to MainView for simplicity
+        self.main_view = MainView(self)
 
-        # Map some proxy callbacks for MainView because it binds to self.controller.*
+        # Map proxy callbacks for MainView
         self.on_search = self.search_controller.on_search
         self.clear_search = self.search_controller.clear_search
         self.on_scene_search = self.search_controller.on_scene_search
@@ -177,9 +179,20 @@ class UmaExporterApp:
         self._update_nav_buttons = self.navigation_controller._update_nav_buttons
         self.go_back = self.navigation_controller.go_back
         self.go_forward = self.navigation_controller.go_forward
+        self.on_export_selected = self.export_controller.on_export_selected
+        self.on_export_all_objects = self.export_controller.on_export_all_objects
+        self.on_character_export_selected = (
+            self.export_controller.on_character_export_selected
+        )
+        self.on_settings_dir_selected = self.settings_controller.on_settings_dir_selected
+        self.apply_settings = self.settings_controller.apply_settings
+        self.on_clear_thumbnail_cache = (
+            self.settings_controller.on_clear_thumbnail_cache
+        )
+        self.on_update_translations = self.settings_controller.on_update_translations
 
         self._init_ui()
-        self._db_load_worker()
+        self.database_service.start_db_load()
 
     def _setup_dearpygui(self):
         dpg.create_context()
@@ -328,115 +341,6 @@ class UmaExporterApp:
 
         dpg.set_primary_window("PrimaryWindow", True)
         dpg.show_viewport()
-
-    def _db_load_worker(self):
-        """Asynchronously initialize the database and load its index."""
-        if self.is_db_loading:
-            return
-
-        db_path = Config.get_db_path()
-        if not Config.BASE_PATH or not os.path.exists(db_path):
-            self.db = None
-            self.tree_data = {}
-            self._queue_ui_task(lambda: dpg.set_value("main_tabs", "settings_tab"))
-            return
-
-        def run_db_load():
-            try:
-                self.is_db_loading = True
-                self._queue_ui_task(lambda: dpg.show_item("loading_modal"))
-
-                db = UmaDatabase(
-                    Config.get_db_path(), translation_service=self.translation_service
-                )
-                UnityLogic.set_key_provider(db.get_key_by_hash)
-                tree_data = db.load_index()
-
-                def finalize():
-                    self.db = db
-                    self.is_db_loading = False
-                    dpg.hide_item("loading_modal")
-                    self._set_database_ready(tree_data)
-
-                self._queue_ui_task(finalize)
-
-            except Exception as e:
-                print(f"Failed to load database: {e}")
-
-                def on_error(err=str(e)):
-                    dpg.hide_item("loading_modal")
-                    dpg.set_value("settings_status_msg", err)
-                    dpg.set_value("main_tabs", "settings_tab")
-
-                self._queue_ui_task(on_error)
-                self.is_db_loading = False
-
-        self.executor.submit(run_db_load)
-
-    def _set_database_ready(self, tree_data):
-        self.tree_data = tree_data
-
-        if dpg.does_item_exist("browse_group"):
-            dpg.delete_item("browse_group", children_only=True)
-            self.browser_controller.render_browser_tree_items("browse_group")
-        if dpg.does_item_exist("search_results"):
-            dpg.delete_item("search_results", children_only=True)
-        if dpg.does_item_exist("search_group"):
-            dpg.configure_item("search_group", show=False)
-        if dpg.does_item_exist("browse_group"):
-            dpg.configure_item("browse_group", show=True)
-        if dpg.does_alias_exist("main_tabs"):
-            dpg.set_value("main_tabs", "home_tab")
-
-        dpg.set_value(
-            "settings_status_msg", i18n("msg_db_ready") + f" ({self.db.db_path})"
-        )
-
-        self.search_controller.render_scene_results()
-        self.search_controller.render_prop_results()
-        self.search_controller.render_character_results()
-
-    def _reset_database_state(self):
-        if self.db:
-            try:
-                self.db.close()
-            except Exception:
-                pass
-
-        self.db = None
-        self.tree_data = {}
-        self.node_map = {}
-        self.cached_recursive_hashes = {}
-        self.cached_deps = {}
-        self.cached_rev_deps = {}
-        UnityLogic.clear_runtime_caches()
-
-        if dpg.does_item_exist("browse_group"):
-            dpg.delete_item("browse_group", children_only=True)
-        if dpg.does_item_exist("search_results"):
-            dpg.delete_item("search_results", children_only=True)
-        if dpg.does_item_exist("scene_results_parent"):
-            dpg.delete_item("scene_results_parent", children_only=True)
-        if dpg.does_item_exist("scene_thumbnails_parent"):
-            dpg.delete_item("scene_thumbnails_parent", children_only=True)
-        if dpg.does_item_exist("prop_results_parent"):
-            dpg.delete_item("prop_results_parent", children_only=True)
-        if dpg.does_item_exist("prop_thumbnails_parent"):
-            dpg.delete_item("prop_thumbnails_parent", children_only=True)
-        if dpg.does_item_exist("character_list_scroll"):
-            dpg.delete_item("character_list_scroll", children_only=True)
-        if dpg.does_item_exist("character_outfits_content"):
-            dpg.delete_item("character_outfits_content", children_only=True)
-
-        self.character_entries = []
-        self.current_character_id = None
-        self.last_selected_character_logo = None
-        self.character_cache_pending.clear()
-        self.last_selected_character_outfit = None
-        self.current_character_outfit = None
-        self.thumbnail_items["character_outfits"] = []
-        self.lazy_thumb_queues["character_icons"] = []
-        self.lazy_thumb_queues["character_outfits"] = []
 
     def _queue_ui_task(self, func):
         self.ui_tasks.put(func)
@@ -642,563 +546,13 @@ class UmaExporterApp:
         self.preview_controller._load_deps_async(asset_id, request_id)
         self.preview_controller._load_rev_deps_async(asset_id, request_id)
 
+    def _reset_database_state(self):
+        """Delegate to DatabaseService for state reset."""
+        self.database_service.reset_database_state()
+
     def _is_still_selected(self, asset_id):
+        """Check if the given asset is still the current selection."""
         return self.current_asset_id == asset_id
-
-    def _set_export_status(self, prefix, message, color=None):
-        tag = f"{prefix}ui_export_status"
-        if dpg.does_item_exist(tag):
-            dpg.set_value(tag, message)
-            if color is not None:
-                dpg.configure_item(tag, color=color)
-
-    def _set_character_export_status(self, message, color=None):
-        tag = "character_export_status"
-        if dpg.does_item_exist(tag):
-            dpg.set_value(tag, message)
-            if color is not None:
-                dpg.configure_item(tag, color=color)
-
-    def _get_character_outfit_main_suffix(self, outfit_id):
-        if not outfit_id or len(outfit_id) < 6:
-            return None, None
-
-        outfit_main = outfit_id[:4]
-        outfit_suffix = outfit_id[-2:]
-        if outfit_suffix == "01":
-            outfit_suffix = "00"
-
-        return outfit_main, outfit_suffix
-
-    def _is_generic_costume(self, chara_id, outfit_id):
-        """
-        Check if the outfit is a generic/universal costume.
-        A generic costume is when the 6-digit outfit_id doesn't start with the 4-digit chara_id.
-        """
-        if not chara_id or not outfit_id or len(outfit_id) < 4:
-            return False
-        return outfit_id[:4] != chara_id
-
-    def _build_character_export_targets(self, chara_id, outfit_id):
-        if not chara_id or not outfit_id:
-            return []
-
-        outfit_main, outfit_suffix = self._get_character_outfit_main_suffix(outfit_id)
-        if not outfit_main or not outfit_suffix:
-            return []
-
-        is_generic = self._is_generic_costume(chara_id, outfit_id)
-
-        if is_generic:
-            # Generic costume: construct compound costume ID and build special body path
-            # Compound format: {bodyType}_{bodyTypeSub}_{setting}_{height}_{shape}_{bust}
-            #
-            # Step 1: Query dress_data to get body_type, body_type_sub, body_setting
-            dress_data = None
-            if self.db and self.db.master_db:
-                dress_data = self.db.master_db.get_dress_data(outfit_id)
-
-            # Step 2: Query chara_data (using current character's 4-digit ID) to get height, shape, bust
-            chara_data = None
-            if self.db and self.db.master_db:
-                chara_data = self.db.master_db.get_chara_data(chara_id)
-
-            if dress_data and chara_data:
-                # Extract body type parameters from dress_data
-                # body_type: pad to 4 digits (e.g., "1" → "0001")
-                body_type = dress_data.get("body_type", outfit_main)
-                body_type = body_type.zfill(4)
-
-                # body_type_sub: pad to 2 digits (e.g., "0" → "00")
-                body_type_sub = dress_data.get("body_type_sub", "00")
-                body_type_sub = body_type_sub.zfill(2)
-
-                body_setting = dress_data.get("body_setting", "00")
-                body_setting = body_setting.zfill(2)
-
-                # Extract body measurements from chara_data
-                height = chara_data.get("height", "00")
-                shape = chara_data.get("shape", "00")
-                bust = chara_data.get("bust", "00")
-                skin = chara_data.get("skin", "00")
-                socks = chara_data.get("socks", "00")
-
-                # Construct compound costume ID: {bodyType}_{bodyTypeSub}_{setting}_{height}_{shape}_{bust}
-                costume_id_compound = f"{body_type}_{body_type_sub}_{body_setting}_{height}_{shape}_{bust}"
-
-                # costumeIdShort: only {body_type}_{body_type_sub}
-                # e.g., "0001_00"
-                costume_id_short = f"{body_type}_{body_type_sub}"
-
-                # Body path: 3d/chara/body/bdy{costumeIdShort}/pfb_bdy{costumeIdCompound}
-                body_path = (
-                    f"3d/chara/body/bdy{costume_id_short}/pfb_bdy{costume_id_compound}"
-                )
-                body_animator = f"pfb_bdy{costume_id_compound}"
-
-                # Texture prefix depends on body_type
-                if body_type == "0001":
-                    body_texture_prefix = f"tex_bdy{costume_id_short}_00_{skin}_{bust}_0{socks}_"
-                elif body_type == "0003":
-                    body_texture_prefix = f"tex_bdy{costume_id_short}_00_{skin}_{bust}_"
-                elif body_type == "0006":
-                    body_texture_prefix = f"tex_bdy{costume_id_compound}_{skin}_{bust}_00_"
-                else:
-                    body_texture_prefix = f"tex_bdy{costume_id_compound}_{skin}_{bust}_"
-            else:
-                # Fallback to standard pattern if data not available
-                body_path = f"3d/chara/body/bdy{outfit_main}_{outfit_suffix}/pfb_bdy{outfit_main}_{outfit_suffix}"
-                body_animator = f"pfb_bdy{outfit_main}_{outfit_suffix}"
-                body_texture_prefix = f"tex_bdy{outfit_main}_{outfit_suffix}_"
-        else:
-            # Character-specific costume: standard pattern
-            body_path = f"3d/chara/body/bdy{outfit_main}_{outfit_suffix}/pfb_bdy{outfit_main}_{outfit_suffix}"
-            body_animator = f"pfb_bdy{outfit_main}_{outfit_suffix}"
-            body_texture_prefix = f"tex_bdy{outfit_main}_{outfit_suffix}_"
-
-        return [
-            {
-                "label": "body",
-                "logical_path": body_path,
-                "animator_name": body_animator,
-                "texture_prefix": body_texture_prefix,
-            },
-            {
-                "label": "head",
-                "logical_path": f"3d/chara/head/chr{chara_id}_{outfit_suffix}/pfb_chr{chara_id}_{outfit_suffix}",
-                "animator_name": f"pfb_chr{chara_id}_{outfit_suffix}",
-            },
-        ]
-
-    def _resolve_character_tail_target(self, chara_id):
-        if not chara_id or not self.db:
-            return None
-
-        for tail_id in ("0001", "0002"):
-            texture_name = f"tex_tail{tail_id}_00_{chara_id}_diff"
-            texture_path = f"3d/chara/tail/tail{tail_id}_00/textures/{texture_name}"
-            texture_asset = self.db.get_asset_by_path(texture_path)
-            if texture_asset is None:
-                continue
-
-            return {
-                "label": "tail",
-                "logical_path": f"3d/chara/tail/tail{tail_id}_00/pfb_tail{tail_id}_00",
-                "animator_name": f"pfb_tail{tail_id}_00",
-                "texture_prefix": f"tex_tail{tail_id}_00_{chara_id}_",
-            }
-
-        return None
-
-    def _get_recursive_export_inputs(self, asset_id):
-        if not asset_id or not self.db:
-            return [], []
-
-        results = self.preview_controller._get_recursive_hashes(asset_id)
-        paths = []
-        bundle_keys = []
-
-        for asset_hash, bundle_key in results:
-            phys_path = os.path.join(Config.get_data_root(), asset_hash[:2], asset_hash)
-            if not os.path.exists(phys_path):
-                continue
-            paths.append(phys_path)
-            bundle_keys.append(bundle_key)
-
-        return paths, bundle_keys
-
-    def _build_character_texture_output_path(self, target_dir, label, texture_name):
-        safe_name = UnityLogic._sanitize_export_name(texture_name) or "texture"
-        file_name = f"{safe_name}.png"
-        output_path = os.path.join(target_dir, file_name)
-
-        if not os.path.exists(output_path):
-            return output_path
-
-        base, ext = os.path.splitext(file_name)
-        counter = 1
-        while True:
-            candidate = os.path.join(target_dir, f"{base}_{counter}{ext}")
-            if not os.path.exists(candidate):
-                return candidate
-            counter += 1
-
-    def _export_character_component_textures(
-        self, target_dir, label, asset, texture_prefix_filter=None
-    ):
-        if not asset or not self.db:
-            return 0
-
-        base_dir = asset["full_path"].rsplit("/", 1)[0]
-        texture_prefix = f"{base_dir}/textures/"
-        texture_assets = self.db.get_assets_by_prefix(texture_prefix)
-        exported_count = 0
-
-        for texture_asset in texture_assets:
-            texture_name = texture_asset["full_path"].rsplit("/", 1)[-1]
-            texture_hash = texture_asset.get("hash")
-            if not texture_name or not texture_hash:
-                continue
-            if texture_prefix_filter and not texture_name.startswith(
-                texture_prefix_filter
-            ):
-                continue
-
-            phys_path = os.path.join(
-                Config.get_data_root(),
-                texture_hash[:2],
-                texture_hash,
-            )
-            if not os.path.exists(phys_path):
-                continue
-
-            output_path = self._build_character_texture_output_path(
-                target_dir, label, texture_name
-            )
-            exported = UnityLogic.export_named_texture_to_png(
-                phys_path,
-                texture_name,
-                output_path,
-                bundle_key=texture_asset.get("key"),
-            )
-            if exported:
-                exported_count += 1
-
-        return exported_count
-
-    def _export_character_animator_group(self, target_dir, chara_id, outfit_id):
-        targets = self._build_character_export_targets(chara_id, outfit_id)
-        tail_target = self._resolve_character_tail_target(chara_id)
-        if tail_target is not None:
-            targets.append(tail_target)
-        if not targets or not self.db:
-            return False
-
-        export_configs = []
-        texture_exports = 0
-
-        for target in targets:
-            asset = self.db.get_asset_by_path(target["logical_path"])
-            animator_name = target["animator_name"]
-
-            if asset is None and target["label"] != "tail":
-                candidates = self.db.find_character_component_candidates(
-                    target["label"], chara_id, outfit_id
-                )
-                if candidates:
-                    asset = candidates[0]
-                    animator_name = asset["full_path"].rsplit("/", 1)[-1]
-
-            if asset is None:
-                return False
-
-            phys_path = os.path.join(
-                Config.get_data_root(),
-                asset["hash"][:2],
-                asset["hash"],
-            )
-            if (
-                UnityLogic.find_named_animator(
-                    phys_path,
-                    animator_name,
-                    bundle_key=asset.get("key"),
-                )
-                is None
-            ):
-                return False
-
-            export_paths, export_bundle_keys = self._get_recursive_export_inputs(
-                asset.get("id")
-            )
-            if not export_paths:
-                export_paths = [phys_path]
-                export_bundle_keys = [asset.get("key")]
-
-            export_configs.append(
-                {
-                    "physical_paths": export_paths,
-                    "bundle_keys": export_bundle_keys,
-                }
-            )
-            texture_exports += self._export_character_component_textures(
-                target_dir,
-                target["label"],
-                asset,
-                texture_prefix_filter=target.get("texture_prefix"),
-            )
-
-            # Export facial_target MonoBehaviour for head component
-            if target["label"] == "head":
-                texture_exports += self._export_head_facial_target(
-                    target_dir, phys_path, asset, target
-                )
-
-        if not export_configs:
-            return False
-
-        exported_count = UnityLogic.batch_export_animators(export_configs, target_dir)
-        return (exported_count + texture_exports) > 0
-
-    def _export_head_facial_target(self, target_dir, phys_path, asset, target):
-        """Export the facial_target MonoBehaviour from the head asset file."""
-        try:
-            # Extract folder name from the logical path to build facial_target name
-            # Example: 3d/chara/head/chr1001_00/pfb_chr1001_00 -> chr1001_00
-            logical_path = target.get("logical_path", "")
-            # logical_path is like "3d/chara/head/chr1001_00/pfb_chr1001_00"
-            path_parts = logical_path.rsplit("/", 1)
-            if len(path_parts) < 2:
-                return 0
-
-            folder_path = path_parts[0]  # "3d/chara/head/chr1001_00"
-            folder_name = folder_path.split("/")[-1]  # "chr1001_00"
-            facial_target_name = f"ast_{folder_name}_facial_target"
-
-            # Find the MonoBehaviour by name
-            path_id = UnityLogic.find_monobehaviour_by_name(
-                phys_path, facial_target_name, bundle_key=asset.get("key")
-            )
-
-            if path_id is None:
-                return 0
-
-            # Export the MonoBehaviour as a JSON file
-            export_dir = target_dir
-            os.makedirs(export_dir, exist_ok=True)
-
-            success = UnityLogic.export_single_unity_object(
-                phys_path,
-                path_id,
-                export_dir,
-                object_type="MonoBehaviour",
-                object_name=facial_target_name,
-                bundle_key=asset.get("key"),
-            )
-
-            return 1 if success else 0
-        except Exception as e:
-            print(f"Failed to export facial_target: {e}")
-            return 0
-
-    def _get_active_prefix(self):
-        active_tab = dpg.get_value("main_tabs")
-        try:
-            if active_tab and not isinstance(active_tab, str):
-                active_tab = dpg.get_item_alias(active_tab) or ""
-        except Exception:
-            active_tab = ""
-        if active_tab == "scene_tab":
-            return "scene_"
-        if active_tab == "prop_tab":
-            return "prop_"
-        return ""
-
-    def on_export_selected(self, sender, app_data):
-        target_dir = app_data.get("file_path_name", "")
-        if not target_dir:
-            return
-
-        prefix = self._get_active_prefix()
-        self._set_export_status(prefix, i18n("msg_export_started"), [255, 255, 0])
-
-        selected_tag = self.last_unity_selected.get(prefix, None)
-        if not selected_tag or not dpg.does_item_exist(selected_tag):
-            print("No Unity object selected for export.")
-            self._set_export_status(prefix, i18n("msg_export_failed"), [255, 0, 0])
-            return
-
-        user_data = dpg.get_item_user_data(selected_tag)
-        if not user_data or len(user_data) < 2:
-            print("Invalid Unity object selection data.")
-            self._set_export_status(prefix, i18n("msg_export_failed"), [255, 0, 0])
-            return
-
-        phys_path = user_data[0]
-        path_id = user_data[1]
-        u_type = user_data[2] if len(user_data) > 2 else None
-        object_name = user_data[4] if len(user_data) > 4 else None
-        bundle_key = user_data[5] if len(user_data) > 5 else None
-
-        if u_type == "Animator" and self.current_asset_id:
-            results = self.preview_controller._get_recursive_hashes(
-                self.current_asset_id
-            )
-            paths = []
-            bundle_keys = []
-            for h, k in results:
-                p = os.path.join(Config.get_data_root(), h[:2], h)
-                if os.path.exists(p):
-                    paths.append(p)
-                    bundle_keys.append(k)
-
-            if paths:
-                future = self.executor.submit(
-                    UnityLogic.export_animator_with_dependencies,
-                    paths,
-                    target_dir,
-                    bundle_keys=bundle_keys,
-                )
-                future.add_done_callback(
-                    lambda f: self._queue_ui_task(
-                        lambda: self._set_export_status(
-                            prefix,
-                            i18n("msg_export_done")
-                            if (f.exception() is None and (f.result() or 0) > 0)
-                            else i18n("msg_export_failed"),
-                            [0, 255, 0]
-                            if (f.exception() is None and (f.result() or 0) > 0)
-                            else [255, 0, 0],
-                        )
-                    )
-                )
-                return
-
-        future = self.executor.submit(
-            UnityLogic.export_single_unity_object,
-            phys_path,
-            path_id,
-            target_dir,
-            u_type,
-            object_name,
-            bundle_key=bundle_key,
-        )
-        future.add_done_callback(
-            lambda f: self._queue_ui_task(
-                lambda: self._set_export_status(
-                    prefix,
-                    i18n("msg_export_done")
-                    if (f.exception() is None and bool(f.result()))
-                    else i18n("msg_export_failed"),
-                    [0, 255, 0]
-                    if (f.exception() is None and bool(f.result()))
-                    else [255, 0, 0],
-                )
-            )
-        )
-
-    def on_character_export_selected(self, sender, app_data):
-        target_dir = app_data.get("file_path_name", "")
-        if not target_dir:
-            return
-
-        selected_outfit = self.current_character_outfit
-        if not selected_outfit:
-            self._set_character_export_status(
-                i18n("msg_select_outfit"), [255, 120, 120]
-            )
-            return
-
-        chara_id = selected_outfit.get("chara_id")
-        outfit_id = selected_outfit.get("outfit_id")
-        if not chara_id or not outfit_id:
-            self._set_character_export_status(i18n("msg_export_failed"), [255, 0, 0])
-            return
-
-        self._set_character_export_status(i18n("msg_export_started"), [255, 255, 0])
-
-        future = self.executor.submit(
-            self._export_character_animator_group,
-            target_dir,
-            chara_id,
-            outfit_id,
-        )
-
-        future.add_done_callback(
-            lambda f: self._queue_ui_task(
-                lambda: self._set_character_export_status(
-                    i18n("msg_export_done")
-                    if (f.exception() is None and bool(f.result()))
-                    else i18n("msg_character_export_missing")
-                    if f.exception() is None
-                    else i18n("msg_export_failed"),
-                    [0, 255, 0]
-                    if (f.exception() is None and bool(f.result()))
-                    else [255, 0, 0],
-                )
-            )
-        )
-
-    def on_export_all_objects(self, sender, app_data):
-        target_dir = app_data.get("file_path_name", "")
-        if not target_dir or not self.current_asset_hash:
-            return
-
-        prefix = self._get_active_prefix()
-        self._set_export_status(prefix, i18n("msg_export_started"), [255, 255, 0])
-
-        phys_path = os.path.join(
-            Config.get_data_root(), self.current_asset_hash[:2], self.current_asset_hash
-        )
-        bundle_key = None
-        if self.current_asset_data:
-            bundle_key = self.current_asset_data.get("key")
-
-        future = self.executor.submit(
-            UnityLogic.export_unity_assets,
-            [phys_path],
-            target_dir,
-            bundle_keys=[bundle_key] if bundle_key is not None else None,
-        )
-        future.add_done_callback(
-            lambda f: self._queue_ui_task(
-                lambda: self._set_export_status(
-                    prefix,
-                    i18n("msg_export_done")
-                    if (f.exception() is None and (f.result() or 0) > 0)
-                    else i18n("msg_export_failed"),
-                    [0, 255, 0]
-                    if (f.exception() is None and (f.result() or 0) > 0)
-                    else [255, 0, 0],
-                )
-            )
-        )
-
-    def on_settings_dir_selected(self, sender, app_data):
-        selected_path = app_data["file_path_name"]
-        dpg.set_value("settings_base_path", selected_path)
-
-    def apply_settings(self, sender, app_data, user_data):
-        base_path = dpg.get_value("settings_base_path")
-        region = dpg.get_value("settings_region")
-        lang = dpg.get_value("settings_language")
-
-        region_map = {
-            i18n("region_jp"): "jp",
-            i18n("region_global"): "global",
-        }
-        Config.update_config(base_path, region_map.get(region, "jp"), lang)
-        self._reset_database_state()
-        dpg.set_value("settings_status_msg", i18n("msg_loading"))
-        self._db_load_worker()
-
-    def on_clear_thumbnail_cache(self, sender, app_data, user_data):
-        try:
-            thumb_manager.clear_all()
-            dpg.set_value("settings_status_msg", i18n("msg_clear_cache_success"))
-        except Exception as e:
-            dpg.set_value("settings_status_msg", f"Failed to clear cache: {e}")
-
-    def on_update_translations(self, sender, app_data, user_data):
-        dpg.set_value("settings_translation_status", i18n("msg_updating_translations"))
-        dpg.configure_item(sender, enabled=False)
-
-        def callback(success):
-            def finalize():
-                if success:
-                    dpg.set_value(
-                        "settings_translation_status", i18n("msg_translations_updated")
-                    )
-                    # Reload character list to show new names
-                    self.search_controller.render_character_results()
-                else:
-                    dpg.set_value(
-                        "settings_translation_status", i18n("msg_translations_failed")
-                    )
-                dpg.configure_item(sender, enabled=True)
-
-            self._queue_ui_task(finalize)
-
-        self.translation_service.download_translations(callback)
 
     def _on_app_exit(self):
         self.f3d_service.cleanup()

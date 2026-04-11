@@ -4,7 +4,7 @@ import platform
 import locale
 import sys
 
-from src.utils import is_nuitka
+from src.core.utils import is_nuitka
 
 CONFIG_FILE = "config.json"
 

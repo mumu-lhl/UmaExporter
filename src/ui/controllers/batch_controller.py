@@ -1,13 +1,15 @@
 import os
-from src.constants import Config
-from src.unity_logic import UnityLogic
-from src.ui.i18n import i18n
-import dearpygui.dearpygui as dpg
 import threading
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
-from src.ui.f3d_worker import generate_thumbnail
-from src.thumbnail_manager import ThumbnailManager as thumb_manager
+
+import dearpygui.dearpygui as dpg
+
+from src.core.config import Config
+from src.core.unity import UnityLogic
+from src.core.i18n import i18n
+from src.services.f3d.worker import generate_thumbnail
+from src.services.thumbnail.manager import ThumbnailManager as thumb_manager
 
 
 class BatchController:
