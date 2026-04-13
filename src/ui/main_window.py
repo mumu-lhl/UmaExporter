@@ -557,15 +557,22 @@ class UmaExporterApp:
         return self.current_asset_id == asset_id
 
     def _on_app_exit(self):
+        from src.core.monitor import Monitor
+        Monitor.finalize()
         self.f3d_service.cleanup()
 
     def run(self):
+        from src.core.monitor import Monitor
+        if Config.PROFILE:
+            dpg.show_metrics()
+
         try:
             while dpg.is_dearpygui_running():
-                self._drain_ui_tasks()
-                self.search_controller.process_lazy_thumbnails()
-                self.search_controller.process_global_search_load_more()
-                dpg.render_dearpygui_frame()
+                with Monitor.time_block("frame_time"):
+                    self._drain_ui_tasks()
+                    self.search_controller.process_lazy_thumbnails()
+                    self.search_controller.process_global_search_load_more()
+                    dpg.render_dearpygui_frame()
         except KeyboardInterrupt:
             pass
         finally:

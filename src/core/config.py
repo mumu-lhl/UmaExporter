@@ -39,6 +39,16 @@ class Config:
     REGION = "jp"
     # Runtime flag: all user data is now assumed to be encrypted
     DB_ENCRYPTED = True
+    # Performance monitoring flag
+    PROFILE = False
+
+    @classmethod
+    def get_profile_dir(cls):
+        """Returns the directory where performance profiles are stored."""
+        path = os.path.join(cls.get_app_data_dir(), "profiles")
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+        return path
 
     @classmethod
     def get_effective_language(cls):

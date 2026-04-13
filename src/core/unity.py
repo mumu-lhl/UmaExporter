@@ -47,6 +47,9 @@ UnityPy.Environment.load_file = _custom_load_file
 UnityPy.environment.Environment.load_file = _custom_load_file
 
 
+from src.core.monitor import Monitor
+
+
 class UnityLogic:
     _key_provider = None
 
@@ -79,6 +82,7 @@ class UnityLogic:
         return sanitized.rstrip(". ") or None
 
     @staticmethod
+    @Monitor.time_func("unity_load_bundle_data")
     def _load_bundle_data(physical_path, bundle_key=None):
         """Read bundle data and decrypt."""
         if not os.path.exists(physical_path):
@@ -90,7 +94,7 @@ class UnityLogic:
             if bundle_key is not None and str(bundle_key).strip() != "":
                 try:
                     decryption_key = int(bundle_key)
-                except ValueError, TypeError:
+                except (ValueError, TypeError):
                     pass
 
             with open(physical_path, "rb") as f:
@@ -115,6 +119,7 @@ class UnityLogic:
 
     @staticmethod
     @lru_cache(maxsize=16)
+    @Monitor.time_func("unity_get_assets")
     def get_unity_assets(physical_path, bundle_key=None):
         """Analyze Unity AssetBundle and return object list"""
         try:

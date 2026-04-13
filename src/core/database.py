@@ -8,12 +8,16 @@ from src.core.config import Config
 from src.core.decryptor import get_db_hex_key
 
 
+from src.core.monitor import Monitor
+
+
 class MasterDatabase:
     def __init__(self, db_path=None, translation_service=None):
         self.db_path = db_path or Config.get_master_db_path()
         self.conn = self._connect(self.db_path)
         self.translation_service = translation_service
 
+    @Monitor.time_func("master_db_connect")
     def _connect(self, db_path):
         if not db_path or not os.path.exists(db_path):
             return None
@@ -31,6 +35,7 @@ class MasterDatabase:
         except Exception:
             return None
 
+    @Monitor.time_func("master_db_get_text")
     def get_text(self, category_id, index):
         if self.translation_service:
             translated = self.translation_service.get_text(category_id, index)
