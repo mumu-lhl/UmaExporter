@@ -103,7 +103,7 @@ jobs:
           apsw
         include-module: |
           ctypes._layout
-          src.uma_decryptor
+          src.core.uma_decryptor
         include-package-data: |
           dearpygui
           f3d

@@ -15,7 +15,7 @@ check-as-cli:
 
 # Build Cython extension (skip if already in src/core/)
 build-cython:
-    @uv run python -c "import glob, sys; sys.exit(0 if glob.glob('src/core/uma_decryptor*.so') or glob.glob('src/core/uma_decryptor*.pyd') else 1)" || (uv run python setup.py build_ext --inplace && uv run python -c "import shutil, glob, os; [shutil.move(f, os.path.join('src/core', os.path.basename(f))) for f in glob.glob('src/uma_decryptor*.so') if not os.path.exists(os.path.join('src/core', os.path.basename(f)))]")
+    @uv run python -c "import glob, sys; sys.exit(0 if glob.glob('src/core/uma_decryptor*.so') or glob.glob('src/core/uma_decryptor*.pyd') else 1)" || (uv run python setup.py build_ext --inplace && uv run python -c "import shutil, glob, os; [shutil.move(f, os.path.join('src/core', os.path.basename(f))) for pattern in ('src/uma_decryptor*.so', 'src/uma_decryptor*.pyd') for f in glob.glob(pattern) if not os.path.exists(os.path.join('src/core', os.path.basename(f)))]")
 
 # Update version info
 update-version:
