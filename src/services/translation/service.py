@@ -16,6 +16,7 @@ class TranslationService:
 
         self.en_url = "https://raw.githubusercontent.com/UmaTL/hachimi-tl-en/refs/heads/main/localized_data/text_data_dict.json"
         self.zh_url = "https://raw.githubusercontent.com/Hachimi-Hachimi/tl-zh-cn/dev/localized_data/text_data_dict.json"
+        self.zh_mirror_url = "https://files.leadrdrk.com/hachimi/tl-zh-cn/localized_data/text_data_dict.json"
 
     def _get_cache_path(self, lang):
         return os.path.join(self._cache_dir, f"text_data_{lang}.json")
@@ -38,32 +39,37 @@ class TranslationService:
         lang = Config.get_effective_language()
         if lang not in ["English", "Chinese"]:
             if callback:
-                callback(False)
+                callback(False, False)
             return
 
-        url = self.en_url if lang == "English" else self.zh_url
+        urls = [self.en_url] if lang == "English" else [self.zh_url, self.zh_mirror_url]
 
         def _worker():
-            try:
-                print(f"Downloading translations from {url}...")
-                response = requests.get(url, timeout=30)
-                response.raise_for_status()
-                data = response.json()
+            success = False
+            is_mirror = False
+            for url in urls:
+                try:
+                    print(f"Downloading translations from {url}...")
+                    is_mirror = (url == self.zh_mirror_url)
+                    response = requests.get(url, timeout=30)
+                    response.raise_for_status()
+                    data = response.json()
 
-                cache_path = self._get_cache_path(lang)
-                with open(cache_path, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
+                    cache_path = self._get_cache_path(lang)
+                    with open(cache_path, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
 
-                with self._lock:
-                    self._translations = data
+                    with self._lock:
+                        self._translations = data
 
-                print(f"Translations for {lang} updated successfully.")
-                if callback:
-                    callback(True)
-            except Exception as e:
-                print(f"Failed to download translations: {e}")
-                if callback:
-                    callback(False)
+                    print(f"Translations for {lang} updated successfully.")
+                    success = True
+                    break
+                except Exception as e:
+                    print(f"Failed to download translations from {url}: {e}")
+
+            if callback:
+                callback(success, is_mirror)
 
         threading.Thread(target=_worker, daemon=True).start()
 

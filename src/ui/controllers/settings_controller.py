@@ -38,12 +38,13 @@ class SettingsController:
         dpg.set_value("settings_translation_status", i18n("msg_updating_translations"))
         dpg.configure_item(sender, enabled=False)
 
-        def callback(success):
+        def callback(success, is_mirror=False):
             def finalize():
                 if success:
+                    msg_key = "msg_translations_updated_mirror" if is_mirror else "msg_translations_updated"
                     dpg.set_value(
                         "settings_translation_status",
-                        i18n("msg_translations_updated"),
+                        i18n(msg_key),
                     )
                     # Reload character list to show new names
                     self.app.search_controller.render_character_results()

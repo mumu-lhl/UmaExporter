@@ -101,6 +101,7 @@ TRANSLATIONS = {
         "btn_update_translations": "Update Translations",
         "msg_updating_translations": "Updating translations...",
         "msg_translations_updated": "Translations updated!",
+        "msg_translations_updated_mirror": "Translations updated (via mirror)!",
         "msg_translations_failed": "Failed to update translations.",
     },
     "Chinese": {
@@ -203,6 +204,7 @@ TRANSLATIONS = {
         "btn_update_translations": "下载/更新角色翻译库",
         "msg_updating_translations": "正在更新翻译库...",
         "msg_translations_updated": "翻译库更新成功!",
+        "msg_translations_updated_mirror": "翻译库更新成功 (使用镜像站)!",
         "msg_translations_failed": "翻译库更新失败。",
     },
 }
