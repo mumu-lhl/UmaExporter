@@ -1,3 +1,17 @@
+## [0.3.1] - 2026-04-14
+
+### 🚀 Features
+
+- 为中文翻译库下载提供镜像
+- 翻译下载源
+
+### 🐛 Bug Fixes
+
+- 修复cython模块
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V0.3.1
 ## [0.3.0] - 2026-04-13
 
 ### 🚀 Features
