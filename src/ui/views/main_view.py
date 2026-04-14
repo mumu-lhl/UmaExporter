@@ -359,7 +359,12 @@ class MainView:
                     dpg.add_spacer(height=10)
                     dpg.add_text(i18n("label_download_source"))
                     dpg.add_combo(
-                        items=[i18n("source_auto"), i18n("source_default"), i18n("source_mirror")],
+                        items=[
+                            i18n("source_auto"),
+                            i18n("source_github"),
+                            i18n("source_yingqwq"),
+                            i18n("source_leadrdrk"),
+                        ],
                         tag="settings_translation_source",
                         default_value=i18n("source_auto"),
                         width=200,

@@ -15,8 +15,25 @@ class TranslationService:
             os.makedirs(self._cache_dir, exist_ok=True)
 
         self.en_url = "https://raw.githubusercontent.com/UmaTL/hachimi-tl-en/refs/heads/main/localized_data/text_data_dict.json"
-        self.zh_url = "https://raw.githubusercontent.com/Hachimi-Hachimi/tl-zh-cn/dev/localized_data/text_data_dict.json"
-        self.zh_mirror_url = "https://files.leadrdrk.com/hachimi/tl-zh-cn/localized_data/text_data_dict.json"
+        self.zh_mirrors = [
+            {
+                "name": "Github",
+                "id": "github",
+                "url": "https://raw.githubusercontent.com/Hachimi-Hachimi/tl-zh-cn/dev/localized_data/text_data_dict.json",
+            },
+            {
+                "name": "YingQwq",
+                "id": "yingqwq",
+                "url": "http://185.200.65.108:7890/zh-cn/root/text_data_dict.json",
+            },
+            {
+                "name": "LeadRdrk",
+                "id": "leadrdrk",
+                "url": "https://files.leadrdrk.com/hachimi/tl-zh-cn/localized_data/text_data_dict.json",
+            },
+        ]
+
+
 
     def _get_cache_path(self, lang):
         return os.path.join(self._cache_dir, f"text_data_{lang}.json")
@@ -39,26 +56,28 @@ class TranslationService:
         lang = Config.get_effective_language()
         if lang not in ["English", "Chinese"]:
             if callback:
-                callback(False, False)
+                callback(False, None)
             return
 
         if lang == "English":
-            urls = [self.en_url]
+            targets = [{"name": "Github", "url": self.en_url}]
         else:
-            if source == "default":
-                urls = [self.zh_url]
-            elif source == "mirror":
-                urls = [self.zh_mirror_url]
-            else:  # auto
-                urls = [self.zh_url, self.zh_mirror_url]
+            if source == "auto":
+                targets = self.zh_mirrors
+            else:
+                # source is expected to be an id like 'yingqwq', 'leadrdrk', 'github'
+                targets = [m for m in self.zh_mirrors if m["id"] == source]
+                if not targets:  # Fallback
+                    targets = self.zh_mirrors
 
         def _worker():
             success = False
-            is_mirror = False
-            for url in urls:
+            used_source_name = None
+            for target in targets:
+                url = target["url"]
+                name = target["name"]
                 try:
-                    print(f"Downloading translations from {url}...")
-                    is_mirror = (url == self.zh_mirror_url)
+                    print(f"Downloading translations from {name} ({url})...")
                     response = requests.get(url, timeout=30)
                     response.raise_for_status()
                     data = response.json()
@@ -70,14 +89,15 @@ class TranslationService:
                     with self._lock:
                         self._translations = data
 
-                    print(f"Translations for {lang} updated successfully.")
+                    print(f"Translations for {lang} updated successfully from {name}.")
                     success = True
+                    used_source_name = name
                     break
                 except Exception as e:
-                    print(f"Failed to download translations from {url}: {e}")
+                    print(f"Failed to download translations from {name}: {e}")
 
             if callback:
-                callback(success, is_mirror)
+                callback(success, used_source_name)
 
         threading.Thread(target=_worker, daemon=True).start()
 

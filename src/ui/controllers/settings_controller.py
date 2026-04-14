@@ -41,28 +41,32 @@ class SettingsController:
         source_val = dpg.get_value("settings_translation_source")
         source_map = {
             i18n("source_auto"): "auto",
-            i18n("source_default"): "default",
-            i18n("source_mirror"): "mirror",
+            i18n("source_github"): "github",
+            i18n("source_yingqwq"): "yingqwq",
+            i18n("source_leadrdrk"): "leadrdrk",
         }
         source = source_map.get(source_val, "auto")
 
-        def callback(success, is_mirror=False):
+        def callback(success, used_source_name=None):
             def finalize():
                 if success:
-                    msg_key = "msg_translations_updated_mirror" if is_mirror else "msg_translations_updated"
+                    if used_source_name:
+                        msg = i18n("msg_translations_updated_from").format(used_source_name)
+                    else:
+                        msg = i18n("msg_translations_updated")
                     dpg.set_value(
                         "settings_translation_status",
-                        i18n(msg_key),
+                        msg,
                     )
                     # Reload character list to show new names
                     self.app.search_controller.render_character_results()
                 else:
                     dpg.set_value(
-                        "settings_translation_status",
-                        i18n("msg_translations_failed"),
+                        "settings_translation_status", i18n("msg_translations_failed")
                     )
                 dpg.configure_item(sender, enabled=True)
 
             self.app._queue_ui_task(finalize)
 
         self.app.translation_service.download_translations(callback, source=source)
+
