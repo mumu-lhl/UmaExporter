@@ -38,6 +38,14 @@ class SettingsController:
         dpg.set_value("settings_translation_status", i18n("msg_updating_translations"))
         dpg.configure_item(sender, enabled=False)
 
+        source_val = dpg.get_value("settings_translation_source")
+        source_map = {
+            i18n("source_auto"): "auto",
+            i18n("source_default"): "default",
+            i18n("source_mirror"): "mirror",
+        }
+        source = source_map.get(source_val, "auto")
+
         def callback(success, is_mirror=False):
             def finalize():
                 if success:
@@ -57,4 +65,4 @@ class SettingsController:
 
             self.app._queue_ui_task(finalize)
 
-        self.app.translation_service.download_translations(callback)
+        self.app.translation_service.download_translations(callback, source=source)

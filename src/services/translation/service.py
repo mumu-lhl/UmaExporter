@@ -35,14 +35,22 @@ class TranslationService:
                 print(f"Failed to load cached translations: {e}")
         return False
 
-    def download_translations(self, callback=None):
+    def download_translations(self, callback=None, source="auto"):
         lang = Config.get_effective_language()
         if lang not in ["English", "Chinese"]:
             if callback:
                 callback(False, False)
             return
 
-        urls = [self.en_url] if lang == "English" else [self.zh_url, self.zh_mirror_url]
+        if lang == "English":
+            urls = [self.en_url]
+        else:
+            if source == "default":
+                urls = [self.zh_url]
+            elif source == "mirror":
+                urls = [self.zh_mirror_url]
+            else:  # auto
+                urls = [self.zh_url, self.zh_mirror_url]
 
         def _worker():
             success = False

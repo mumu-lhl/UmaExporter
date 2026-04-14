@@ -357,6 +357,15 @@ class MainView:
                     )
 
                     dpg.add_spacer(height=10)
+                    dpg.add_text(i18n("label_download_source"))
+                    dpg.add_combo(
+                        items=[i18n("source_auto"), i18n("source_default"), i18n("source_mirror")],
+                        tag="settings_translation_source",
+                        default_value=i18n("source_auto"),
+                        width=200,
+                    )
+
+                    dpg.add_spacer(height=10)
                     with dpg.group(horizontal=True):
                         dpg.add_button(
                             label=i18n("btn_update_translations"),
