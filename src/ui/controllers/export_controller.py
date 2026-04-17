@@ -128,20 +128,29 @@ class ExportController:
         prefix = self._get_active_prefix()
         self._set_export_status(prefix, i18n("msg_export_started"), [255, 255, 0])
 
-        phys_path = os.path.join(
-            Config.get_data_root(),
-            self.app.current_asset_hash[:2],
-            self.app.current_asset_hash,
+        # Get recursive dependencies to ensure all required assets are decrypted/passed
+        export_paths, export_bundle_keys = self._get_recursive_export_inputs(
+            self.app.current_asset_id
         )
-        bundle_key = None
-        if self.app.current_asset_data:
-            bundle_key = self.app.current_asset_data.get("key")
+
+        if not export_paths:
+            # Fallback to single asset if no dependencies found or recursive search failed
+            phys_path = os.path.join(
+                Config.get_data_root(),
+                self.app.current_asset_hash[:2],
+                self.app.current_asset_hash,
+            )
+            export_paths = [phys_path]
+            bundle_key = None
+            if self.app.current_asset_data:
+                bundle_key = self.app.current_asset_data.get("key")
+            export_bundle_keys = [bundle_key] if bundle_key is not None else None
 
         future = self.app.executor.submit(
             UnityLogic.export_unity_assets,
-            [phys_path],
+            export_paths,
             target_dir,
-            bundle_keys=[bundle_key] if bundle_key is not None else None,
+            bundle_keys=export_bundle_keys,
         )
         future.add_done_callback(
             lambda f: self.app._queue_ui_task(

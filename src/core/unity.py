@@ -536,7 +536,7 @@ class UnityLogic:
             return None
 
     @staticmethod
-    def export_unity_assets(physical_paths, export_dir, bundle_keys=None):
+    def export_unity_assets(physical_paths, export_dir, bundle_keys=None, export_all_bundles=False):
         """Optimized entry point for exporting Unity assets"""
         if not physical_paths:
             return 0
@@ -561,11 +561,20 @@ class UnityLogic:
             if not loaded_data:
                 return 0
 
-            env = UnityPy.load(*loaded_data)
+            # Use separate Environment to track which assets belong to the main bundle
+            env = UnityPy.Environment()
+            main_assets_count = 0
+            for i, data in enumerate(loaded_data):
+                before_count = len(env.assets)
+                env.load_file(data)
+                if i == 0:
+                    main_assets_count = len(env.assets) - before_count
+
             os.makedirs(export_dir, exist_ok=True)
             count = 0
 
             # Check for Animator objects to use specialized CLI export
+            # We check ALL loaded assets for animators
             has_animator = False
             for asset in env.assets:
                 for obj in asset.objects.values():
@@ -582,8 +591,12 @@ class UnityLogic:
                 )
                 count += cli_count
 
-            # We always check for other assets too, but maybe avoid Mesh if we already did FBX
-            for asset in env.assets:
+            # We always check for other assets too, but limit to main bundle assets 
+            # unless export_all_bundles is explicitly requested.
+            for i, asset in enumerate(env.assets):
+                if not export_all_bundles and i >= main_assets_count:
+                    break
+                    
                 for obj in asset.objects.values():
                     if obj.type.name in ["AssetBundle", "PreloadData"]:
                         continue
@@ -621,6 +634,8 @@ class UnityLogic:
             return count
         except Exception as e:
             print(f"Global export error: {e}")
+            import traceback
+            traceback.print_exc()
             return 0
 
     @staticmethod
