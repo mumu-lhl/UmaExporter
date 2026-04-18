@@ -232,18 +232,31 @@ class ExportController:
         if not chara_id or not outfit_id:
             return []
 
-        outfit_main, outfit_suffix = self._get_character_outfit_main_suffix(outfit_id)
-        if not outfit_main or not outfit_suffix:
+        # Always fetch dress data first as it contains the authoritative body_type_sub
+        dress_data = None
+        if self.app.db and self.app.db.master_db:
+            dress_data = self.app.db.master_db.get_dress_data(outfit_id)
+
+        # Fallback values from string manipulation
+        outfit_main, outfit_suffix_fallback = self._get_character_outfit_main_suffix(
+            outfit_id
+        )
+        if not outfit_main or not outfit_suffix_fallback:
             return []
+
+        # Determine the authoritative suffix (body_type_sub from DB or fallback)
+        if dress_data:
+            asset_suffix = dress_data.get("body_type_sub", "00").zfill(2)
+        else:
+            asset_suffix = outfit_suffix_fallback
+
+        if asset_suffix == "01":
+            asset_suffix = "00"
 
         is_generic = self._is_generic_costume(chara_id, outfit_id)
 
         if is_generic:
             # Generic costume: construct compound costume ID and build special body path
-            dress_data = None
-            if self.app.db and self.app.db.master_db:
-                dress_data = self.app.db.master_db.get_dress_data(outfit_id)
-
             chara_data = None
             if self.app.db and self.app.db.master_db:
                 chara_data = self.app.db.master_db.get_chara_data(chara_id)
@@ -252,9 +265,7 @@ class ExportController:
                 body_type = dress_data.get("body_type", outfit_main)
                 body_type = body_type.zfill(4)
 
-                body_type_sub = dress_data.get("body_type_sub", "00")
-                body_type_sub = body_type_sub.zfill(2)
-
+                body_type_sub = asset_suffix
                 body_setting = dress_data.get("body_setting", "00")
                 body_setting = body_setting.zfill(2)
 
@@ -266,6 +277,7 @@ class ExportController:
 
                 costume_id_compound = f"{body_type}_{body_type_sub}_{body_setting}_{height}_{shape}_{bust}"
                 costume_id_short = f"{body_type}_{body_type_sub}"
+                costume_id_long = f"{body_type}_{body_type_sub}_{body_setting}"
 
                 body_path = (
                     f"3d/chara/body/bdy{costume_id_short}/pfb_bdy{costume_id_compound}"
@@ -279,19 +291,21 @@ class ExportController:
                 elif body_type == "0003":
                     body_texture_prefix = f"tex_bdy{costume_id_short}_00_{skin}_{bust}_"
                 elif body_type == "0006":
-                    body_texture_prefix = (
-                        f"tex_bdy{costume_id_compound}_{skin}_{bust}_00_"
-                    )
+                    body_texture_prefix = f"tex_bdy{costume_id_long}_{skin}_{bust}_00_"
                 else:
-                    body_texture_prefix = f"tex_bdy{costume_id_compound}_{skin}_{bust}_"
+                    body_texture_prefix = f"tex_bdy{costume_id_long}_{skin}_{bust}_"
+
+                body_texture_export_prefix = f"tex_bdy{chara_id}_00_"
             else:
-                body_path = f"3d/chara/body/bdy{outfit_main}_{outfit_suffix}/pfb_bdy{outfit_main}_{outfit_suffix}"
-                body_animator = f"pfb_bdy{outfit_main}_{outfit_suffix}"
-                body_texture_prefix = f"tex_bdy{outfit_main}_{outfit_suffix}_"
+                body_path = f"3d/chara/body/bdy{outfit_main}_{asset_suffix}/pfb_bdy{outfit_main}_{asset_suffix}"
+                body_animator = f"pfb_bdy{outfit_main}_{asset_suffix}"
+                body_texture_prefix = f"tex_bdy{outfit_main}_{asset_suffix}_"
+                body_texture_export_prefix = None
         else:
-            body_path = f"3d/chara/body/bdy{outfit_main}_{outfit_suffix}/pfb_bdy{outfit_main}_{outfit_suffix}"
-            body_animator = f"pfb_bdy{outfit_main}_{outfit_suffix}"
-            body_texture_prefix = f"tex_bdy{outfit_main}_{outfit_suffix}_"
+            body_path = f"3d/chara/body/bdy{outfit_main}_{asset_suffix}/pfb_bdy{outfit_main}_{asset_suffix}"
+            body_animator = f"pfb_bdy{outfit_main}_{asset_suffix}"
+            body_texture_prefix = f"tex_bdy{outfit_main}_{asset_suffix}_"
+            body_texture_export_prefix = None
 
         return [
             {
@@ -299,11 +313,12 @@ class ExportController:
                 "logical_path": body_path,
                 "animator_name": body_animator,
                 "texture_prefix": body_texture_prefix,
+                "texture_export_prefix": body_texture_export_prefix,
             },
             {
                 "label": "head",
-                "logical_path": f"3d/chara/head/chr{chara_id}_{outfit_suffix}/pfb_chr{chara_id}_{outfit_suffix}",
-                "animator_name": f"pfb_chr{chara_id}_{outfit_suffix}",
+                "logical_path": f"3d/chara/head/chr{chara_id}_{asset_suffix}/pfb_chr{chara_id}_{asset_suffix}",
+                "animator_name": f"pfb_chr{chara_id}_{asset_suffix}",
             },
         ]
 
@@ -361,7 +376,12 @@ class ExportController:
             counter += 1
 
     def _export_character_component_textures(
-        self, target_dir, label, asset, texture_prefix_filter=None
+        self,
+        target_dir,
+        label,
+        asset,
+        texture_prefix_filter=None,
+        texture_export_prefix=None,
     ):
         if not asset or not self.app.db:
             return 0
@@ -381,6 +401,12 @@ class ExportController:
             ):
                 continue
 
+            export_texture_name = texture_name
+            if texture_prefix_filter and texture_export_prefix:
+                if texture_name.startswith(texture_prefix_filter):
+                    suffix = texture_name[len(texture_prefix_filter) :]
+                    export_texture_name = f"{texture_export_prefix}{suffix}"
+
             phys_path = os.path.join(
                 Config.get_data_root(),
                 texture_hash[:2],
@@ -390,7 +416,7 @@ class ExportController:
                 continue
 
             output_path = self._build_character_texture_output_path(
-                target_dir, label, texture_name
+                target_dir, label, export_texture_name
             )
             exported = UnityLogic.export_named_texture_to_png(
                 phys_path,
@@ -462,6 +488,7 @@ class ExportController:
                 target["label"],
                 asset,
                 texture_prefix_filter=target.get("texture_prefix"),
+                texture_export_prefix=target.get("texture_export_prefix"),
             )
 
             if target["label"] == "head":
