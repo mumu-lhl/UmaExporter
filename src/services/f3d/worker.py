@@ -143,6 +143,8 @@ def launch_f3d_viewer_stdin():
         update_scene(line)
         interactor.start(0.1, timer_callback)
 
+    except KeyboardInterrupt:
+        pass
     except Exception as e:
         print(f"F3D Viewer Error: {e}")
     finally:

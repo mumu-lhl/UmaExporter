@@ -17,7 +17,10 @@ def main():
     if args.f3d_viewer:
         from src.services.f3d.worker import launch_f3d_viewer_stdin
 
-        launch_f3d_viewer_stdin()
+        try:
+            launch_f3d_viewer_stdin()
+        except KeyboardInterrupt:
+            pass
         return
 
     # Set profile flag in config
