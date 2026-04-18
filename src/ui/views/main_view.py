@@ -50,7 +50,7 @@ class MainView:
             directory_selector=True,
             show=False,
             callback=self.controller.on_export_selected,
-            id="export_dialog",
+            tag="export_dialog",
             width=600,
             height=400,
         ):
@@ -60,7 +60,7 @@ class MainView:
             directory_selector=True,
             show=False,
             callback=self.controller.on_export_all_objects,
-            id="export_all_dialog",
+            tag="export_all_dialog",
             width=600,
             height=400,
         ):
@@ -70,7 +70,7 @@ class MainView:
             directory_selector=True,
             show=False,
             callback=self.controller.on_settings_dir_selected,
-            id="settings_dir_dialog",
+            tag="settings_dir_dialog",
             width=600,
             height=400,
         ):
@@ -80,7 +80,7 @@ class MainView:
             directory_selector=True,
             show=False,
             callback=self.controller.on_character_export_selected,
-            id="character_export_dialog",
+            tag="character_export_dialog",
             width=600,
             height=400,
         ):

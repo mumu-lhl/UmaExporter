@@ -304,10 +304,6 @@ class UmaExporterApp:
             font_size = 20 if is_chinese else 16
             with dpg.font_registry(tag="main_font_registry"):
                 with dpg.font(actual_font, font_size) as default_font:
-                    dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
-                    if is_chinese:
-                        dpg.add_font_range_hint(dpg.mvFontRangeHint_Chinese_Full)
-                        dpg.add_font_range(0x4E00, 0x9FFF)
                     dpg.bind_font(default_font)
 
     def _init_ui(self):
