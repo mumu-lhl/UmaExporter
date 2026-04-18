@@ -10,14 +10,8 @@
 
 或者在 Release 中下载。
 
-## 版本介绍
-
-* **pyinstaller** : 由 pyinstaller 打包，速度偏慢
-* **nuitka** : 由 nuitka 打包，速度快，可能有稳定性问题
-
 ## 使用说明
 
-* nuitka 打包版本切记目录中不能包含中文
 * Animator、Mesh、Texture2D、Sprite 可以点击预览
 
 对象类型：
