@@ -1,3 +1,16 @@
+## [0.3.6] - 2026-04-25
+
+### 🚀 Features
+
+- 显示服装id
+
+### 🐛 Bug Fixes
+
+- 修复部分私服无法导出面部数据
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V0.3.6
 ## [0.3.5] - 2026-04-25
 
 ### 🐛 Bug Fixes
