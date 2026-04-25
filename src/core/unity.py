@@ -607,10 +607,26 @@ class UnityLogic:
 
             if has_animator:
                 print("Animator detected, using AssetStudioModCLI for export...")
-                cli_count = UnityLogic._export_via_cli(
-                    physical_paths, export_dir, mode="animator", bundle_keys=bundle_keys
-                )
-                count += cli_count
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    UnityLogic._export_via_cli(
+                        physical_paths, tmp_dir, mode="animator", bundle_keys=bundle_keys
+                    )
+                    cli_count = UnityLogic._flatten_directory(tmp_dir, export_dir)
+                    count += cli_count
+
+            def get_save_path(base_name, extension):
+                file_name = f"{base_name}{extension}"
+                target_path = os.path.join(export_dir, file_name)
+                if not os.path.exists(target_path):
+                    return target_path
+                counter = 1
+                while True:
+                    candidate = os.path.join(
+                        export_dir, f"{base_name}_{counter}{extension}"
+                    )
+                    if not os.path.exists(candidate):
+                        return candidate
+                    counter += 1
 
             # We always check for other assets too, but limit to main bundle assets 
             # unless export_all_bundles is explicitly requested.
@@ -625,30 +641,31 @@ class UnityLogic:
                     try:
                         data = obj.parse_as_object()
                         name = getattr(data, "m_Name", f"Unnamed_{obj.path_id}")
+                        safe_name = UnityLogic._sanitize_export_name(name) or f"Unnamed_{obj.path_id}"
 
                         if obj.type.name in ["Texture2D", "Sprite"] and hasattr(
                             data, "image"
                         ):
-                            UnityLogic._save_asset(
-                                export_dir, obj.type.name, f"{name}.png", data.image
-                            )
+                            save_path = get_save_path(safe_name, ".png")
+                            data.image.save(save_path)
                             count += 1
                         elif obj.type.name == "TextAsset" and hasattr(data, "m_Script"):
-                            UnityLogic._save_asset(
-                                export_dir, "TextAsset", f"{name}.txt", data.m_Script
-                            )
+                            save_path = get_save_path(safe_name, ".txt")
+                            with open(save_path, "w", encoding="utf-8") as f:
+                                f.write(data.m_Script)
                             count += 1
                         elif obj.type.name == "Mesh" and hasattr(data, "export"):
-                            # Simple OBJ export for static meshes in non-animator bundles
-                            UnityLogic._save_asset(
-                                export_dir, "Mesh", f"{name}.obj", data.export()
-                            )
+                            save_path = get_save_path(safe_name, ".obj")
+                            with open(save_path, "w", encoding="utf-8") as f:
+                                f.write(data.export())
                             count += 1
                         elif obj.type.name == "AudioClip" and hasattr(data, "samples"):
-                            for sample in data.samples:
-                                UnityLogic._save_asset(
-                                    export_dir, "AudioClip", f"{name}.wav", sample
-                                )
+                            for idx, sample in enumerate(data.samples):
+                                suffix = f"_{idx}" if len(data.samples) > 1 else ""
+                                save_path = get_save_path(f"{safe_name}{suffix}", ".wav")
+                                with open(save_path, "wb") as f:
+                                    f.write(sample)
+                            count += 1
                     except:
                         continue
             print(f"Export completed. Total {count} items saved to {export_dir}")
@@ -702,39 +719,54 @@ class UnityLogic:
                 obj_type = object_type or obj.type.name
 
                 if obj_type == "Animator":
-                    UnityLogic.export_animator_with_dependencies(
-                        [physical_path],
-                        export_dir,
-                        bundle_keys={physical_path: bundle_key},
+                    return (
+                        UnityLogic.export_animator_with_dependencies(
+                            [physical_path],
+                            export_dir,
+                            bundle_keys={physical_path: bundle_key},
+                        )
+                        > 0
                     )
-                    return True
+
+                def get_save_path(base_name, extension):
+                    file_name = f"{base_name}{extension}"
+                    target_path = os.path.join(export_dir, file_name)
+                    if not os.path.exists(target_path):
+                        return target_path
+                    counter = 1
+                    while True:
+                        candidate = os.path.join(
+                            export_dir, f"{base_name}_{counter}{extension}"
+                        )
+                        if not os.path.exists(candidate):
+                            return candidate
+                        counter += 1
 
                 if (
                     obj_type in ["Texture2D", "Sprite"]
                     and parsed is not None
                     and hasattr(parsed, "image")
                 ):
-                    UnityLogic._save_asset(
-                        export_dir, obj_type, f"{safe_name}.png", parsed.image
-                    )
+                    save_path = get_save_path(safe_name, ".png")
+                    parsed.image.save(save_path)
                     return True
                 if (
                     obj_type == "TextAsset"
                     and parsed is not None
                     and hasattr(parsed, "m_Script")
                 ):
-                    UnityLogic._save_asset(
-                        export_dir, "TextAsset", f"{safe_name}.txt", parsed.m_Script
-                    )
+                    save_path = get_save_path(safe_name, ".txt")
+                    with open(save_path, "w", encoding="utf-8") as f:
+                        f.write(parsed.m_Script)
                     return True
                 if (
                     obj_type == "Mesh"
                     and parsed is not None
                     and hasattr(parsed, "export")
                 ):
-                    UnityLogic._save_asset(
-                        export_dir, "Mesh", f"{safe_name}.obj", parsed.export()
-                    )
+                    save_path = get_save_path(safe_name, ".obj")
+                    with open(save_path, "w", encoding="utf-8") as f:
+                        f.write(parsed.export())
                     return True
                 if (
                     obj_type == "AudioClip"
@@ -743,15 +775,11 @@ class UnityLogic:
                 ):
                     for idx, sample in enumerate(parsed.samples):
                         suffix = f"_{idx}" if len(parsed.samples) > 1 else ""
-                        UnityLogic._save_asset(
-                            export_dir,
-                            "AudioClip",
-                            f"{safe_name}{suffix}.wav",
-                            sample,
-                        )
+                        save_path = get_save_path(f"{safe_name}{suffix}", ".wav")
+                        with open(save_path, "wb") as f:
+                            f.write(sample)
                     return True
                 if obj_type == "MonoBehaviour" and parsed is not None:
-                    # Export MonoBehaviour data as JSON directly to export_dir
                     try:
                         import json
 
@@ -759,7 +787,7 @@ class UnityLogic:
                         json_data = json.dumps(
                             type_tree, indent=2, ensure_ascii=False, default=str
                         )
-                        save_path = os.path.join(export_dir, f"{safe_name}.json")
+                        save_path = get_save_path(safe_name, ".json")
                         with open(save_path, "w", encoding="utf-8") as f:
                             f.write(json_data)
                         return True
@@ -777,12 +805,37 @@ class UnityLogic:
         if not physical_paths:
             return 0
         try:
-            return UnityLogic._export_via_cli(
-                physical_paths, export_dir, mode="animator", bundle_keys=bundle_keys
-            )
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                UnityLogic._export_via_cli(
+                    physical_paths, tmp_dir, mode="animator", bundle_keys=bundle_keys
+                )
+                return UnityLogic._flatten_directory(tmp_dir, export_dir)
         except Exception as e:
             print(f"Animator export error: {e}")
             return 0
+
+    @staticmethod
+    def _flatten_directory(source_dir, target_dir):
+        """Recursively move all files from source_dir to target_dir, flattening the structure."""
+        moved_count = 0
+        for root, _, files in os.walk(source_dir):
+            for file_name in files:
+                source_path = os.path.join(root, file_name)
+                target_path = os.path.join(target_dir, file_name)
+
+                if os.path.exists(target_path):
+                    base, ext = os.path.splitext(file_name)
+                    counter = 1
+                    while True:
+                        candidate = os.path.join(target_dir, f"{base}_{counter}{ext}")
+                        if not os.path.exists(candidate):
+                            target_path = candidate
+                            break
+                        counter += 1
+
+                shutil.move(source_path, target_path)
+                moved_count += 1
+        return moved_count
 
     @staticmethod
     def batch_export_animators(export_configs, tmp_root):
@@ -816,24 +869,7 @@ class UnityLogic:
                 bundle_keys=all_bundle_keys,
             )
 
-            exported_files = 0
-            for root, _, files in os.walk(export_dir):
-                for file_name in files:
-                    source_path = os.path.join(root, file_name)
-                    target_path = os.path.join(tmp_root, file_name)
-
-                    if os.path.exists(target_path):
-                        base, ext = os.path.splitext(file_name)
-                        counter = 1
-                        while True:
-                            candidate = os.path.join(tmp_root, f"{base}_{counter}{ext}")
-                            if not os.path.exists(candidate):
-                                target_path = candidate
-                                break
-                            counter += 1
-
-                    shutil.move(source_path, target_path)
-                    exported_files += 1
+            exported_files = UnityLogic._flatten_directory(export_dir, tmp_root)
 
         return exported_files
 
