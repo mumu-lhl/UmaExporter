@@ -503,7 +503,9 @@ class ExportController:
         return (exported_count + texture_exports) > 0
 
     def _export_head_facial_target(self, target_dir, phys_path, asset, target):
-        """Export the facial_target MonoBehaviour from the head asset file."""
+        """Export the facial_target MonoBehaviour from the head asset file.
+        Includes fallback logic to _00 suffix if specific one is not found.
+        """
         try:
             logical_path = target.get("logical_path", "")
             path_parts = logical_path.rsplit("/", 1)
@@ -512,11 +514,23 @@ class ExportController:
 
             folder_path = path_parts[0]
             folder_name = folder_path.split("/")[-1]
+            # folder_name is like chr1234_05
+            
             facial_target_name = f"ast_{folder_name}_facial_target"
-
             path_id = UnityLogic.find_monobehaviour_by_name(
                 phys_path, facial_target_name, bundle_key=asset.get("key")
             )
+
+            # Fallback logic: if chrXXXX_YY's facial target is missing, try chrXXXX_00
+            if path_id is None and "_" in folder_name:
+                base_folder_name = folder_name.rsplit("_", 1)[0] + "_00"
+                if base_folder_name != folder_name:
+                    fallback_facial_target_name = f"ast_{base_folder_name}_facial_target"
+                    path_id = UnityLogic.find_monobehaviour_by_name(
+                        phys_path, fallback_facial_target_name, bundle_key=asset.get("key")
+                    )
+                    if path_id is not None:
+                        facial_target_name = fallback_facial_target_name
 
             if path_id is None:
                 return 0
