@@ -22,15 +22,36 @@ def _custom_load_file(self, file, is_dependency=False, name=None):
     if isinstance(file, str):
         # Resolve path if it's relative
         phys_path = file
-        if not os.path.exists(phys_path) and self.path:
-            phys_path = os.path.join(self.path, file)
+        if not os.path.exists(phys_path):
+            # 1. Try relative to current environment path
+            if self.path:
+                phys_path = os.path.join(self.path, file)
+            
+            # 2. If still not found, and it looks like an UMA hash (32 chars), 
+            # try to find it in the standard dat structure.
+            if not os.path.exists(phys_path) and len(file) == 32:
+                data_root = Config.get_data_root()
+                if data_root:
+                    candidate = os.path.join(data_root, file[:2], file)
+                    if os.path.exists(candidate):
+                        phys_path = candidate
 
         if os.path.exists(phys_path):
-            data_root = Config.get_data_root()
-            if phys_path.startswith(data_root):
+            # Normalize paths for comparison
+            abs_phys_path = os.path.abspath(phys_path)
+            data_root = os.path.abspath(Config.get_data_root())
+            
+            # Case-insensitive comparison on Windows
+            is_in_data_root = False
+            if os.name == "nt":
+                is_in_data_root = abs_phys_path.lower().startswith(data_root.lower())
+            else:
+                is_in_data_root = abs_phys_path.startswith(data_root)
+
+            if is_in_data_root:
                 # Try to get key for this file
-                key = UnityLogic.get_key_for_path(phys_path)
-                decrypted_data = UnityLogic._load_bundle_data(phys_path, bundle_key=key)
+                key = UnityLogic.get_key_for_path(abs_phys_path)
+                decrypted_data = UnityLogic._load_bundle_data(abs_phys_path, bundle_key=key)
                 if decrypted_data:
                     # Pass the decrypted bytes directly to original load_file
                     return _orig_load_file(
@@ -66,7 +87,7 @@ class UnityLogic:
     def get_key_for_path(physical_path):
         if UnityLogic._key_provider:
             # Extract hash from path (it's the filename)
-            f_hash = os.path.basename(physical_path)
+            f_hash = os.path.basename(physical_path).lower()
             return UnityLogic._key_provider(f_hash)
         return None
 
