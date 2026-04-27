@@ -6,6 +6,7 @@ import apsw
 from collections import OrderedDict
 from src.core.config import Config
 from src.core.decryptor import get_db_hex_key
+from src.core.utils import normalize_outfit_id
 
 
 from src.core.monitor import Monitor
@@ -89,6 +90,7 @@ class MasterDatabase:
         if not self.conn or not dress_id:
             return None
         try:
+            dress_id = normalize_outfit_id(dress_id)
             cursor = self.conn.cursor()
             # Convert the full 6-digit outfit_id to integer for querying dress_data
             # e.g., "000001" → 1, "000011" → 11
@@ -521,6 +523,7 @@ class UmaDatabase:
                 rf"chara_stand_{re.escape(chara_id)}_(\d{{6}})", texture_name
             )
             outfit_id = outfit_match.group(1) if outfit_match else None
+
             dress_name = (
                 self.master_db.get_dress_name(outfit_id)
                 if self.master_db and outfit_id
@@ -585,6 +588,7 @@ class UmaDatabase:
         return rows
 
     def debug_find_related_paths(self, category, chara_id, outfit_id, limit=40):
+        outfit_id = normalize_outfit_id(outfit_id)
         cursor = self.conn.cursor()
         outfit_main = outfit_id[:4] if outfit_id else ""
         outfit_suffix = outfit_id[-2:] if outfit_id and len(outfit_id) >= 6 else ""
@@ -630,6 +634,7 @@ class UmaDatabase:
         return results[:limit]
 
     def find_character_component_candidates(self, category, chara_id, outfit_id):
+        outfit_id = normalize_outfit_id(outfit_id)
         cursor = self.conn.cursor()
         outfit_main = outfit_id[:4] if outfit_id else ""
         outfit_suffix = outfit_id[-2:] if outfit_id and len(outfit_id) >= 6 else ""

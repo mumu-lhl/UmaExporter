@@ -4,6 +4,7 @@ import dearpygui.dearpygui as dpg
 from src.core.config import Config
 from src.core.unity import UnityLogic
 from src.core.i18n import i18n
+from src.core.utils import normalize_outfit_id
 
 
 class ExportController:
@@ -209,6 +210,7 @@ class ExportController:
         )
 
     def _get_character_outfit_main_suffix(self, outfit_id):
+        outfit_id = normalize_outfit_id(outfit_id)
         if not outfit_id or len(outfit_id) < 6:
             return None, None
 
@@ -224,6 +226,7 @@ class ExportController:
         Check if the outfit is a generic/universal costume.
         A generic costume is when the 6-digit outfit_id doesn't start with the 4-digit chara_id.
         """
+        outfit_id = normalize_outfit_id(outfit_id)
         if not chara_id or not outfit_id or len(outfit_id) < 4:
             return False
         return outfit_id[:4] != chara_id
@@ -503,7 +506,8 @@ class ExportController:
         return (exported_count + texture_exports) > 0
 
     def _export_head_facial_target(self, target_dir, phys_path, asset, target):
-        """Export the facial_target MonoBehaviour from the head asset file.
+        """Export the facial MonoBehaviour from the head asset file.
+        Tries both ast_*_facial_target and ast_*_facial naming conventions.
         Includes fallback logic to _00 suffix if specific one is not found.
         """
         try:
@@ -515,22 +519,29 @@ class ExportController:
             folder_path = path_parts[0]
             folder_name = folder_path.split("/")[-1]
             # folder_name is like chr1234_05
-            
-            facial_target_name = f"ast_{folder_name}_facial_target"
-            path_id = UnityLogic.find_monobehaviour_by_name(
-                phys_path, facial_target_name, bundle_key=asset.get("key")
-            )
 
-            # Fallback logic: if chrXXXX_YY's facial target is missing, try chrXXXX_00
-            if path_id is None and "_" in folder_name:
+            # List of possible object names to try
+            possible_names = [
+                f"ast_{folder_name}_facial_target",
+                f"ast_{folder_name}_facial",
+            ]
+
+            # Add fallback names with _00 suffix
+            if "_" in folder_name:
                 base_folder_name = folder_name.rsplit("_", 1)[0] + "_00"
                 if base_folder_name != folder_name:
-                    fallback_facial_target_name = f"ast_{base_folder_name}_facial_target"
-                    path_id = UnityLogic.find_monobehaviour_by_name(
-                        phys_path, fallback_facial_target_name, bundle_key=asset.get("key")
-                    )
-                    if path_id is not None:
-                        facial_target_name = fallback_facial_target_name
+                    possible_names.append(f"ast_{base_folder_name}_facial_target")
+                    possible_names.append(f"ast_{base_folder_name}_facial")
+
+            found_name = None
+            path_id = None
+            for name in possible_names:
+                path_id = UnityLogic.find_monobehaviour_by_name(
+                    phys_path, name, bundle_key=asset.get("key")
+                )
+                if path_id is not None:
+                    found_name = name
+                    break
 
             if path_id is None:
                 return 0
@@ -543,11 +554,11 @@ class ExportController:
                 path_id,
                 export_dir,
                 object_type="MonoBehaviour",
-                object_name=facial_target_name,
+                object_name=found_name,
                 bundle_key=asset.get("key"),
             )
 
             return 1 if success else 0
         except Exception as e:
-            print(f"Failed to export facial_target: {e}")
+            print(f"Failed to export facial data: {e}")
             return 0
