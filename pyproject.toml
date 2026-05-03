@@ -1,6 +1,6 @@
 [project]
 name = "uma-exporter"
-version = "0.3.7"
+version = "0.3.8"
 description = "Another umamusume exporter, cross-platform."
 readme = "README.md"
 requires-python = ">=3.14"
