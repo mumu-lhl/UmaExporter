@@ -169,6 +169,11 @@ class PreviewController:
                 self._clear_preview_texture(prefix)
                 self._clear_thumbnail_texture(prefix)
 
+            # Clear export status when selection changes
+            export_status_tag = f"{prefix}ui_export_status"
+            if dpg.does_item_exist(export_status_tag):
+                dpg.set_value(export_status_tag, "")
+
             # Special case for scene/prop: Always clear internal objects if dragging
             # to keep the preview focused only on the thumbnail.
             is_scene_prop = prefix in ("scene_", "prop_")
