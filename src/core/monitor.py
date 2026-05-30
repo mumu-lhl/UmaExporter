@@ -23,23 +23,25 @@ class Monitor:
     def _initialize():
         if not Config.PROFILE or Monitor._log_file:
             return
-        
+
         with Monitor._lock:
             if Monitor._log_file:
                 return
-            
+
             profile_dir = Config.get_profile_dir()
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             Monitor._log_file = os.path.join(profile_dir, f"perf_{timestamp}.jsonl")
             Monitor._start_time = time.time()
-            
+
             # Initial header entry
-            Monitor._write_entry({
-                "type": "header",
-                "timestamp": timestamp,
-                "version": "1.0",
-                "start_time": Monitor._start_time
-            })
+            Monitor._write_entry(
+                {
+                    "type": "header",
+                    "timestamp": timestamp,
+                    "version": "1.0",
+                    "start_time": Monitor._start_time,
+                }
+            )
 
     @staticmethod
     def _write_entry(entry: dict):
@@ -55,21 +57,23 @@ class Monitor:
     def record(name: str, value: float):
         if not Config.PROFILE:
             return
-        
+
         Monitor._initialize()
-        
+
         with Monitor._lock:
             if name not in Monitor._metrics:
                 Monitor._metrics[name] = []
             Monitor._metrics[name].append(value)
-            
+
             # Write individual event to JSONL for real-time persistence
-            Monitor._write_entry({
-                "type": "event",
-                "name": name,
-                "value": value,
-                "timestamp": time.time() - Monitor._start_time
-            })
+            Monitor._write_entry(
+                {
+                    "type": "event",
+                    "name": name,
+                    "value": value,
+                    "timestamp": time.time() - Monitor._start_time,
+                }
+            )
 
     @staticmethod
     def get_summary():
@@ -82,7 +86,7 @@ class Monitor:
                     "count": len(values),
                     "min": min(values),
                     "max": max(values),
-                    "avg": sum(values) / len(values)
+                    "avg": sum(values) / len(values),
                 }
             return summary
 
@@ -91,15 +95,19 @@ class Monitor:
         """Called at app exit to write final summary."""
         if not Monitor._log_file:
             return
-            
+
         summary = Monitor.get_summary()
-        Monitor._write_entry({
-            "type": "summary",
-            "metrics": summary,
-            "end_time": time.time(),
-            "total_duration": time.time() - Monitor._start_time
-        })
-        print(f"[PERF] Session monitoring finalized. Data saved to: {Monitor._log_file}")
+        Monitor._write_entry(
+            {
+                "type": "summary",
+                "metrics": summary,
+                "end_time": time.time(),
+                "total_duration": time.time() - Monitor._start_time,
+            }
+        )
+        print(
+            f"[PERF] Session monitoring finalized. Data saved to: {Monitor._log_file}"
+        )
 
     @staticmethod
     def time_func(name: Optional[str] = None):
@@ -115,7 +123,7 @@ class Monitor:
                 result = func(*args, **kwargs)
                 elapsed = time.perf_counter() - start_time
                 metric_name = name or func.__name__
-                
+
                 # Immediate console feedback
                 # print(f"[PERF] {metric_name}: {elapsed:.4f}s")
                 Monitor.record(metric_name, elapsed)

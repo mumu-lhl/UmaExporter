@@ -9,8 +9,10 @@ from src.core.config import Config
 def main():
     parser = argparse.ArgumentParser(description="Uma Musume Exporter")
     parser.add_argument("--f3d-viewer", action="store_true", help="Launch F3D viewer")
-    parser.add_argument("--profile", action="store_true", help="Enable performance monitoring")
-    
+    parser.add_argument(
+        "--profile", action="store_true", help="Enable performance monitoring"
+    )
+
     args, unknown = parser.parse_known_args()
 
     # 1. HARD GUARD: Check for our custom viewer flag first.
@@ -36,7 +38,7 @@ def main():
             # Change to executable directory for relative paths (e.g., as_cli)
             _executable_dir = os.path.dirname(sys.executable)
             os.chdir(_executable_dir)
-            
+
             # Only redirect logs if NOT profiling, so we can see output in console
             if not Config.PROFILE:
                 sys.stderr = open("error.log", "a", encoding="utf-8", buffering=1)

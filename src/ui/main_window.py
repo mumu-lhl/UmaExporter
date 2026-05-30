@@ -554,11 +554,13 @@ class UmaExporterApp:
 
     def _on_app_exit(self):
         from src.core.monitor import Monitor
+
         Monitor.finalize()
         self.f3d_service.cleanup()
 
     def run(self):
         from src.core.monitor import Monitor
+
         if Config.PROFILE:
             dpg.show_metrics()
 

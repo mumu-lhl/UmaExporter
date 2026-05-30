@@ -51,7 +51,9 @@ class SettingsController:
             def finalize():
                 if success:
                     if used_source_name:
-                        msg = i18n("msg_translations_updated_from").format(used_source_name)
+                        msg = i18n("msg_translations_updated_from").format(
+                            used_source_name
+                        )
                     else:
                         msg = i18n("msg_translations_updated")
                     dpg.set_value(
@@ -69,4 +71,3 @@ class SettingsController:
             self.app._queue_ui_task(finalize)
 
         self.app.translation_service.download_translations(callback, source=source)
-

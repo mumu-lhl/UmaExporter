@@ -414,22 +414,39 @@ class UmaDatabase:
         """Search specifically for scene assets in 3d/env/"""
         cursor = self.conn.cursor()
         cols = "i, n, l, h, e"
+        excluded_filters = (
+            "n NOT LIKE '%_cloth00/%' AND n NOT LIKE '%_cloth00' "
+            "AND n NOT LIKE '%/ast_%' AND n NOT LIKE 'ast_%'"
+        )
         if limit is None:
             cursor.execute(
-                f"SELECT {cols} FROM a WHERE n LIKE ? AND n LIKE '3d/env/%'",
+                f"SELECT {cols} FROM a WHERE n LIKE ? AND n LIKE '3d/env/%' AND {excluded_filters}",
                 (f"%{query}%",),
             )
         else:
             cursor.execute(
-                f"SELECT {cols} FROM a WHERE n LIKE ? AND n LIKE '3d/env/%' LIMIT ?",
+                f"SELECT {cols} FROM a WHERE n LIKE ? AND n LIKE '3d/env/%' AND {excluded_filters} LIMIT ?",
                 (f"%{query}%", limit),
             )
-        return cursor.fetchall()
+        rows = cursor.fetchall()
+
+        def asset_name_sort_key(row):
+            _, name, *_ = row
+            parent_dir = os.path.dirname(name.rstrip("/"))
+            sort_name = os.path.basename(parent_dir) if parent_dir else name
+            return (sort_name.casefold(), name.casefold())
+
+        rows.sort(key=asset_name_sort_key)
+        return rows
 
     def search_props(self, query="", limit=None):
         """Search specifically for prop assets in 3d/chara/prop, 3d/chara/toonprop, and 3d/chara/richprop"""
         cursor = self.conn.cursor()
         cols = "i, n, l, h, e"
+        excluded_filters = (
+            "n NOT LIKE '%_cloth00/%' AND n NOT LIKE '%_cloth00' "
+            "AND n NOT LIKE '%/ast_%' AND n NOT LIKE 'ast_%'"
+        )
         conditions = [
             "n LIKE '3d/chara/prop/%'",
             "n LIKE '3d/chara/toonprop/%'",
@@ -439,15 +456,26 @@ class UmaDatabase:
 
         if limit is None:
             cursor.execute(
-                f"SELECT {cols} FROM a WHERE n LIKE ? AND {path_filter}",
+                f"SELECT {cols} FROM a WHERE n LIKE ? AND {path_filter} AND {excluded_filters}",
                 (f"%{query}%",),
             )
         else:
             cursor.execute(
-                f"SELECT {cols} FROM a WHERE n LIKE ? AND {path_filter} LIMIT ?",
+                f"SELECT {cols} FROM a WHERE n LIKE ? AND {path_filter} AND {excluded_filters} LIMIT ?",
                 (f"%{query}%", limit),
             )
-        return cursor.fetchall()
+        rows = cursor.fetchall()
+
+        # Sort by the asset directory name, e.g. prop1811_00 for
+        # 3d/chara/prop/prop1811_00/pfb_chr_prop1811_00.
+        def prop_sort_key(row):
+            _, name, *_ = row
+            parent_dir = os.path.dirname(name.rstrip("/"))
+            sort_name = os.path.basename(parent_dir) if parent_dir else name
+            return (sort_name.casefold(), name.casefold())
+
+        rows.sort(key=prop_sort_key)
+        return rows
 
     def get_character_entries(self):
         """Return character logo assets, excluding placeholder character chr0000."""

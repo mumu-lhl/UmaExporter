@@ -33,8 +33,6 @@ class TranslationService:
             },
         ]
 
-
-
     def _get_cache_path(self, lang):
         return os.path.join(self._cache_dir, f"text_data_{lang}.json")
 

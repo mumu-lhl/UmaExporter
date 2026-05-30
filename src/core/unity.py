@@ -26,8 +26,8 @@ def _custom_load_file(self, file, is_dependency=False, name=None):
             # 1. Try relative to current environment path
             if self.path:
                 phys_path = os.path.join(self.path, file)
-            
-            # 2. If still not found, and it looks like an UMA hash (32 chars), 
+
+            # 2. If still not found, and it looks like an UMA hash (32 chars),
             # try to find it in the standard dat structure.
             if not os.path.exists(phys_path) and len(file) == 32:
                 data_root = Config.get_data_root()
@@ -40,7 +40,7 @@ def _custom_load_file(self, file, is_dependency=False, name=None):
             # Normalize paths for comparison
             abs_phys_path = os.path.abspath(phys_path)
             data_root = os.path.abspath(Config.get_data_root())
-            
+
             # Case-insensitive comparison on Windows
             is_in_data_root = False
             if os.name == "nt":
@@ -51,7 +51,9 @@ def _custom_load_file(self, file, is_dependency=False, name=None):
             if is_in_data_root:
                 # Try to get key for this file
                 key = UnityLogic.get_key_for_path(abs_phys_path)
-                decrypted_data = UnityLogic._load_bundle_data(abs_phys_path, bundle_key=key)
+                decrypted_data = UnityLogic._load_bundle_data(
+                    abs_phys_path, bundle_key=key
+                )
                 if decrypted_data:
                     # Pass the decrypted bytes directly to original load_file
                     return _orig_load_file(
@@ -115,7 +117,7 @@ class UnityLogic:
             if bundle_key is not None and str(bundle_key).strip() != "":
                 try:
                     decryption_key = int(bundle_key)
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     pass
 
             with open(physical_path, "rb") as f:
@@ -557,7 +559,9 @@ class UnityLogic:
             return None
 
     @staticmethod
-    def export_unity_assets(physical_paths, export_dir, bundle_keys=None, export_all_bundles=False):
+    def export_unity_assets(
+        physical_paths, export_dir, bundle_keys=None, export_all_bundles=False
+    ):
         """Optimized entry point for exporting Unity assets"""
         if not physical_paths:
             return 0
@@ -609,7 +613,10 @@ class UnityLogic:
                 print("Animator detected, using AssetStudioModCLI for export...")
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     UnityLogic._export_via_cli(
-                        physical_paths, tmp_dir, mode="animator", bundle_keys=bundle_keys
+                        physical_paths,
+                        tmp_dir,
+                        mode="animator",
+                        bundle_keys=bundle_keys,
                     )
                     cli_count = UnityLogic._flatten_directory(tmp_dir, export_dir)
                     count += cli_count
@@ -628,12 +635,12 @@ class UnityLogic:
                         return candidate
                     counter += 1
 
-            # We always check for other assets too, but limit to main bundle assets 
+            # We always check for other assets too, but limit to main bundle assets
             # unless export_all_bundles is explicitly requested.
             for i, asset in enumerate(env.assets):
                 if not export_all_bundles and i >= main_assets_count:
                     break
-                    
+
                 for obj in asset.objects.values():
                     if obj.type.name in ["AssetBundle", "PreloadData"]:
                         continue
@@ -641,7 +648,10 @@ class UnityLogic:
                     try:
                         data = obj.parse_as_object()
                         name = getattr(data, "m_Name", f"Unnamed_{obj.path_id}")
-                        safe_name = UnityLogic._sanitize_export_name(name) or f"Unnamed_{obj.path_id}"
+                        safe_name = (
+                            UnityLogic._sanitize_export_name(name)
+                            or f"Unnamed_{obj.path_id}"
+                        )
 
                         if obj.type.name in ["Texture2D", "Sprite"] and hasattr(
                             data, "image"
@@ -662,7 +672,9 @@ class UnityLogic:
                         elif obj.type.name == "AudioClip" and hasattr(data, "samples"):
                             for idx, sample in enumerate(data.samples):
                                 suffix = f"_{idx}" if len(data.samples) > 1 else ""
-                                save_path = get_save_path(f"{safe_name}{suffix}", ".wav")
+                                save_path = get_save_path(
+                                    f"{safe_name}{suffix}", ".wav"
+                                )
                                 with open(save_path, "wb") as f:
                                     f.write(sample)
                             count += 1
@@ -673,6 +685,7 @@ class UnityLogic:
         except Exception as e:
             print(f"Global export error: {e}")
             import traceback
+
             traceback.print_exc()
             return 0
 

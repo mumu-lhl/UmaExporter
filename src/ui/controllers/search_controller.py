@@ -719,7 +719,11 @@ class SearchController:
                                         dpg.add_text(f"ID: {item['outfit_id']}")
                                 dpg.add_text(item["dress_name"], wrap=180)
                                 if item.get("outfit_id"):
-                                    dpg.add_text(f"ID {item['outfit_id']}", wrap=180, color=[150, 150, 150])
+                                    dpg.add_text(
+                                        f"ID {item['outfit_id']}",
+                                        wrap=180,
+                                        color=[150, 150, 150],
+                                    )
                                 else:
                                     dpg.add_text("", wrap=180, color=[150, 150, 150])
 
@@ -759,7 +763,7 @@ class SearchController:
 
         self.app.current_character_outfit = user_data
         dpg.configure_item("character_export_button", enabled=True)
-        
+
         outfit_id = user_data.get("outfit_id")
         status_text = user_data.get("dress_name", "")
         if outfit_id:
