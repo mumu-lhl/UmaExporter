@@ -17,6 +17,12 @@ def main():
 
     # 1. HARD GUARD: Check for our custom viewer flag first.
     if args.f3d_viewer:
+        try:
+            sys.stdout.reconfigure(line_buffering=True, write_through=True)
+            sys.stderr.reconfigure(line_buffering=True, write_through=True)
+        except Exception:
+            pass
+
         from src.services.f3d.worker import launch_f3d_viewer_stdin
 
         try:

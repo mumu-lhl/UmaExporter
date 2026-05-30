@@ -25,6 +25,10 @@ class F3dService:
 
                 args.append("--f3d-viewer")
 
+                env = os.environ.copy()
+                env["PYTHONUNBUFFERED"] = "1"
+                env["PYTHONIOENCODING"] = "utf-8"
+
                 self.f3d_process = subprocess.Popen(
                     args,
                     stdin=subprocess.PIPE,
@@ -32,6 +36,7 @@ class F3dService:
                     stderr=subprocess.PIPE,
                     text=True,
                     bufsize=1,  # Line buffered
+                    env=env,
                     # On Windows, hide the console window
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 )

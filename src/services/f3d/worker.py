@@ -55,7 +55,7 @@ def launch_f3d_viewer_stdin():
     try:
         import f3d
     except ImportError:
-        print("[F3D] Error: f3d module not found.")
+        print("[F3D] Error: f3d module not found.", flush=True)
         return
 
     import threading
@@ -102,6 +102,7 @@ def launch_f3d_viewer_stdin():
             path = path.strip()
             if not path:
                 return
+
             if current_mesh and os.path.exists(current_mesh):
                 try:
                     os.remove(current_mesh)
@@ -118,10 +119,10 @@ def launch_f3d_viewer_stdin():
                 time.sleep(0.1)  # Small delay to ensure model is processed
                 interactor.trigger_command("set_camera isometric")
             except Exception as e:
-                print(f"[F3D] Warning: Could not set isometric view: {e}")
+                print(f"[F3D] Warning: Could not set isometric view: {e}", flush=True)
 
             window.render()
-            print(f"[F3D] Loaded: {path}")
+            print(f"[F3D] Loaded: {path}", flush=True)
 
         def timer_callback(t=None):
             # Non-blocking check for new paths from the queue
@@ -146,11 +147,11 @@ def launch_f3d_viewer_stdin():
     except KeyboardInterrupt:
         pass
     except Exception as e:
-        print(f"F3D Viewer Error: {e}")
+        print(f"F3D Viewer Error: {e}", flush=True)
     finally:
         if current_mesh and os.path.exists(current_mesh):
             try:
                 os.remove(current_mesh)
             except:
                 pass
-        print("[F3D] Viewer exiting.")
+        print("[F3D] Viewer exiting.", flush=True)
