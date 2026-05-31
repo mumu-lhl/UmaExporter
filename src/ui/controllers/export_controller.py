@@ -1,4 +1,5 @@
 import os
+import re
 import dearpygui.dearpygui as dpg
 
 from src.core.config import Config
@@ -432,6 +433,141 @@ class ExportController:
 
         return exported_count
 
+    def _matches_character_clothes_object(self, label, object_name):
+        if not object_name:
+            return False
+
+        # Only export the specific clothes MonoBehaviour wrappers that mirror
+        # the filenames we care about for body/head/tail exports.
+        patterns = {
+            "body": [
+                r"^ast_bdy\d{4}_\d{2}_skirt\d{2}$",
+                r"^pfb_bdy\d{4}_\d{2}_bust_cloth\d{2}$",
+                r"^pfb_bdy\d{4}_\d{2}_cloth\d{2}$",
+            ],
+            "head": [r"^pfb_chr\d{4}_\d{2}_cloth\d{2}$"],
+            "tail": [r"^pfb_tail\d{4}_\d{2}_cloth\d{2}$"],
+        }
+
+        return any(
+            re.match(pattern, object_name) for pattern in patterns.get(label, [])
+        )
+
+    def _find_monobehaviour_by_name(self, physical_path, object_name, bundle_key=None):
+        if not object_name:
+            return None
+
+        try:
+            env = UnityLogic._load_env(physical_path, bundle_key=bundle_key)
+            for asset in env.assets:
+                for obj in asset.objects.values():
+                    if obj.type.name != "MonoBehaviour":
+                        continue
+                    try:
+                        data = obj.read()
+                    except Exception:
+                        continue
+
+                    current_name = getattr(data, "m_Name", None)
+                    if current_name == object_name:
+                        return obj.path_id
+            return None
+        except Exception as e:
+            print(f"Find monobehaviour error for {object_name}: {e}")
+            return None
+
+    def _find_monobehaviour_by_script_name(
+        self, physical_path, script_name, bundle_key=None
+    ):
+        if not script_name:
+            return None
+
+        try:
+            env = UnityLogic._load_env(physical_path, bundle_key=bundle_key)
+            for asset in env.assets:
+                for obj in asset.objects.values():
+                    if obj.type.name != "MonoBehaviour":
+                        continue
+                    try:
+                        data = obj.read()
+                    except Exception:
+                        continue
+
+                    script_ptr = getattr(data, "m_Script", None)
+                    if not script_ptr:
+                        continue
+                    try:
+                        script_reader = script_ptr.deref()
+                    except Exception:
+                        script_reader = None
+                    if not script_reader:
+                        continue
+
+                    try:
+                        current_script_name = script_reader.peek_name()
+                    except Exception:
+                        current_script_name = None
+                    if current_script_name == script_name:
+                        return obj.path_id
+            return None
+        except Exception as e:
+            print(f"Find monobehaviour by script error for {script_name}: {e}")
+            return None
+
+    def _export_character_clothes_monobehaviours(self, target_dir, asset, label):
+        if not asset or not self.app.db:
+            return 0
+
+        base_dir = asset["full_path"].rsplit("/", 1)[0]
+        clothes_prefix = f"{base_dir}/clothes/"
+        clothes_assets = self.app.db.get_assets_by_prefix(clothes_prefix)
+        exported_count = 0
+        exported_names = set()
+
+        for clothes_asset in clothes_assets:
+            object_name = clothes_asset["full_path"].rsplit("/", 1)[-1]
+            if object_name in exported_names:
+                continue
+            if not self._matches_character_clothes_object(label, object_name):
+                continue
+
+            phys_path = os.path.join(
+                Config.get_data_root(),
+                clothes_asset["hash"][:2],
+                clothes_asset["hash"],
+            )
+            if not os.path.exists(phys_path):
+                continue
+
+            if object_name.startswith("pfb_"):
+                path_id = self._find_monobehaviour_by_script_name(
+                    phys_path,
+                    "CySpringDataContainer",
+                    bundle_key=clothes_asset.get("key"),
+                )
+            else:
+                path_id = self._find_monobehaviour_by_name(
+                    phys_path,
+                    object_name,
+                    bundle_key=clothes_asset.get("key"),
+                )
+            if path_id is None:
+                continue
+
+            success = UnityLogic.export_single_unity_object(
+                phys_path,
+                path_id,
+                target_dir,
+                object_type="MonoBehaviour",
+                object_name=object_name,
+                bundle_key=clothes_asset.get("key"),
+            )
+            if success:
+                exported_names.add(object_name)
+                exported_count += 1
+
+        return exported_count
+
     def _export_character_animator_group(self, target_dir, chara_id, outfit_id):
         targets = self._build_character_export_targets(chara_id, outfit_id)
         tail_target = self._resolve_character_tail_target(chara_id)
@@ -492,6 +628,11 @@ class ExportController:
                 asset,
                 texture_prefix_filter=target.get("texture_prefix"),
                 texture_export_prefix=target.get("texture_export_prefix"),
+            )
+            texture_exports += self._export_character_clothes_monobehaviours(
+                target_dir,
+                asset,
+                target["label"],
             )
 
             if target["label"] == "head":
