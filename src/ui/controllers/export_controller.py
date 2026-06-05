@@ -568,6 +568,70 @@ class ExportController:
 
         return exported_count
 
+    def _export_character_flare_monobehaviour(self, target_dir, asset, label):
+        """Export the component flare MonoBehaviour beside body/head/tail exports.
+
+        Character component flare bundles live under the component directory:
+        - 3d/chara/body/bdyXXXX_YY/flares/ast_bdyXXXX_YY_flare
+        - 3d/chara/head/chrXXXX_YY/flares/ast_chrXXXX_YY_flare
+        - 3d/chara/tail/tailXXXX_YY/flares/ast_tailXXXX_YY_flare
+
+        The MonoBehaviour to export has the same name as the flare bundle file.
+        Missing flare bundles are treated as optional, matching clothes export behavior.
+        """
+        if not asset or not self.app.db:
+            return 0
+
+        expected_prefixes = {
+            "body": "bdy",
+            "head": "chr",
+            "tail": "tail",
+        }
+        expected_prefix = expected_prefixes.get(label)
+        if expected_prefix is None:
+            return 0
+
+        base_dir = asset["full_path"].rsplit("/", 1)[0]
+        folder_name = base_dir.rsplit("/", 1)[-1]
+        if not folder_name.startswith(expected_prefix):
+            return 0
+
+        object_name = f"ast_{folder_name}_flare"
+        flare_path = f"{base_dir}/flares/{object_name}"
+        flare_asset = self.app.db.get_asset_by_path(flare_path)
+        if flare_asset is None:
+            return 0
+
+        flare_hash = flare_asset.get("hash")
+        if not flare_hash:
+            return 0
+
+        phys_path = os.path.join(
+            Config.get_data_root(),
+            flare_hash[:2],
+            flare_hash,
+        )
+        if not os.path.exists(phys_path):
+            return 0
+
+        path_id = UnityLogic.find_monobehaviour_by_name(
+            phys_path,
+            object_name,
+            bundle_key=flare_asset.get("key"),
+        )
+        if path_id is None:
+            return 0
+
+        success = UnityLogic.export_single_unity_object(
+            phys_path,
+            path_id,
+            target_dir,
+            object_type="MonoBehaviour",
+            object_name=object_name,
+            bundle_key=flare_asset.get("key"),
+        )
+        return 1 if success else 0
+
     def _export_character_animator_group(self, target_dir, chara_id, outfit_id):
         targets = self._build_character_export_targets(chara_id, outfit_id)
         tail_target = self._resolve_character_tail_target(chara_id)
@@ -630,6 +694,11 @@ class ExportController:
                 texture_export_prefix=target.get("texture_export_prefix"),
             )
             texture_exports += self._export_character_clothes_monobehaviours(
+                target_dir,
+                asset,
+                target["label"],
+            )
+            texture_exports += self._export_character_flare_monobehaviour(
                 target_dir,
                 asset,
                 target["label"],
