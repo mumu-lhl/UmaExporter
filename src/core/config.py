@@ -41,6 +41,10 @@ class Config:
     DB_ENCRYPTED = True
     # Performance monitoring flag
     PROFILE = False
+    # Square display and texture size for character stand illustrations.
+    CHARACTER_OUTFIT_IMAGE_SIZE = 180
+    # 3D dress icons use their original, more compact card presentation.
+    CHARACTER_3D_OUTFIT_ICON_SIZE = 96
 
     @classmethod
     def get_profile_dir(cls):
@@ -123,6 +127,28 @@ class Config:
 
                     cls.LANGUAGE = data.get("language", "Auto")
                     cls.REGION = data.get("region", "jp")
+                    image_size = data.get(
+                        "character_outfit_image_size",
+                        cls.CHARACTER_OUTFIT_IMAGE_SIZE,
+                    )
+                    try:
+                        cls.CHARACTER_OUTFIT_IMAGE_SIZE = max(1, int(image_size))
+                    except (TypeError, ValueError):
+                        print(
+                            "Invalid character_outfit_image_size in config; "
+                            f"using {cls.CHARACTER_OUTFIT_IMAGE_SIZE}."
+                        )
+                    icon_size = data.get(
+                        "character_3d_outfit_icon_size",
+                        cls.CHARACTER_3D_OUTFIT_ICON_SIZE,
+                    )
+                    try:
+                        cls.CHARACTER_3D_OUTFIT_ICON_SIZE = max(1, int(icon_size))
+                    except (TypeError, ValueError):
+                        print(
+                            "Invalid character_3d_outfit_icon_size in config; "
+                            f"using {cls.CHARACTER_3D_OUTFIT_ICON_SIZE}."
+                        )
                     print(f"Loaded language: {cls.LANGUAGE}, region: {cls.REGION}")
                     return
             except Exception as e:
@@ -146,6 +172,10 @@ class Config:
                     "base_path": cls.BASE_PATH,
                     "language": cls.LANGUAGE,
                     "region": cls.REGION,
+                    "character_outfit_image_size": cls.CHARACTER_OUTFIT_IMAGE_SIZE,
+                    "character_3d_outfit_icon_size": (
+                        cls.CHARACTER_3D_OUTFIT_ICON_SIZE
+                    ),
                 }
                 json.dump(data, f, indent=4)
                 print(f"Saved config to {CONFIG_FILE}")

@@ -633,6 +633,14 @@ class SearchController:
 
     def _render_character_outfit_grid(self, chara_id, items, request_id=None):
         parent = "character_outfits_content"
+        image_size = Config.CHARACTER_OUTFIT_IMAGE_SIZE
+        # The database normally performs this filter.  Retain it here so an
+        # already-cached list cannot render a 3D-only placeholder button.
+        items = [
+            item
+            for item in items
+            if item.get("texture_name") or item.get("icon_texture_name")
+        ]
         if request_id is None:
             self.app.thumbnail_request_ids["character_outfits"] += 1
             request_id = self.app.thumbnail_request_ids["character_outfits"]
@@ -647,7 +655,7 @@ class SearchController:
         except Exception:
             width = 800
 
-        columns = max(1, int(width / 220))
+        columns = max(1, int(width / (image_size + 40)))
         self.app.thumbnail_columns["character_outfits"] = columns
 
         def build_grid():
@@ -697,12 +705,24 @@ class SearchController:
                             if display_name.startswith(chara_prefix):
                                 display_name = display_name[len(chara_prefix) :]
                             with dpg.group():
+                                has_stand = bool(item.get("texture_name"))
+
+                                # Keep the original compact presentation for
+                                # 3D-discovered dress icons while stand
+                                # illustrations use the larger configured card.
+                                card_size = (
+                                    image_size
+                                    if has_stand
+                                    else Config.CHARACTER_3D_OUTFIT_ICON_SIZE
+                                )
                                 img_id = dpg.add_image(
                                     "thumb_placeholder",
-                                    width=180,
-                                    height=180,
+                                    width=card_size,
+                                    height=card_size,
                                 )
+
                                 item["item_tag"] = img_id
+                                item["selection_tags"] = [img_id]
                                 with dpg.item_handler_registry() as handler:
                                     dpg.add_item_clicked_handler(
                                         callback=lambda s, a, u, item_id=img_id: (
@@ -717,49 +737,71 @@ class SearchController:
                                     dpg.add_text(item["dress_name"])
                                     if item.get("outfit_id"):
                                         dpg.add_text(f"ID: {item['outfit_id']}")
-                                dpg.add_text(item["dress_name"], wrap=180)
+
+                                if has_stand:
+                                    self.app.lazy_thumb_queues[
+                                        "character_outfits"
+                                    ].append(
+                                        {
+                                            "img_id": img_id,
+                                            "cache_name": item["cache_name"],
+                                            "cache_path": thumb_manager.get_character_cache_path(
+                                                item["cache_name"]
+                                            ),
+                                            "hash": item["hash"],
+                                            "key": item["key"],
+                                            "texture_name": item["texture_name"],
+                                            "size": image_size,
+                                        }
+                                    )
+
+                                if not has_stand and item.get("icon_texture_name"):
+                                    self.app.lazy_thumb_queues[
+                                        "character_outfits"
+                                    ].append(
+                                        {
+                                            "img_id": img_id,
+                                            "cache_name": item["icon_cache_name"],
+                                            "cache_path": thumb_manager.get_character_cache_path(
+                                                item["icon_cache_name"]
+                                            ),
+                                            "hash": item["icon_hash"],
+                                            "key": item["icon_key"],
+                                            "texture_name": item["icon_texture_name"],
+                                            "size": Config.CHARACTER_3D_OUTFIT_ICON_SIZE,
+                                        }
+                                    )
+
+                                dpg.add_text(item["dress_name"], wrap=image_size)
                                 if item.get("outfit_id"):
                                     dpg.add_text(
                                         f"ID {item['outfit_id']}",
-                                        wrap=180,
+                                        wrap=image_size,
                                         color=[150, 150, 150],
                                     )
-                                else:
-                                    dpg.add_text("", wrap=180, color=[150, 150, 150])
-
-                                self.app.lazy_thumb_queues["character_outfits"].append(
-                                    {
-                                        "img_id": img_id,
-                                        "cache_name": item["cache_name"],
-                                        "cache_path": thumb_manager.get_character_cache_path(
-                                            item["cache_name"]
-                                        ),
-                                        "hash": item["hash"],
-                                        "key": item["key"],
-                                        "texture_name": item["texture_name"],
-                                        "size": 180,
-                                    }
-                                )
 
         self.app._queue_ui_task(build_grid)
 
     def on_character_outfit_selected(self, sender, app_data, user_data, *args):
-        previous = self.app.last_selected_character_outfit
-        if previous and previous != sender and dpg.does_item_exist(previous):
-            dpg.configure_item(previous, tint_color=[255, 255, 255, 255])
+        def set_image_tint(tag, color):
+            if not tag or not dpg.does_item_exist(tag):
+                return
+            if dpg.get_item_type(tag) != "mvAppItemType::mvImage":
+                return
+            dpg.configure_item(tag, tint_color=color)
 
-        if sender and dpg.does_item_exist(sender):
-            dpg.configure_item(sender, tint_color=[150, 200, 255, 255])
-            self.app.last_selected_character_outfit = sender
-        else:
-            self.app.last_selected_character_outfit = user_data.get("item_tag")
-            if self.app.last_selected_character_outfit and dpg.does_item_exist(
-                self.app.last_selected_character_outfit
-            ):
-                dpg.configure_item(
-                    self.app.last_selected_character_outfit,
-                    tint_color=[150, 200, 255, 255],
-                )
+        previous = self.app.last_selected_character_outfit
+        previous_tags = previous if isinstance(previous, list) else [previous]
+        for tag in previous_tags:
+            if tag != sender:
+                set_image_tint(tag, [255, 255, 255, 255])
+
+        selected_tags = user_data.get("selection_tags") or [
+            sender or user_data.get("item_tag")
+        ]
+        for tag in selected_tags:
+            set_image_tint(tag, [150, 200, 255, 255])
+        self.app.last_selected_character_outfit = selected_tags
 
         self.app.current_character_outfit = user_data
         dpg.configure_item("character_export_button", enabled=True)
@@ -888,23 +930,26 @@ class SearchController:
         if not queue:
             return False
 
-        first_visible_idx = -1
+        visible_indices = []
         for idx, task in enumerate(queue):
             try:
                 if dpg.is_item_visible(task["img_id"]):
-                    first_visible_idx = idx
-                    break
+                    visible_indices.append(idx)
+                    if len(visible_indices) == batch_size:
+                        break
             except Exception:
                 continue
 
-        if first_visible_idx == -1:
-            to_load_batch = queue[:batch_size]
-            remaining = queue[batch_size:]
-        else:
-            start = max(0, first_visible_idx - batch_size // 2)
-            end = min(len(queue), start + batch_size)
-            to_load_batch = queue[start:end]
-            remaining = queue[:start] + queue[end:]
+        # Do not decode bundles until their cards are actually on screen.  The
+        # previous fallback eagerly loaded the first batch whenever DPG had not
+        # finished its first layout pass, which made selecting a character
+        # compete with invisible 3D icon work.
+        if not visible_indices:
+            return False
+
+        selected = set(visible_indices)
+        to_load_batch = [task for idx, task in enumerate(queue) if idx in selected]
+        remaining = [task for idx, task in enumerate(queue) if idx not in selected]
 
         self.app.lazy_thumb_queues[domain] = remaining
 
@@ -933,7 +978,13 @@ class SearchController:
         if active_tab == "character_tab":
             try:
                 width = dpg.get_item_rect_size("character_outfits_panel")[0]
-                expected_columns = max(1, int(max(width, 1) / 220))
+                expected_columns = max(
+                    1,
+                    int(
+                        max(width, 1)
+                        / (Config.CHARACTER_OUTFIT_IMAGE_SIZE + 40)
+                    ),
+                )
             except Exception:
                 expected_columns = self.app.thumbnail_columns.get(
                     "character_outfits", 0
@@ -953,9 +1004,11 @@ class SearchController:
                     )
                     return
 
-            if self._process_character_lazy_queue("character_icons", 12):
+            # The outfit pane is the result of the current selection, so load
+            # it before background character-list icons.
+            if self._process_character_lazy_queue("character_outfits", 16):
                 return
-            self._process_character_lazy_queue("character_outfits", 16)
+            self._process_character_lazy_queue("character_icons", 12)
             return
 
         tab_to_prefix = {"scene_tab": "scene_", "prop_tab": "prop_"}

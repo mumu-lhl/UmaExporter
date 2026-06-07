@@ -113,6 +113,29 @@ class MasterDatabase:
             print(f"MasterDB dress_data query error: {e}")
             return None
 
+    def get_all_dress_data(self):
+        """Return the dress metadata used to map 3D body assets to UI dresses."""
+        if not self.conn:
+            return []
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "SELECT id, chara_id, body_type, body_type_sub, body_setting FROM dress_data"
+            )
+            return [
+                {
+                    "id": str(row[0]) if row[0] is not None else None,
+                    "chara_id": str(row[1]) if row[1] is not None else None,
+                    "body_type": str(row[2]) if row[2] is not None else None,
+                    "body_type_sub": str(row[3]) if row[3] is not None else None,
+                    "body_setting": str(row[4]) if row[4] is not None else None,
+                }
+                for row in cursor.fetchall()
+            ]
+        except Exception as e:
+            print(f"MasterDB dress list query error: {e}")
+            return []
+
     def get_chara_data(self, chara_id):
         """
         Query character data from chara_data table in master.mdb.
@@ -159,6 +182,8 @@ class UmaDatabase:
         self._deps_by_to = None
         self._dep_graph_lock = threading.Lock()
         self._asset_info_cache_limit = 16384
+        self._dress_icon_rows = None
+        self._dress_icon_by_dress_id = {}
 
     def _connect(self, db_path):
         if not db_path:
@@ -531,7 +556,12 @@ class UmaDatabase:
         return rows
 
     def get_character_outfit_assets(self, chara_id):
-        """Return stand illustration assets for one character."""
+        """Return stand and 3D-discoverable outfits for one character.
+
+        UmaViewer lists both character-specific body prefabs and common body
+        prefabs.  The latter have no stand illustration, so ``dress_data`` is
+        used to associate their body type/subtype with a dress icon and name.
+        """
         cursor = self.conn.cursor()
         cols = "i, n, l, h, e"
         cursor.execute(
@@ -544,7 +574,7 @@ class UmaDatabase:
             (f"chara/chr{chara_id}/chara_stand_{chara_id}_______",),
         )
 
-        rows = []
+        rows_by_outfit_id = {}
         for i_id, name, size, f_hash, key_val in cursor.fetchall():
             texture_name = name.split("/")[-1]
             outfit_match = re.fullmatch(
@@ -558,24 +588,153 @@ class UmaDatabase:
                 else None
             )
 
-            rows.append(
-                {
-                    "id": i_id,
-                    "chara_id": chara_id,
-                    "full_path": name,
-                    "size": size,
-                    "hash": f_hash,
-                    "key": key_val,
-                    "texture_name": texture_name,
-                    "cache_name": texture_name,
-                    "outfit_id": outfit_id,
-                    "dress_name": dress_name or f"Outfit {outfit_id}"
-                    if outfit_id
-                    else "Unknown",
-                }
+            if not outfit_id:
+                continue
+            stand_item = {
+                "id": i_id,
+                "chara_id": chara_id,
+                "full_path": name,
+                "size": size,
+                "hash": f_hash,
+                "key": key_val,
+                "texture_name": texture_name,
+                "cache_name": texture_name,
+                "outfit_id": outfit_id,
+                "dress_name": dress_name or f"Outfit {outfit_id}",
+                "has_stand": True,
+            }
+            rows_by_outfit_id[outfit_id] = stand_item
+
+        if not self.master_db:
+            return list(rows_by_outfit_id.values())
+
+        # Index actual body prefabs, matching UmaViewer's body-path based
+        # discovery.  This avoids displaying database entries whose model is
+        # absent in the selected game data.
+        cursor.execute(
+            """
+            SELECT i, n, l, h, e FROM a
+            WHERE n LIKE '3d/chara/body/bdy%/pfb_bdy%'
+              AND n NOT LIKE '%/clothes/%'
+            ORDER BY n
+            """
+        )
+        body_assets = {}
+        for i_id, name, size, f_hash, key_val in cursor.fetchall():
+            prefab_name = name.rsplit("/", 1)[-1]
+            match = re.match(r"pfb_bdy(\d{4})_(\d{2})(?:_|$)", prefab_name)
+            if not match:
+                continue
+            body_assets.setdefault(
+                (match.group(1), match.group(2)),
+                {"id": i_id, "full_path": name, "size": size, "hash": f_hash, "key": key_val},
             )
 
-        return rows
+        dress_data = self.master_db.get_all_dress_data()
+        dedicated_dresses = {}
+        common_dresses = {}
+        for dress in dress_data:
+            dress_id = dress.get("id")
+            body_type = (dress.get("body_type") or "").zfill(4)
+            body_sub = (dress.get("body_type_sub") or "").zfill(2)
+            if not dress_id or not body_type or not body_sub:
+                continue
+
+            # This reproduces UmaViewer.ListCostumes:
+            # - character prefabs: first CostumeEntry for chara_id + subtype
+            # - common prefabs: first CostumeEntry for body type + subtype
+            # ``setdefault`` preserves master-data order, the equivalent of
+            # UmaViewer's FirstOrDefault selection.
+            if dress.get("chara_id") == str(chara_id):
+                dedicated_dresses.setdefault(body_sub, dress)
+            elif dress.get("chara_id") == "0":
+                common_dresses.setdefault((body_type, body_sub), dress)
+
+        for (body_type, body_sub), asset in body_assets.items():
+            if body_type == str(chara_id).zfill(4):
+                dress = dedicated_dresses.get(body_sub)
+            else:
+                dress = common_dresses.get((body_type, body_sub))
+            if dress is None:
+                continue
+
+            # Keep the original master dress ID.  Export normalizes special
+            # IDs when it builds paths, while names and cached translations
+            # are keyed by the unmodified text_data[14] index.
+            dress_id = dress["id"]
+            item = {
+                **asset,
+                "chara_id": chara_id,
+                "texture_name": None,
+                "cache_name": None,
+                "outfit_id": dress_id,
+                "dress_name": self.master_db.get_dress_name(dress_id)
+                or f"Outfit {dress_id}",
+                "has_stand": False,
+            }
+            # Source-qualified keys keep a 3D card even when its dress ID
+            # matches a stand illustration (for example 101 vs 000101).
+            rows_by_outfit_id[f"3d:{dress_id}"] = item
+
+            # Icon bundle names include a model ID that is not consistently
+            # equal to dress_data.id.  This suffix lookup is the stable
+            # association available in the game metadata.  UmaViewer's
+            # broader Contains-based lookup is intentionally not used here:
+            # it can overwrite unrelated costume entries.
+            icon_row = self._get_dress_icon_for_dress_id(dress_id)
+            if icon_row:
+                _, icon_path, _, icon_hash, icon_key = icon_row
+                icon_name = icon_path.rsplit("/", 1)[-1]
+                item.update(
+                    {
+                        "icon_hash": icon_hash,
+                        "icon_key": icon_key,
+                        "icon_texture_name": icon_name,
+                        "icon_cache_name": icon_name,
+                    }
+                )
+
+        # A 3D-only card is represented by its dress icon.  Suppress the
+        # rare model-only entry for which the game has no matching icon;
+        # otherwise the UI would need an empty stand-image placeholder.
+        visible_items = [
+            item
+            for item in rows_by_outfit_id.values()
+            if item.get("has_stand") or item.get("icon_texture_name")
+        ]
+        return sorted(
+            visible_items,
+            key=lambda item: (not item.get("has_stand", False), item["outfit_id"]),
+        )
+
+    def _get_dress_icon_for_dress_id(self, dress_id):
+        """Return the first dress icon matching *dress_id*, cached per DB session."""
+        if dress_id in self._dress_icon_by_dress_id:
+            return self._dress_icon_by_dress_id[dress_id]
+
+        if self._dress_icon_rows is None:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                SELECT i, n, l, h, e FROM a
+                WHERE n LIKE 'outgame/dress/dress_%'
+                ORDER BY n
+                """
+            )
+            self._dress_icon_rows = cursor.fetchall()
+
+        # Equivalent to the prior SQL LIKE pattern ``dress_%{dress_id}_%``.
+        # In SQL LIKE, each ``_`` is a one-character wildcard, including the
+        # final character after the dress ID.
+        pattern = re.compile(
+            rf"^outgame/dress/dress..*{re.escape(str(dress_id))}..*$"
+        )
+        icon_row = next(
+            (row for row in self._dress_icon_rows if pattern.match(row[1])),
+            None,
+        )
+        self._dress_icon_by_dress_id[dress_id] = icon_row
+        return icon_row
 
     def get_asset_by_path(self, logical_path):
         cursor = self.conn.cursor()

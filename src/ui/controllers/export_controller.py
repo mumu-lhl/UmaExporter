@@ -246,11 +246,13 @@ class ExportController:
         if self.app.db and self.app.db.master_db:
             dress_data = self.app.db.master_db.get_dress_data(outfit_id)
 
-        # Fallback values from string manipulation
+        # Fallback values from string manipulation.  Short master dress IDs
+        # (for example the common costume ``24``) are valid; they only lack
+        # enough information for this fallback path.
         outfit_main, outfit_suffix_fallback = self._get_character_outfit_main_suffix(
             outfit_id
         )
-        if not outfit_main or not outfit_suffix_fallback:
+        if not dress_data and (not outfit_main or not outfit_suffix_fallback):
             return []
 
         # Determine the authoritative suffix (body_type_sub from DB or fallback)
@@ -259,28 +261,45 @@ class ExportController:
         else:
             asset_suffix = outfit_suffix_fallback
 
-        if asset_suffix == "01":
+        # UmaViewer distinguishes common costumes by dress_data.chara_id,
+        # not by the presentation dress ID.  The latter may be as short as
+        # ``24`` and therefore cannot reliably encode a character ID.
+        is_generic = (
+            dress_data is not None
+            and dress_data.get("chara_id") not in (None, str(chara_id))
+        ) or (dress_data is None and self._is_generic_costume(chara_id, outfit_id))
+
+        # Character-specific legacy assets commonly store subtype 01 under
+        # the shared _00 bundle.  Generic costumes do not follow that rule:
+        # e.g. dress 51 (bdy0017_00) and 52 (bdy0017_01) are distinct.
+        if not is_generic and asset_suffix == "01":
             asset_suffix = "00"
 
         if is_mini:
+            mini_body_main = (
+                dress_data.get("body_type", "").zfill(4)
+                if is_generic and dress_data
+                else outfit_main
+            )
+            mini_head_suffix = "00" if is_generic else asset_suffix
             return [
                 {
                     "label": "body",
-                    "logical_path": f"3d/chara/mini/body/mbdy{outfit_main}_{asset_suffix}/pfb_mbdy{outfit_main}_{asset_suffix}",
-                    "animator_name": f"pfb_mbdy{outfit_main}_{asset_suffix}",
-                    "texture_prefix": f"tex_mbdy{outfit_main}_{asset_suffix}_",
+                    "logical_path": f"3d/chara/mini/body/mbdy{mini_body_main}_{asset_suffix}/pfb_mbdy{mini_body_main}_{asset_suffix}",
+                    "animator_name": f"pfb_mbdy{mini_body_main}_{asset_suffix}",
+                    "texture_prefix": f"tex_mbdy{mini_body_main}_{asset_suffix}_",
                     "is_mini": True,
+                    "allow_candidate_fallback": not is_generic,
                 },
                 {
                     "label": "head",
-                    "logical_path": f"3d/chara/mini/head/mchr{chara_id}_{asset_suffix}/pfb_mchr{chara_id}_{asset_suffix}_hair",
-                    "animator_name": f"pfb_mchr{chara_id}_{asset_suffix}_hair",
-                    "texture_prefix": f"tex_mchr{chara_id}_{asset_suffix}_",
+                    "logical_path": f"3d/chara/mini/head/mchr{chara_id}_{mini_head_suffix}/pfb_mchr{chara_id}_{mini_head_suffix}_hair",
+                    "animator_name": f"pfb_mchr{chara_id}_{mini_head_suffix}_hair",
+                    "texture_prefix": f"tex_mchr{chara_id}_{mini_head_suffix}_",
                     "is_mini": True,
+                    "allow_candidate_fallback": not is_generic,
                 },
             ]
-
-        is_generic = self._is_generic_costume(chara_id, outfit_id)
 
         if is_generic:
             # Generic costume: construct compound costume ID and build special body path
@@ -334,6 +353,10 @@ class ExportController:
             body_texture_prefix = f"tex_bdy{outfit_main}_{asset_suffix}_"
             body_texture_export_prefix = None
 
+        # UmaViewer uses the default character head for common body outfits;
+        # only character-specific costumes select a matching head subtype.
+        head_suffix = "00" if is_generic else asset_suffix
+
         return [
             {
                 "label": "body",
@@ -341,20 +364,38 @@ class ExportController:
                 "animator_name": body_animator,
                 "texture_prefix": body_texture_prefix,
                 "texture_export_prefix": body_texture_export_prefix,
+                "allow_candidate_fallback": not is_generic,
             },
             {
                 "label": "head",
-                "logical_path": f"3d/chara/head/chr{chara_id}_{asset_suffix}/pfb_chr{chara_id}_{asset_suffix}",
-                "animator_name": f"pfb_chr{chara_id}_{asset_suffix}",
+                "logical_path": f"3d/chara/head/chr{chara_id}_{head_suffix}/pfb_chr{chara_id}_{head_suffix}",
+                "animator_name": f"pfb_chr{chara_id}_{head_suffix}",
+                "allow_candidate_fallback": not is_generic,
             },
         ]
 
-    def _resolve_character_tail_target(self, chara_id, is_mini=False):
+    def _resolve_character_tail_target(self, chara_id, outfit_id=None, is_mini=False):
         if not chara_id or not self.app.db:
             return None
 
         if is_mini:
             return self._resolve_character_mini_tail_target(chara_id)
+
+        # UmaViewer first tries a character-and-costume-specific tail before
+        # falling back to the shared tail with a character texture.
+        _, outfit_suffix = self._get_character_outfit_main_suffix(outfit_id)
+        if outfit_suffix:
+            folder_name = f"tail{chara_id}_{outfit_suffix}"
+            exclusive_path = (
+                f"3d/chara/tail/{folder_name}/pfb_{folder_name}"
+            )
+            if self.app.db.get_asset_by_path(exclusive_path) is not None:
+                return {
+                    "label": "tail",
+                    "logical_path": exclusive_path,
+                    "animator_name": f"pfb_{folder_name}",
+                    "texture_prefix": f"tex_{folder_name}_",
+                }
 
         for tail_id in ("0001", "0002"):
             texture_name = f"tex_tail{tail_id}_00_{chara_id}_diff"
@@ -371,6 +412,42 @@ class ExportController:
             }
 
         return None
+
+    def _append_character_runtime_export_targets(
+        self, export_configs, chara_id, is_mini=False
+    ):
+        """Include the runtime assets UmaViewer needs to assemble a character.
+
+        The locator drives facial keys and the idle motion establishes the
+        character animation rig.  They are optional in old game data, but
+        when available they must be handed to AssetStudio with the model
+        dependencies so the character export is complete.
+        """
+        if not self.app.db:
+            return
+
+        motion_path = (
+            f"3d/motion/mini/event/body/chara/chr{chara_id}_00/"
+            f"anm_min_eve_chr{chara_id}_00_idle01_loop"
+            if is_mini
+            else f"3d/motion/event/body/chara/chr{chara_id}_00/"
+            f"anm_eve_chr{chara_id}_00_idle01_loop"
+        )
+        for logical_path in ("3d/animator/drivenkeylocator", motion_path):
+            asset = self.app.db.get_asset_by_path(logical_path)
+            if asset is None:
+                continue
+            paths, bundle_keys = self._get_recursive_export_inputs(asset.get("id"))
+            if not paths:
+                phys_path = os.path.join(
+                    Config.get_data_root(), asset["hash"][:2], asset["hash"]
+                )
+                if not os.path.exists(phys_path):
+                    continue
+                paths, bundle_keys = [phys_path], [asset.get("key")]
+            export_configs.append(
+                {"physical_paths": paths, "bundle_keys": bundle_keys}
+            )
 
     def _resolve_character_mini_tail_target(self, chara_id):
         if not chara_id or not self.app.db:
@@ -729,7 +806,9 @@ class ExportController:
         targets = self._build_character_export_targets(
             chara_id, outfit_id, is_mini=is_mini
         )
-        tail_target = self._resolve_character_tail_target(chara_id, is_mini=is_mini)
+        tail_target = self._resolve_character_tail_target(
+            chara_id, outfit_id, is_mini=is_mini
+        )
         if tail_target is not None:
             targets.append(tail_target)
         if not targets or not self.app.db:
@@ -742,7 +821,7 @@ class ExportController:
             asset = self.app.db.get_asset_by_path(target["logical_path"])
             animator_name = target["animator_name"]
 
-            if asset is None and target["label"] != "tail":
+            if asset is None and target.get("allow_candidate_fallback", False):
                 candidates = self.app.db.find_character_component_candidates(
                     target["label"], chara_id, outfit_id, is_mini=is_mini
                 )
@@ -806,6 +885,9 @@ class ExportController:
                     target_dir, phys_path, asset, target
                 )
 
+        self._append_character_runtime_export_targets(
+            export_configs, chara_id, is_mini=is_mini
+        )
         if not export_configs:
             return False
 
