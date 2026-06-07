@@ -231,6 +231,11 @@ class MainView:
                                 ),
                                 enabled=False,
                             )
+                            dpg.add_checkbox(
+                                label=i18n("label_export_mini"),
+                                tag="character_export_mini",
+                                default_value=False,
+                            )
                             dpg.add_text("", tag="character_export_status")
                         dpg.add_separator()
                         with dpg.child_window(

@@ -661,7 +661,9 @@ class UmaDatabase:
                 continue
         return results[:limit]
 
-    def find_character_component_candidates(self, category, chara_id, outfit_id):
+    def find_character_component_candidates(
+        self, category, chara_id, outfit_id, is_mini=False
+    ):
         outfit_id = normalize_outfit_id(outfit_id)
         cursor = self.conn.cursor()
         outfit_main = outfit_id[:4] if outfit_id else ""
@@ -669,7 +671,27 @@ class UmaDatabase:
         if outfit_suffix == "01":
             outfit_suffix = "00"
 
-        if category == "body":
+        if is_mini:
+            if category == "body":
+                patterns = [
+                    f"3d/chara/mini/body/mbdy{outfit_main}_%/pfb_mbdy{outfit_main}_%",
+                    f"3d/chara/mini/body/mbdy{chara_id}_%/pfb_mbdy{chara_id}_%",
+                ]
+            elif category == "head":
+                patterns = [
+                    f"3d/chara/mini/head/mchr{chara_id}_%/pfb_mchr{chara_id}_%_hair",
+                    f"3d/chara/mini/head/mchr{chara_id}_%/pfb_mchr{chara_id}_%",
+                ]
+            elif category == "tail":
+                patterns = [
+                    f"3d/chara/mini/tail/mtail{outfit_main}_%/pfb_mtail{outfit_main}_%",
+                    f"3d/chara/mini/tail/mtail{chara_id}_%/pfb_mtail{chara_id}_%",
+                    f"3d/chara/mini/tail/tail{outfit_main}_%/pfb_tail{outfit_main}_%",
+                    f"3d/chara/mini/tail/tail{chara_id}_%/pfb_tail{chara_id}_%",
+                ]
+            else:
+                patterns = []
+        elif category == "body":
             patterns = [
                 f"3d/chara/body/bdy{chara_id}_%/pfb_bdy{chara_id}_%",
                 f"3d/chara/body/bdy{outfit_main}_%/pfb_bdy{outfit_main}_%",

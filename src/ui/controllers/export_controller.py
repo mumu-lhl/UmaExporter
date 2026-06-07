@@ -186,6 +186,10 @@ class ExportController:
             self._set_character_export_status(i18n("msg_export_failed"), [255, 0, 0])
             return
 
+        is_mini = False
+        if dpg.does_item_exist("character_export_mini"):
+            is_mini = bool(dpg.get_value("character_export_mini"))
+
         self._set_character_export_status(i18n("msg_export_started"), [255, 255, 0])
 
         future = self.app.executor.submit(
@@ -193,6 +197,7 @@ class ExportController:
             target_dir,
             chara_id,
             outfit_id,
+            is_mini,
         )
 
         future.add_done_callback(
@@ -232,7 +237,7 @@ class ExportController:
             return False
         return outfit_id[:4] != chara_id
 
-    def _build_character_export_targets(self, chara_id, outfit_id):
+    def _build_character_export_targets(self, chara_id, outfit_id, is_mini=False):
         if not chara_id or not outfit_id:
             return []
 
@@ -256,6 +261,24 @@ class ExportController:
 
         if asset_suffix == "01":
             asset_suffix = "00"
+
+        if is_mini:
+            return [
+                {
+                    "label": "body",
+                    "logical_path": f"3d/chara/mini/body/mbdy{outfit_main}_{asset_suffix}/pfb_mbdy{outfit_main}_{asset_suffix}",
+                    "animator_name": f"pfb_mbdy{outfit_main}_{asset_suffix}",
+                    "texture_prefix": f"tex_mbdy{outfit_main}_{asset_suffix}_",
+                    "is_mini": True,
+                },
+                {
+                    "label": "head",
+                    "logical_path": f"3d/chara/mini/head/mchr{chara_id}_{asset_suffix}/pfb_mchr{chara_id}_{asset_suffix}_hair",
+                    "animator_name": f"pfb_mchr{chara_id}_{asset_suffix}_hair",
+                    "texture_prefix": f"tex_mchr{chara_id}_{asset_suffix}_",
+                    "is_mini": True,
+                },
+            ]
 
         is_generic = self._is_generic_costume(chara_id, outfit_id)
 
@@ -326,9 +349,12 @@ class ExportController:
             },
         ]
 
-    def _resolve_character_tail_target(self, chara_id):
+    def _resolve_character_tail_target(self, chara_id, is_mini=False):
         if not chara_id or not self.app.db:
             return None
+
+        if is_mini:
+            return self._resolve_character_mini_tail_target(chara_id)
 
         for tail_id in ("0001", "0002"):
             texture_name = f"tex_tail{tail_id}_00_{chara_id}_diff"
@@ -342,6 +368,61 @@ class ExportController:
                 "logical_path": f"3d/chara/tail/tail{tail_id}_00/pfb_tail{tail_id}_00",
                 "animator_name": f"pfb_tail{tail_id}_00",
                 "texture_prefix": f"tex_tail{tail_id}_00_{chara_id}_",
+            }
+
+        return None
+
+    def _resolve_character_mini_tail_target(self, chara_id):
+        if not chara_id or not self.app.db:
+            return None
+
+        for tail_id in ("0001", "0002"):
+            for asset_prefix in ("mtail", "tail"):
+                texture_name = f"tex_{asset_prefix}{tail_id}_00_{chara_id}_diff"
+                texture_path = (
+                    f"3d/chara/mini/tail/{asset_prefix}{tail_id}_00/"
+                    f"textures/{texture_name}"
+                )
+                texture_asset = self.app.db.get_asset_by_path(texture_path)
+                if texture_asset is None:
+                    continue
+
+                folder_name = f"{asset_prefix}{tail_id}_00"
+                return {
+                    "label": "tail",
+                    "logical_path": f"3d/chara/mini/tail/{folder_name}/pfb_{folder_name}",
+                    "animator_name": f"pfb_{folder_name}",
+                    "texture_prefix": f"tex_{folder_name}_{chara_id}_",
+                    "is_mini": True,
+                }
+
+        # Fallback for naming variations: infer the tail folder from any mini tail
+        # texture that embeds the character id, then look for pfb_<folder> beside it.
+        texture_assets = self.app.db.get_assets_by_prefix("3d/chara/mini/tail/")
+        for texture_asset in texture_assets:
+            full_path = texture_asset.get("full_path", "")
+            if "/textures/" not in full_path:
+                continue
+
+            texture_name = full_path.rsplit("/", 1)[-1]
+            chara_marker = f"_{chara_id}_"
+            if chara_marker not in texture_name:
+                continue
+
+            base_dir = full_path.split("/textures/", 1)[0]
+            folder_name = base_dir.rsplit("/", 1)[-1]
+            animator_name = f"pfb_{folder_name}"
+            model_path = f"{base_dir}/{animator_name}"
+            if self.app.db.get_asset_by_path(model_path) is None:
+                continue
+
+            texture_prefix = texture_name.split(chara_marker, 1)[0] + chara_marker
+            return {
+                "label": "tail",
+                "logical_path": model_path,
+                "animator_name": animator_name,
+                "texture_prefix": texture_prefix,
+                "is_mini": True,
             }
 
         return None
@@ -433,9 +514,15 @@ class ExportController:
 
         return exported_count
 
-    def _matches_character_clothes_object(self, label, object_name):
+    def _matches_character_clothes_object(self, label, object_name, is_mini=False):
         if not object_name:
             return False
+
+        if is_mini:
+            object_name_lower = object_name.lower()
+            if "cloth" in object_name_lower:
+                return True
+            return label == "body" and "skirt" in object_name_lower
 
         # Only export the specific clothes MonoBehaviour wrappers that mirror
         # the filenames we care about for body/head/tail exports.
@@ -514,7 +601,9 @@ class ExportController:
             print(f"Find monobehaviour by script error for {script_name}: {e}")
             return None
 
-    def _export_character_clothes_monobehaviours(self, target_dir, asset, label):
+    def _export_character_clothes_monobehaviours(
+        self, target_dir, asset, label, is_mini=False
+    ):
         if not asset or not self.app.db:
             return 0
 
@@ -528,7 +617,9 @@ class ExportController:
             object_name = clothes_asset["full_path"].rsplit("/", 1)[-1]
             if object_name in exported_names:
                 continue
-            if not self._matches_character_clothes_object(label, object_name):
+            if not self._matches_character_clothes_object(
+                label, object_name, is_mini=is_mini
+            ):
                 continue
 
             phys_path = os.path.join(
@@ -632,9 +723,13 @@ class ExportController:
         )
         return 1 if success else 0
 
-    def _export_character_animator_group(self, target_dir, chara_id, outfit_id):
-        targets = self._build_character_export_targets(chara_id, outfit_id)
-        tail_target = self._resolve_character_tail_target(chara_id)
+    def _export_character_animator_group(
+        self, target_dir, chara_id, outfit_id, is_mini=False
+    ):
+        targets = self._build_character_export_targets(
+            chara_id, outfit_id, is_mini=is_mini
+        )
+        tail_target = self._resolve_character_tail_target(chara_id, is_mini=is_mini)
         if tail_target is not None:
             targets.append(tail_target)
         if not targets or not self.app.db:
@@ -649,7 +744,7 @@ class ExportController:
 
             if asset is None and target["label"] != "tail":
                 candidates = self.app.db.find_character_component_candidates(
-                    target["label"], chara_id, outfit_id
+                    target["label"], chara_id, outfit_id, is_mini=is_mini
                 )
                 if candidates:
                     asset = candidates[0]
@@ -697,14 +792,16 @@ class ExportController:
                 target_dir,
                 asset,
                 target["label"],
+                is_mini=is_mini,
             )
-            texture_exports += self._export_character_flare_monobehaviour(
-                target_dir,
-                asset,
-                target["label"],
-            )
+            if not is_mini:
+                texture_exports += self._export_character_flare_monobehaviour(
+                    target_dir,
+                    asset,
+                    target["label"],
+                )
 
-            if target["label"] == "head":
+            if target["label"] == "head" and not is_mini:
                 texture_exports += self._export_head_facial_target(
                     target_dir, phys_path, asset, target
                 )
