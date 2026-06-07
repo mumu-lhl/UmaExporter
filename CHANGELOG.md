@@ -1,3 +1,15 @@
+## [0.4.0] - 2026-06-07
+
+### 🚀 Features
+
+- 导出人物时导出物理参数
+- 导出人物flare碰撞数据
+- 支持导出小马
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* V0.3.10
+- *(release)* V0.4.0
 ## [0.3.9] - 2026-05-30
 
 ### 🚀 Features
