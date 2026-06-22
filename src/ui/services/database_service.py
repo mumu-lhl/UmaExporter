@@ -82,7 +82,7 @@ class DatabaseService:
 
         self.app.search_controller.render_scene_results()
         self.app.search_controller.render_prop_results()
-        self.app.search_controller.render_character_results()
+        self.app.character_controller.render_results()
 
     def reset_database_state(self):
         """Reset all database-related state and clear UI."""

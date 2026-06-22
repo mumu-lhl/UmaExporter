@@ -19,12 +19,16 @@ from src.ui.controllers.preview_controller import PreviewController
 from src.ui.controllers.search_controller import SearchController
 from src.ui.controllers.settings_controller import SettingsController
 from src.ui.controllers.shortcut_controller import ShortcutController
+from src.ui.features.characters.controller import CharacterController
+from src.ui.features.characters.export_controller import CharacterExportController
 
 # Services
 from src.services.f3d.service import F3dService
 from src.services.thumbnail.service import ThumbnailService
 from src.services.translation.service import TranslationService
 from src.ui.services.database_service import DatabaseService
+from src.ui.state import CharacterState, NavigationState
+from src.ui.runtime.texture_registry import TextureRegistry
 
 # Views
 from src.ui.views.main_view import MainView
@@ -48,12 +52,7 @@ class UmaExporterApp:
         self.last_selected = None
 
         # Navigation State
-        self.history_back = []
-        self.history_forward = []
-        self.current_asset_id = None
-        self.current_asset_hash = None
-        self.current_asset_data = None
-        self.is_navigating = False
+        self.navigation_state = NavigationState()
 
         # Drag State
         self.drag_preview_active = False
@@ -97,16 +96,18 @@ class UmaExporterApp:
         self.last_lazy_scan_time = 0
         self.lazy_scan_interval = 0.2
         self.texture_lock = threading.Lock()
+        self.texture_registry = TextureRegistry(self.texture_lock)
 
         # View Modes
         self.scene_view_mode = "list"
         self.prop_view_mode = "list"
-        self.search_thumbnail_textures = {
+        self.search_thumbnail_textures = self.texture_registry.tags_by_domain
+        self.search_thumbnail_textures.update({
             "scene_": [],
             "prop_": [],
             "character_icons": [],
             "character_outfits": [],
-        }
+        })
         self.thumbnail_columns = {
             "scene_": 0,
             "prop_": 0,
@@ -119,12 +120,7 @@ class UmaExporterApp:
             "character_icons": [],
             "character_outfits": [],
         }
-        self.character_entries = []
-        self.current_character_id = None
-        self.last_selected_character_logo = None
-        self.character_cache_pending = set()
-        self.last_selected_character_outfit = None
-        self.current_character_outfit = None
+        self.character_state = CharacterState()
         self.global_search_query = ""
         self.global_search_limit = 500
         self.global_search_offset = 0
@@ -139,7 +135,7 @@ class UmaExporterApp:
 
         # Initialize Services
         self.f3d_service = F3dService()
-        self.thumbnail_service = ThumbnailService(self.executor, self)
+        self.thumbnail_service = ThumbnailService(self.executor, self._queue_ui_task)
         self.translation_service = TranslationService(self)
         self.translation_service.load_cached()
         self.database_service = DatabaseService(self)
@@ -149,6 +145,8 @@ class UmaExporterApp:
         self.drag_controller = DragController(self)
         self.navigation_controller = NavigationController(self)
         self.search_controller = SearchController(self)
+        self.character_controller = CharacterController(self)
+        self.character_export_controller = CharacterExportController(self)
         self.browser_controller = BrowserController(self)
         self.shortcut_controller = ShortcutController(self)
         self.batch_controller = BatchController(self)
@@ -168,9 +166,9 @@ class UmaExporterApp:
         self.clear_scene_search = self.search_controller.clear_scene_search
         self.on_prop_search = self.search_controller.on_prop_search
         self.clear_prop_search = self.search_controller.clear_prop_search
-        self.on_character_selected = self.search_controller.on_character_selected
+        self.on_character_selected = self.character_controller.on_selected
         self.on_character_outfit_selected = (
-            self.search_controller.on_character_outfit_selected
+            self.character_controller.on_outfit_selected
         )
         self._on_view_mode_change = self.search_controller.on_view_mode_change
         self._on_batch_cat_all_change = self.batch_controller.on_batch_cat_all_change
@@ -182,7 +180,7 @@ class UmaExporterApp:
         self.on_export_selected = self.export_controller.on_export_selected
         self.on_export_all_objects = self.export_controller.on_export_all_objects
         self.on_character_export_selected = (
-            self.export_controller.on_character_export_selected
+            self.character_export_controller.on_character_export_selected
         )
         self.on_settings_dir_selected = (
             self.settings_controller.on_settings_dir_selected
@@ -195,6 +193,92 @@ class UmaExporterApp:
 
         self._init_ui()
         self.database_service.start_db_load()
+
+    # Compatibility accessors keep existing controllers working while state is
+    # migrated feature-by-feature.  New code should use the state objects.
+    @property
+    def history_back(self):
+        return self.navigation_state.back
+
+    @property
+    def history_forward(self):
+        return self.navigation_state.forward
+
+    @property
+    def current_asset_id(self):
+        return self.navigation_state.current_asset_id
+
+    @current_asset_id.setter
+    def current_asset_id(self, value):
+        self.navigation_state.current_asset_id = value
+
+    @property
+    def current_asset_hash(self):
+        return self.navigation_state.current_asset_hash
+
+    @current_asset_hash.setter
+    def current_asset_hash(self, value):
+        self.navigation_state.current_asset_hash = value
+
+    @property
+    def current_asset_data(self):
+        return self.navigation_state.current_asset_data
+
+    @current_asset_data.setter
+    def current_asset_data(self, value):
+        self.navigation_state.current_asset_data = value
+
+    @property
+    def is_navigating(self):
+        return self.navigation_state.is_navigating
+
+    @is_navigating.setter
+    def is_navigating(self, value):
+        self.navigation_state.is_navigating = value
+
+    @property
+    def character_entries(self):
+        return self.character_state.entries
+
+    @character_entries.setter
+    def character_entries(self, value):
+        self.character_state.entries = value
+
+    @property
+    def current_character_id(self):
+        return self.character_state.current_id
+
+    @current_character_id.setter
+    def current_character_id(self, value):
+        self.character_state.current_id = value
+
+    @property
+    def last_selected_character_logo(self):
+        return self.character_state.selected_logo_tag
+
+    @last_selected_character_logo.setter
+    def last_selected_character_logo(self, value):
+        self.character_state.selected_logo_tag = value
+
+    @property
+    def character_cache_pending(self):
+        return self.character_state.pending_cache_writes
+
+    @property
+    def last_selected_character_outfit(self):
+        return self.character_state.selected_outfit_tags
+
+    @last_selected_character_outfit.setter
+    def last_selected_character_outfit(self, value):
+        self.character_state.selected_outfit_tags = value
+
+    @property
+    def current_character_outfit(self):
+        return self.character_state.selected_outfit
+
+    @current_character_outfit.setter
+    def current_character_outfit(self, value):
+        self.character_state.selected_outfit = value
 
     def _setup_dearpygui(self):
         dpg.create_context()

@@ -8,6 +8,7 @@ from src.core.unity import UnityLogic
 from src.core.i18n import i18n
 from src.services.thumbnail.manager import ThumbnailManager as thumb_manager
 from src.services.f3d.worker import generate_thumbnail
+from src.ui.features.preview.dependencies import DependencyPanelController
 
 
 class PreviewController:
@@ -15,6 +16,7 @@ class PreviewController:
         self.app = app
         self.f3d_service = app.f3d_service
         self.thumbnail_service = app.thumbnail_service
+        self.dependencies = DependencyPanelController(app)
 
     def _format_size(self, size_bytes):
         try:
@@ -821,12 +823,6 @@ class PreviewController:
             logical_file_name=logical_file_name,
         )
 
-    def _get_recursive_hashes(self, asset_id):
-        if asset_id not in self.app.cached_recursive_hashes:
-            self.app.cached_recursive_hashes[asset_id] = (
-                self.app.db.get_all_recursive_dependencies(asset_id)
-            )
-        return self.app.cached_recursive_hashes[asset_id]
 
     def _apply_animator_preview_result(
         self,
@@ -1088,94 +1084,10 @@ class PreviewController:
         self.app.preview_texture_tags[prefix] = None
 
     def _load_deps_async(self, current_asset_id, request_id):
-        if not self.app.db:
-            return
-        cached = self.app.cached_deps.get(current_asset_id)
-        if cached is not None:
-            self.app._queue_ui_task(
-                lambda: self._apply_dependency_result(
-                    current_asset_id,
-                    request_id,
-                    cached,
-                    "ui_dep_parent",
-                    "No dependencies found.",
-                )
-            )
-            return
-
-        future = self.app.executor.submit(
-            self.app.db.get_dependencies, current_asset_id
-        )
-
-        def done_callback(f):
-            try:
-                deps = f.result()
-            except Exception:
-                deps = []
-            self.app.cached_deps[current_asset_id] = deps
-            self.app._queue_ui_task(
-                lambda: self._apply_dependency_result(
-                    current_asset_id,
-                    request_id,
-                    deps,
-                    "ui_dep_parent",
-                    i18n("msg_no_deps"),
-                )
-            )
-
-        future.add_done_callback(done_callback)
+        self.dependencies.load_dependencies(current_asset_id, request_id)
 
     def _load_rev_deps_async(self, current_asset_id, request_id):
-        if not self.app.db:
-            return
-        cached = self.app.cached_rev_deps.get(current_asset_id)
-        if cached is not None:
-            self.app._queue_ui_task(
-                lambda: self._apply_dependency_result(
-                    current_asset_id,
-                    request_id,
-                    cached,
-                    "ui_rev_dep_parent",
-                    i18n("msg_no_rev_deps"),
-                )
-            )
-            return
-
-        future = self.app.executor.submit(
-            self.app.db.get_reverse_dependencies, current_asset_id
-        )
-
-        def done_callback(f):
-            try:
-                rev_deps = f.result()
-            except Exception:
-                rev_deps = []
-            self.app.cached_rev_deps[current_asset_id] = rev_deps
-            self.app._queue_ui_task(
-                lambda: self._apply_dependency_result(
-                    current_asset_id,
-                    request_id,
-                    rev_deps,
-                    "ui_rev_dep_parent",
-                    i18n("msg_no_rev_deps"),
-                )
-            )
-
-        future.add_done_callback(done_callback)
-
-    def _apply_dependency_result(
-        self, current_asset_id, request_id, data, parent_suffix, empty_msg
-    ):
-        if request_id != self.app.selection_request_id:
-            return
-        if not self.app._is_still_selected(current_asset_id):
-            return
-        for prefix in self._detail_prefixes():
-            self._fill_dependency_table(
-                f"{prefix}{parent_suffix}",
-                data,
-                empty_msg,
-            )
+        self.dependencies.load_reverse_dependencies(current_asset_id, request_id)
 
     def _detail_prefixes(self):
         prefixes = [""]
@@ -1184,36 +1096,6 @@ class PreviewController:
         if dpg.does_alias_exist("prop_ui_path"):
             prefixes.append("prop_")
         return prefixes
-
-    def _fill_dependency_table(self, parent, data, empty_msg):
-        dpg.delete_item(parent, children_only=True)
-        if not data:
-            dpg.add_text(empty_msg, parent=parent)
-            return
-        with dpg.table(
-            header_row=True,
-            resizable=True,
-            parent=parent,
-            policy=dpg.mvTable_SizingStretchProp,
-        ):
-            dpg.add_table_column(label="Type", width_fixed=True)
-            dpg.add_table_column(label="Asset Path")
-            for name, d_type, asset_id, size, f_hash, key_val in data:
-                with dpg.table_row() as row:
-                    dpg.add_text(f"Type {d_type}")
-                    asset_info = {
-                        "id": asset_id,
-                        "size": size,
-                        "hash": f_hash,
-                        "full_path": name,
-                        "key": key_val,
-                        "is_from_dep": True,  # Mark as navigation source
-                    }
-                    self.app._add_file_selectable(
-                        name,
-                        asset_info,
-                        row,
-                    )
 
     def _get_recursive_hashes(self, asset_id):
         if asset_id not in self.app.cached_recursive_hashes:

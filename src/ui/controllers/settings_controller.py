@@ -61,7 +61,7 @@ class SettingsController:
                         msg,
                     )
                     # Reload character list to show new names
-                    self.app.search_controller.render_character_results()
+                    self.app.character_controller.render_results()
                 else:
                     dpg.set_value(
                         "settings_translation_status", i18n("msg_translations_failed")
