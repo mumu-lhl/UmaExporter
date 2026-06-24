@@ -1,3 +1,13 @@
+## [0.4.1] - 2026-06-24
+
+### 🚀 Features
+
+- 3d发现服装导出
+- 增加运行环境检测
+
+### 🚜 Refactor
+
+- 重构代码架构
 ## [0.4.0] - 2026-06-07
 
 ### 🚀 Features
@@ -5,11 +15,6 @@
 - 导出人物时导出物理参数
 - 导出人物flare碰撞数据
 - 支持导出小马
-
-### ⚙️ Miscellaneous Tasks
-
-- *(release)* V0.3.10
-- *(release)* V0.4.0
 ## [0.3.9] - 2026-05-30
 
 ### 🚀 Features
@@ -24,7 +29,6 @@
 ### ⚙️ Miscellaneous Tasks
 
 - 更新依赖
-- *(release)* V0.3.9
 ## [0.3.8] - 2026-05-03
 
 ### 🐛 Bug Fixes
@@ -34,16 +38,11 @@
 ### ⚙️ Miscellaneous Tasks
 
 - 更新依赖
-- *(release)* V0.3.8
 ## [0.3.7] - 2026-04-26
 
 ### 🚀 Features
 
 - 将所有文件直接导出至目标目录
-
-### ⚙️ Miscellaneous Tasks
-
-- *(release)* V0.3.7
 ## [0.3.6] - 2026-04-25
 
 ### 🚀 Features
@@ -53,10 +52,6 @@
 ### 🐛 Bug Fixes
 
 - 修复部分私服无法导出面部数据
-
-### ⚙️ Miscellaneous Tasks
-
-- *(release)* V0.3.6
 ## [0.3.5] - 2026-04-25
 
 ### 🐛 Bug Fixes
@@ -93,10 +88,6 @@
 ### 🐛 Bug Fixes
 
 - 修复cython模块
-
-### ⚙️ Miscellaneous Tasks
-
-- *(release)* V0.3.1
 ## [0.3.0] - 2026-04-13
 
 ### 🚀 Features
@@ -136,7 +127,6 @@
 ### ⚙️ Miscellaneous Tasks
 
 - 日志不显示日志更新commit
-- *(release)* V0.2.5
 ## [0.2.4] - 2026-04-01
 
 ### 🐛 Bug Fixes
@@ -176,7 +166,6 @@
 
 - *(ci)* Remove cache
 - *(ci)* Speed up nuitka compiling
-- *(release)* Remove Release prefix
 - *(ci)* Use mold as linker
 - *(ci)* Fix mold
 - *(ci)* Improve nuitka
