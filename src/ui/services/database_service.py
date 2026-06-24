@@ -77,7 +77,7 @@ class DatabaseService:
 
         dpg.set_value(
             "settings_status_msg",
-            i18n("msg_db_ready") + f" ({self.app.db.db_path})",
+            "",
         )
 
         self.app.search_controller.render_scene_results()

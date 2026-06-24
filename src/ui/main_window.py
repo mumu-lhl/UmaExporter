@@ -190,6 +190,7 @@ class UmaExporterApp:
             self.settings_controller.on_clear_thumbnail_cache
         )
         self.on_update_translations = self.settings_controller.on_update_translations
+        self.on_check_runtime = self.settings_controller.on_check_runtime
 
         self._init_ui()
         self.database_service.start_db_load()
@@ -409,7 +410,7 @@ class UmaExporterApp:
 
         # Add a simple loading modal
         with dpg.window(
-            label="Loading...",
+            label=i18n("msg_loading"),
             modal=True,
             show=False,
             tag="loading_modal",
@@ -418,7 +419,7 @@ class UmaExporterApp:
             width=200,
             height=100,
         ):
-            dpg.add_text("Parsing Database...")
+            dpg.add_text(i18n("msg_parsing_database"))
             dpg.add_loading_indicator(style=1)
 
         dpg.set_primary_window("PrimaryWindow", True)

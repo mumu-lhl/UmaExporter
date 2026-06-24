@@ -329,7 +329,7 @@ class MainView:
                         dpg.add_input_text(
                             tag="settings_base_path",
                             default_value=Config.BASE_PATH,
-                            width=-100,
+                            width=420,
                         )
                         dpg.add_button(
                             label=i18n("btn_browse"),
@@ -402,6 +402,28 @@ class MainView:
                         i18n("label_restart_note"),
                         color=[150, 150, 150],
                     )
+
+                    dpg.add_spacer(height=14)
+                    dpg.add_text(i18n("label_runtime_check"))
+                    with dpg.group(horizontal=True):
+                        dpg.add_button(
+                            label=i18n("btn_check_runtime"),
+                            width=200,
+                            callback=self.controller.on_check_runtime,
+                        )
+                        dpg.add_text(
+                            i18n("msg_runtime_check_hint"),
+                            tag="settings_runtime_check_status",
+                            wrap=320,
+                        )
+
+                    with dpg.child_window(
+                        tag="settings_runtime_check_list",
+                        height=72,
+                        width=520,
+                        border=True,
+                    ):
+                        dpg.add_text(i18n("msg_runtime_check_hint"))
         # Bind the disabled theme
         dpg.bind_item_theme("nav_back_btn", "disabled_btn_theme")
         dpg.bind_item_theme("nav_forward_btn", "disabled_btn_theme")
