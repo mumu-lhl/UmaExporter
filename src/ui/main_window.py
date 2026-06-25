@@ -191,6 +191,7 @@ class UmaExporterApp:
         )
         self.on_update_translations = self.settings_controller.on_update_translations
         self.on_check_runtime = self.settings_controller.on_check_runtime
+        self.on_check_updates = self.settings_controller.on_check_updates
 
         self._init_ui()
         self.database_service.start_db_load()

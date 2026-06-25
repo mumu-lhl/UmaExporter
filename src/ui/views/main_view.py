@@ -403,6 +403,21 @@ class MainView:
                         color=[150, 150, 150],
                     )
 
+                    dpg.add_spacer(height=10)
+                    with dpg.group(horizontal=True):
+                        dpg.add_button(
+                            label=i18n("btn_check_updates"),
+                            width=200,
+                            callback=self.controller.on_check_updates,
+                        )
+                        dpg.add_text("", tag="settings_update_status", wrap=520)
+                        dpg.add_button(
+                            label=i18n("btn_open_update"),
+                            tag="settings_update_link",
+                            show=False,
+                            small=True,
+                        )
+
                     dpg.add_spacer(height=14)
                     dpg.add_text(i18n("label_runtime_check"))
                     with dpg.group(horizontal=True):
@@ -419,7 +434,7 @@ class MainView:
 
                     with dpg.child_window(
                         tag="settings_runtime_check_list",
-                        height=72,
+                        height=96,
                         width=520,
                         border=True,
                     ):
