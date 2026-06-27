@@ -117,11 +117,14 @@ class UnityLogic:
             if bundle_key is not None and str(bundle_key).strip() != "":
                 try:
                     decryption_key = int(bundle_key)
-                except ValueError, TypeError:
+                except (ValueError, TypeError):
                     pass
 
             with open(physical_path, "rb") as f:
                 data = bytearray(f.read())
+
+            if not Config.DB_ENCRYPTED:
+                return bytes(data)
 
             decrypted = decrypt_bundle(data, region=Config.REGION, key=decryption_key)
 

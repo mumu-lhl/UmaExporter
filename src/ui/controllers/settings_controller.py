@@ -35,6 +35,7 @@ class SettingsController:
         region_map = {
             i18n("region_jp"): "jp",
             i18n("region_global"): "global",
+            i18n("region_tw"): "tw",
         }
         Config.update_config(base_path, region_map.get(region, "jp"), lang)
         self.app._reset_database_state()

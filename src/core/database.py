@@ -189,10 +189,14 @@ class UmaDatabase:
         if not db_path:
             raise ValueError("Database path is empty.")
 
-        # Always use encrypted connection with apsw as all data is now encrypted
+        if not Config.DB_ENCRYPTED:
+            print(f"Connecting to plain database {db_path}...")
+            conn = sqlite3.connect(db_path, check_same_thread=False)
+            conn.execute("SELECT name FROM sqlite_master LIMIT 1")
+            return conn
+
         print(f"Connecting to encrypted database {db_path}...")
-        conn = self._connect_encrypted(db_path)
-        return conn
+        return self._connect_encrypted(db_path)
 
     def _connect_encrypted(self, db_path):
         """Connect to an encrypted database using apsw and sqlite3mc."""
@@ -227,7 +231,7 @@ class UmaDatabase:
                     cursor.execute("SELECT name FROM sqlite_master LIMIT 1")
                     success = True
                     break
-                except apsw.NotADBError, apsw.AuthError, apsw.ExecutionCompleteError:
+                except (apsw.NotADBError, apsw.AuthError, apsw.ExecutionCompleteError):
                     continue
 
             if not success:
@@ -257,16 +261,23 @@ class UmaDatabase:
         for pragma in pragmas:
             try:
                 cursor.execute(pragma)
-            except sqlite3.DatabaseError, apsw.Error:
+            except (sqlite3.DatabaseError, apsw.Error):
                 continue
+
+    @staticmethod
+    def _asset_cols(include_id=True):
+        key_col = "e" if Config.DB_ENCRYPTED else "NULL AS e"
+        cols = ["n", "l", "h", key_col]
+        if include_id:
+            cols.insert(0, "i")
+        return ", ".join(cols)
 
     def load_index(self):
         """Parse database path structure with IDs"""
         print("Parsing database index...")
         cursor = self.conn.cursor()
 
-        # Dynamically include 'e' (key) column only if the DB is encrypted
-        cols = "i, n, l, h, e"
+        cols = self._asset_cols()
         cursor.execute(f"SELECT {cols} FROM a WHERE n IS NOT NULL AND n != ''")
 
         tree_data = {}
@@ -368,7 +379,7 @@ class UmaDatabase:
             self._asset_info_by_id.move_to_end(key)
             return info
         cursor = self.conn.cursor()
-        cols = "n, l, h, e"
+        cols = self._asset_cols(include_id=False)
         cursor.execute(f"SELECT {cols} FROM a WHERE i = ? LIMIT 1", (key,))
         row = cursor.fetchone()
         if row:
@@ -404,7 +415,7 @@ class UmaDatabase:
     def search_assets(self, query, limit=500, offset=0):
         """Search assets via database LIKE query"""
         cursor = self.conn.cursor()
-        cols = "i, n, l, h, e"
+        cols = self._asset_cols()
         cursor.execute(
             f"SELECT {cols} FROM a WHERE n LIKE ? ORDER BY n LIMIT ? OFFSET ?",
             (f"%{query}%", limit, offset),
@@ -438,7 +449,7 @@ class UmaDatabase:
     def search_scenes(self, query="", limit=None):
         """Search specifically for scene assets in 3d/env/"""
         cursor = self.conn.cursor()
-        cols = "i, n, l, h, e"
+        cols = self._asset_cols()
         excluded_filters = (
             "n NOT LIKE '%_cloth00/%' AND n NOT LIKE '%_cloth00' "
             "AND n NOT LIKE '%/ast_%' AND n NOT LIKE 'ast_%'"
@@ -467,7 +478,7 @@ class UmaDatabase:
     def search_props(self, query="", limit=None):
         """Search specifically for prop assets in 3d/chara/prop, 3d/chara/toonprop, and 3d/chara/richprop"""
         cursor = self.conn.cursor()
-        cols = "i, n, l, h, e"
+        cols = self._asset_cols()
         excluded_filters = (
             "n NOT LIKE '%_cloth00/%' AND n NOT LIKE '%_cloth00' "
             "AND n NOT LIKE '%/ast_%' AND n NOT LIKE 'ast_%'"
@@ -505,7 +516,7 @@ class UmaDatabase:
     def get_character_entries(self):
         """Return character logo assets, excluding placeholder character chr0000."""
         cursor = self.conn.cursor()
-        cols = "i, n, l, h, e"
+        cols = self._asset_cols()
 
         cursor.execute(
             f"""
@@ -563,7 +574,7 @@ class UmaDatabase:
         used to associate their body type/subtype with a dress icon and name.
         """
         cursor = self.conn.cursor()
-        cols = "i, n, l, h, e"
+        cols = self._asset_cols()
         cursor.execute(
             f"""
             SELECT {cols}
@@ -612,8 +623,8 @@ class UmaDatabase:
         # discovery.  This avoids displaying database entries whose model is
         # absent in the selected game data.
         cursor.execute(
-            """
-            SELECT i, n, l, h, e FROM a
+            f"""
+            SELECT {self._asset_cols()} FROM a
             WHERE n LIKE '3d/chara/body/bdy%/pfb_bdy%'
               AND n NOT LIKE '%/clothes/%'
             ORDER BY n
@@ -715,8 +726,8 @@ class UmaDatabase:
         if self._dress_icon_rows is None:
             cursor = self.conn.cursor()
             cursor.execute(
-                """
-                SELECT i, n, l, h, e FROM a
+                f"""
+                SELECT {self._asset_cols()} FROM a
                 WHERE n LIKE 'outgame/dress/dress_%'
                 ORDER BY n
                 """
@@ -738,7 +749,7 @@ class UmaDatabase:
 
     def get_asset_by_path(self, logical_path):
         cursor = self.conn.cursor()
-        cols = "i, n, l, h, e"
+        cols = self._asset_cols()
         cursor.execute(f"SELECT {cols} FROM a WHERE n = ? LIMIT 1", (logical_path,))
         row = cursor.fetchone()
         if not row:
@@ -755,7 +766,7 @@ class UmaDatabase:
 
     def get_assets_by_prefix(self, logical_prefix):
         cursor = self.conn.cursor()
-        cols = "i, n, l, h, e"
+        cols = self._asset_cols()
         cursor.execute(
             f"SELECT {cols} FROM a WHERE n LIKE ? ORDER BY n",
             (f"{logical_prefix}%",),
@@ -871,7 +882,7 @@ class UmaDatabase:
         candidates = []
         for pattern in patterns:
             cursor.execute(
-                "SELECT i, n, l, h, e FROM a WHERE n LIKE ? ORDER BY n",
+                f"SELECT {self._asset_cols()} FROM a WHERE n LIKE ? ORDER BY n",
                 (pattern,),
             )
             for i_id, name, size, f_hash, key_val in cursor.fetchall():
@@ -905,7 +916,7 @@ class UmaDatabase:
     def get_all_animator_assets(self, categories=None):
         """Retrieves all asset info for specified categories (scene, prop)."""
         cursor = self.conn.cursor()
-        cols = "i, n, l, h, e"
+        cols = self._asset_cols()
 
         query_base = f"SELECT {cols} FROM a WHERE "
         conditions = []
@@ -939,6 +950,8 @@ class UmaDatabase:
 
     def get_key_by_hash(self, f_hash):
         """Quick look up for decryption key by file hash."""
+        if not Config.DB_ENCRYPTED:
+            return None
         # Note: _asset_info_by_id is keyed by ID, not hash.
         # But we can use a separate small cache or just query.
         cursor = self.conn.cursor()

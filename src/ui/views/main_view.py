@@ -341,6 +341,7 @@ class MainView:
                     region_options = {
                         i18n("region_jp"): "jp",
                         i18n("region_global"): "global",
+                        i18n("region_tw"): "tw",
                     }
                     reverse_region_map = {v: k for k, v in region_options.items()}
                     dpg.add_combo(

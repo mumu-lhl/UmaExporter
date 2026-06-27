@@ -21,7 +21,7 @@ class PreviewController:
     def _format_size(self, size_bytes):
         try:
             size_bytes = int(size_bytes)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             return "Unknown"
         if size_bytes < 1024:
             return f"{size_bytes} Bytes"

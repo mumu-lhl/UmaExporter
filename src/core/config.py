@@ -35,9 +35,9 @@ class Config:
     BASE_PATH = ""
     # Language: "Auto", "English", "Chinese"
     LANGUAGE = "Auto"
-    # Data region (jp, global)
+    # Data region (jp, global, tw)
     REGION = "jp"
-    # Runtime flag: all user data is now assumed to be encrypted
+    # Runtime flag: most regions use encrypted metadata and asset bundles.
     DB_ENCRYPTED = True
     # Performance monitoring flag
     PROFILE = False
@@ -103,12 +103,35 @@ class Config:
         ]
 
     @classmethod
-    def is_valid_path(cls, path):
+    def is_encrypted_region(cls, region=None):
+        region = (region or cls.REGION or "").lower()
+        return region != "tw"
+
+    @classmethod
+    def _get_tw_game_root(cls, persistent_path):
+        if not persistent_path:
+            return ""
+        return os.path.dirname(os.path.dirname(os.path.normpath(persistent_path)))
+
+    @classmethod
+    def is_valid_path(cls, path, region=None):
         if not path:
             return False
+        region = (region or cls.REGION or "jp").lower()
+
+        if region == "tw":
+            normalized_path = os.path.normpath(path)
+            game_root = cls._get_tw_game_root(normalized_path)
+            has_master = os.path.exists(
+                os.path.join(normalized_path, "master", "master.mdb")
+            )
+            has_meta = os.path.exists(os.path.join(game_root, "meta"))
+            has_dat = os.path.isdir(os.path.join(game_root, "dat"))
+            return has_master and has_meta and has_dat
+
         # Check for essential parts: meta database and dat folder
         has_meta = os.path.exists(os.path.join(path, "meta"))
-        has_dat = os.path.exists(os.path.join(path, "dat"))
+        has_dat = os.path.isdir(os.path.join(path, "dat"))
         return has_meta and has_dat
 
     @classmethod
@@ -119,14 +142,15 @@ class Config:
                 with open(CONFIG_FILE, "r") as f:
                     data = json.load(f)
                     path = data.get("base_path", "")
-                    if cls.is_valid_path(path):
+                    cls.REGION = data.get("region", "jp")
+                    cls.DB_ENCRYPTED = cls.is_encrypted_region(cls.REGION)
+                    if cls.is_valid_path(path, cls.REGION):
                         cls.BASE_PATH = path
                         print(
                             f"Loaded valid config path from {CONFIG_FILE}: {cls.BASE_PATH}"
                         )
 
                     cls.LANGUAGE = data.get("language", "Auto")
-                    cls.REGION = data.get("region", "jp")
                     image_size = data.get(
                         "character_outfit_image_size",
                         cls.CHARACTER_OUTFIT_IMAGE_SIZE,
@@ -156,7 +180,7 @@ class Config:
 
         # 2. Try Windows defaults if on Windows
         for p in cls._get_windows_defaults():
-            if cls.is_valid_path(p):
+            if cls.is_valid_path(p, cls.REGION):
                 cls.BASE_PATH = p
                 print(f"Found default Windows path: {p}")
                 return
@@ -215,7 +239,11 @@ class Config:
 
     @classmethod
     def get_db_path(cls):
-        return os.path.join(cls.BASE_PATH, "meta") if cls.BASE_PATH else ""
+        if not cls.BASE_PATH:
+            return ""
+        if cls.REGION.lower() == "tw":
+            return os.path.join(cls._get_tw_game_root(cls.BASE_PATH), "meta")
+        return os.path.join(cls.BASE_PATH, "meta")
 
     @classmethod
     def get_master_db_path(cls):
@@ -233,7 +261,11 @@ class Config:
 
     @classmethod
     def get_data_root(cls):
-        return os.path.join(cls.BASE_PATH, "dat") if cls.BASE_PATH else ""
+        if not cls.BASE_PATH:
+            return ""
+        if cls.REGION.lower() == "tw":
+            return os.path.join(cls._get_tw_game_root(cls.BASE_PATH), "dat")
+        return os.path.join(cls.BASE_PATH, "dat")
 
     @classmethod
     def set_base_path(cls, path):
@@ -245,6 +277,7 @@ class Config:
         cls.BASE_PATH = (base_path or "").strip()
         if region is not None:
             cls.REGION = region
+        cls.DB_ENCRYPTED = cls.is_encrypted_region(cls.REGION)
         if language is not None:
             cls.LANGUAGE = language
         cls.save()
