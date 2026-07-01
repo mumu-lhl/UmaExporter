@@ -1,7 +1,10 @@
 import os
 import shutil
 import subprocess
+import threading
+import time
 import webbrowser
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
 import dearpygui.dearpygui as dpg
 import requests
@@ -22,32 +25,257 @@ class SettingsController:
 
     def __init__(self, app):
         self.app = app
+        self.cache_migration_stop_event = threading.Event()
+        self.is_cache_migration_running = False
 
     def on_settings_dir_selected(self, sender, app_data):
         selected_path = app_data["file_path_name"]
         dpg.set_value("settings_base_path", selected_path)
 
+    def on_settings_thumbnail_cache_dir_selected(self, sender, app_data):
+        selected_path = app_data["file_path_name"]
+        dpg.set_value("settings_thumbnail_cache_path", selected_path)
+        self._save_thumbnail_cache_path(selected_path)
+
+    def on_thumbnail_cache_path_changed(self, sender, app_data, user_data):
+        self._save_thumbnail_cache_path(dpg.get_value("settings_thumbnail_cache_path"))
+
+    def _save_thumbnail_cache_path(self, path):
+        Config.THUMBNAIL_CACHE_PATH = (path or "").strip()
+        Config.save()
+
     def apply_settings(self, sender, app_data, user_data):
         base_path = dpg.get_value("settings_base_path")
         region = dpg.get_value("settings_region")
         lang = dpg.get_value("settings_language")
+        thumbnail_cache_path = dpg.get_value("settings_thumbnail_cache_path")
 
         region_map = {
             i18n("region_jp"): "jp",
             i18n("region_global"): "global",
             i18n("region_tw"): "tw",
         }
-        Config.update_config(base_path, region_map.get(region, "jp"), lang)
+        Config.update_config(
+            base_path,
+            region_map.get(region, "jp"),
+            lang,
+            thumbnail_cache_path,
+        )
         self.app._reset_database_state()
         dpg.set_value("settings_status_msg", i18n("msg_loading"))
         self.app.database_service.start_db_load()
 
+    def on_migrate_cache_to_custom(self, sender, app_data, user_data):
+        custom_path = (dpg.get_value("settings_thumbnail_cache_path") or "").strip()
+        if not custom_path:
+            self._set_cache_migration_status(
+                i18n("msg_cache_migration_custom_path_empty")
+            )
+            return
+        self._start_cache_migration(Config.get_default_thumbnail_dir(), custom_path)
+
+    def on_migrate_cache_to_default(self, sender, app_data, user_data):
+        custom_path = (dpg.get_value("settings_thumbnail_cache_path") or "").strip()
+        if not custom_path:
+            self._set_cache_migration_status(
+                i18n("msg_cache_migration_custom_path_empty")
+            )
+            return
+        self._start_cache_migration(custom_path, Config.get_default_thumbnail_dir())
+
+    def on_pause_cache_migration(self, sender, app_data, user_data):
+        if self.is_cache_migration_running:
+            self.cache_migration_stop_event.set()
+            self._set_cache_migration_status(i18n("msg_cache_migration_stopping"))
+
+    def _start_cache_migration(self, source_dir, target_dir):
+        if self.is_cache_migration_running:
+            return
+
+        source_dir = os.path.abspath(os.path.normpath(source_dir))
+        target_dir = os.path.abspath(os.path.normpath(target_dir))
+        if source_dir == target_dir:
+            self._set_cache_migration_status(i18n("msg_cache_migration_same_path"))
+            return
+
+        self.is_cache_migration_running = True
+        self.cache_migration_stop_event.clear()
+        self._set_cache_migration_buttons(True)
+        self._set_cache_migration_status(i18n("msg_cache_migration_scanning"))
+        self.app.executor.submit(self._run_cache_migration, source_dir, target_dir)
+
+    def _run_cache_migration(self, source_dir, target_dir):
+        copied = 0
+        skipped = 0
+        failed = 0
+        discovered = 0
+        processed = 0
+        stopped = False
+        last_ui_update = 0
+
+        def send_progress(force=False):
+            nonlocal last_ui_update
+            now = time.monotonic()
+            if not force and now - last_ui_update < 0.2:
+                return
+            last_ui_update = now
+            self.app._queue_ui_task(
+                lambda p=processed, d=discovered, c=copied, s=skipped, f=failed: self._update_cache_migration_progress(
+                    p, d, c, s, f
+                )
+            )
+
+        def migrate_one(source_path):
+            rel_path = os.path.relpath(source_path, source_dir)
+            target_path = os.path.join(target_dir, rel_path)
+            try:
+                if os.path.exists(target_path):
+                    return "skipped"
+                if not os.path.exists(source_path):
+                    return "skipped"
+
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                shutil.copy2(source_path, target_path)
+                return "copied"
+            except Exception:
+                return "failed"
+
+        def apply_result(result):
+            nonlocal copied, skipped, failed, processed
+            processed += 1
+            if result == "copied":
+                copied += 1
+            elif result == "skipped":
+                skipped += 1
+            else:
+                failed += 1
+
+        try:
+            if not os.path.isdir(source_dir):
+                self.app._queue_ui_task(
+                    lambda: self._finish_cache_migration(True, copied, skipped, failed, 0, None)
+                )
+                return
+
+            os.makedirs(target_dir, exist_ok=True)
+
+            max_workers = 4
+            max_pending = max_workers * 16
+            pending = set()
+
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                for root, dirs, names in os.walk(source_dir):
+                    if self.cache_migration_stop_event.is_set():
+                        stopped = True
+                        break
+
+                    dirs[:] = [
+                        name
+                        for name in dirs
+                        if not self._is_path_inside(
+                            os.path.join(root, name), target_dir
+                        )
+                    ]
+
+                    for name in names:
+                        if self.cache_migration_stop_event.is_set():
+                            stopped = True
+                            break
+                        source_path = os.path.join(root, name)
+                        discovered += 1
+                        pending.add(pool.submit(migrate_one, source_path))
+
+                        if len(pending) >= max_pending:
+                            done, pending = wait(
+                                pending, return_when=FIRST_COMPLETED
+                            )
+                            for future in done:
+                                apply_result(future.result())
+                            send_progress()
+
+                    send_progress()
+                    if stopped:
+                        break
+
+                while pending:
+                    done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        apply_result(future.result())
+                    send_progress()
+
+            send_progress(force=True)
+        except Exception as e:
+            failed += 1
+            self.app._queue_ui_task(
+                lambda msg=str(e): self._finish_cache_migration(
+                    False, copied, skipped, failed, discovered, msg
+                )
+            )
+            return
+
+        self.app._queue_ui_task(
+            lambda: self._finish_cache_migration(
+                not stopped, copied, skipped, failed, discovered, None
+            )
+        )
+
+    @staticmethod
+    def _is_path_inside(path, parent):
+        try:
+            path = os.path.abspath(os.path.normpath(path))
+            parent = os.path.abspath(os.path.normpath(parent))
+            return os.path.commonpath([path, parent]) == parent
+        except ValueError:
+            return False
+
+    def _set_cache_migration_buttons(self, running):
+        items = {
+            "settings_migrate_cache_to_custom_btn": not running,
+            "settings_migrate_cache_to_default_btn": not running,
+            "settings_pause_cache_migration_btn": running,
+        }
+        for tag, enabled in items.items():
+            if dpg.does_item_exist(tag):
+                dpg.configure_item(tag, enabled=enabled)
+
+    def _update_cache_migration_progress(self, current, total, copied, skipped, failed):
+        self._set_cache_migration_status(
+            i18n("msg_cache_migration_progress").format(
+                current, total, copied, skipped, failed
+            ),
+        )
+
+    def _finish_cache_migration(self, completed, copied, skipped, failed, total, error):
+        self.is_cache_migration_running = False
+        self._set_cache_migration_buttons(False)
+        if error:
+            msg = i18n("msg_cache_migration_failed").format(error)
+        elif completed:
+            msg = i18n("msg_cache_migration_done").format(total, copied, skipped, failed)
+        else:
+            msg = i18n("msg_cache_migration_paused").format(total, copied, skipped, failed)
+        self._set_cache_migration_status(msg)
+
+    def _set_cache_migration_status(self, message):
+        if dpg.does_item_exist("settings_cache_migration_status"):
+            dpg.configure_item("settings_cache_migration_status", show=bool(message))
+            dpg.set_value("settings_cache_migration_status", message)
+
     def on_clear_thumbnail_cache(self, sender, app_data, user_data):
+        status_tag = (
+            "settings_cache_migration_status"
+            if dpg.does_item_exist("settings_cache_migration_status")
+            else "settings_status_msg"
+        )
         try:
             thumb_manager.clear_all()
-            dpg.set_value("settings_status_msg", i18n("msg_clear_cache_success"))
+            if dpg.does_item_exist(status_tag):
+                dpg.configure_item(status_tag, show=True)
+            dpg.set_value(status_tag, i18n("msg_cache_cleared"))
         except Exception as e:
-            dpg.set_value("settings_status_msg", f"Failed to clear cache: {e}")
+            if dpg.does_item_exist(status_tag):
+                dpg.configure_item(status_tag, show=True)
+            dpg.set_value(status_tag, f"Failed to clear cache: {e}")
 
     def on_check_updates(self, sender, app_data, user_data):
         dpg.set_value("settings_update_status", i18n("msg_update_checking"))

@@ -45,6 +45,8 @@ class Config:
     CHARACTER_OUTFIT_IMAGE_SIZE = 180
     # 3D dress icons use their original, more compact card presentation.
     CHARACTER_3D_OUTFIT_ICON_SIZE = 96
+    # Empty means the default application data thumbnail directory.
+    THUMBNAIL_CACHE_PATH = ""
 
     @classmethod
     def get_profile_dir(cls):
@@ -173,6 +175,7 @@ class Config:
                             "Invalid character_3d_outfit_icon_size in config; "
                             f"using {cls.CHARACTER_3D_OUTFIT_ICON_SIZE}."
                         )
+                    cls.THUMBNAIL_CACHE_PATH = data.get("thumbnail_cache_path", "")
                     print(f"Loaded language: {cls.LANGUAGE}, region: {cls.REGION}")
                     return
             except Exception as e:
@@ -200,6 +203,7 @@ class Config:
                     "character_3d_outfit_icon_size": (
                         cls.CHARACTER_3D_OUTFIT_ICON_SIZE
                     ),
+                    "thumbnail_cache_path": cls.THUMBNAIL_CACHE_PATH,
                 }
                 json.dump(data, f, indent=4)
                 print(f"Saved config to {CONFIG_FILE}")
@@ -232,10 +236,15 @@ class Config:
     @classmethod
     def get_thumbnail_dir(cls):
         """Returns the directory where thumbnails are stored."""
-        path = os.path.join(cls.get_app_data_dir(), "thumbnails")
+        path = cls.THUMBNAIL_CACHE_PATH.strip() or cls.get_default_thumbnail_dir()
         if not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
         return path
+
+    @classmethod
+    def get_default_thumbnail_dir(cls):
+        """Returns the built-in thumbnail cache directory."""
+        return os.path.join(cls.get_app_data_dir(), "thumbnails")
 
     @classmethod
     def get_db_path(cls):
@@ -272,7 +281,7 @@ class Config:
         cls.BASE_PATH = path
 
     @classmethod
-    def update_config(cls, base_path, region=None, language=None):
+    def update_config(cls, base_path, region=None, language=None, thumbnail_cache_path=None):
         """Update in-memory config and persist it to disk."""
         cls.BASE_PATH = (base_path or "").strip()
         if region is not None:
@@ -280,4 +289,6 @@ class Config:
         cls.DB_ENCRYPTED = cls.is_encrypted_region(cls.REGION)
         if language is not None:
             cls.LANGUAGE = language
+        if thumbnail_cache_path is not None:
+            cls.THUMBNAIL_CACHE_PATH = (thumbnail_cache_path or "").strip()
         cls.save()

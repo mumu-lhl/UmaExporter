@@ -86,10 +86,12 @@ class ThumbnailManager:
     def clear_all():
         """Clears all thumbnail files."""
         thumb_dir = Config.get_thumbnail_dir()
-        if os.path.exists(thumb_dir):
-            for f in os.listdir(thumb_dir):
-                if f.endswith(".png"):
-                    try:
-                        os.remove(os.path.join(thumb_dir, f))
-                    except OSError:
-                        pass
+        targets = [thumb_dir, ThumbnailManager.get_character_cache_dir()]
+        for target_dir in targets:
+            if os.path.exists(target_dir):
+                for f in os.listdir(target_dir):
+                    if f.endswith(".png"):
+                        try:
+                            os.remove(os.path.join(target_dir, f))
+                        except OSError:
+                            pass

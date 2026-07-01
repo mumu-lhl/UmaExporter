@@ -79,6 +79,16 @@ class MainView:
         with dpg.file_dialog(
             directory_selector=True,
             show=False,
+            callback=self.controller.on_settings_thumbnail_cache_dir_selected,
+            tag="settings_thumbnail_cache_dir_dialog",
+            width=600,
+            height=400,
+        ):
+            dpg.add_file_extension(".*")
+
+        with dpg.file_dialog(
+            directory_selector=True,
+            show=False,
             callback=self.controller.on_character_export_selected,
             tag="character_export_dialog",
             width=600,
@@ -363,6 +373,80 @@ class MainView:
                     )
 
                     dpg.add_spacer(height=10)
+                    with dpg.group(horizontal=True):
+                        dpg.add_button(
+                            label=i18n("btn_apply"),
+                            width=200,
+                            callback=self.controller.apply_settings,
+                        )
+                        dpg.add_text("", tag="settings_status_msg")
+
+                    dpg.add_text(
+                        i18n("label_restart_note"),
+                        color=[150, 150, 150],
+                    )
+
+                    dpg.add_spacer(height=16)
+                    dpg.add_separator()
+
+                    dpg.add_spacer(height=10)
+                    dpg.add_text(i18n("label_thumbnail_cache_path"))
+                    with dpg.group(horizontal=True):
+                        dpg.add_input_text(
+                            tag="settings_thumbnail_cache_path",
+                            default_value=Config.THUMBNAIL_CACHE_PATH,
+                            width=420,
+                            hint=Config.get_default_thumbnail_dir(),
+                        )
+                        with dpg.item_handler_registry() as thumbnail_cache_path_handler:
+                            dpg.add_item_deactivated_after_edit_handler(
+                                callback=self.controller.on_thumbnail_cache_path_changed
+                            )
+                        dpg.bind_item_handler_registry(
+                            "settings_thumbnail_cache_path",
+                            thumbnail_cache_path_handler,
+                        )
+                        dpg.add_button(
+                            label=i18n("btn_browse"),
+                            callback=lambda: dpg.show_item(
+                                "settings_thumbnail_cache_dir_dialog"
+                            ),
+                        )
+
+                    dpg.add_spacer(height=6)
+                    with dpg.group(horizontal=True):
+                        dpg.add_button(
+                            label=i18n("btn_migrate_cache_to_custom"),
+                            tag="settings_migrate_cache_to_custom_btn",
+                            width=220,
+                            callback=self.controller.on_migrate_cache_to_custom,
+                        )
+                        dpg.add_button(
+                            label=i18n("btn_migrate_cache_to_default"),
+                            tag="settings_migrate_cache_to_default_btn",
+                            width=220,
+                            callback=self.controller.on_migrate_cache_to_default,
+                        )
+                        dpg.add_button(
+                            label=i18n("btn_pause_cache_migration"),
+                            tag="settings_pause_cache_migration_btn",
+                            width=120,
+                            callback=self.controller.on_pause_cache_migration,
+                            enabled=False,
+                        )
+                        dpg.add_button(
+                            label=i18n("btn_clear_cache"),
+                            width=160,
+                            callback=self.controller.on_clear_thumbnail_cache,
+                        )
+                    dpg.add_text(
+                        "",
+                        tag="settings_cache_migration_status",
+                        wrap=620,
+                        show=False,
+                    )
+
+                    dpg.add_spacer(height=4)
                     dpg.add_text(i18n("label_download_source"))
                     dpg.add_combo(
                         items=[
@@ -384,25 +468,6 @@ class MainView:
                             callback=self.controller.on_update_translations,
                         )
                         dpg.add_text("", tag="settings_translation_status")
-
-                    dpg.add_spacer(height=20)
-                    with dpg.group(horizontal=True):
-                        dpg.add_button(
-                            label=i18n("btn_apply"),
-                            width=200,
-                            callback=self.controller.apply_settings,
-                        )
-                        dpg.add_button(
-                            label=i18n("btn_clear_cache"),
-                            width=200,
-                            callback=self.controller.on_clear_thumbnail_cache,
-                        )
-                        dpg.add_text("", tag="settings_status_msg")
-
-                    dpg.add_text(
-                        i18n("label_restart_note"),
-                        color=[150, 150, 150],
-                    )
 
                     dpg.add_spacer(height=10)
                     with dpg.group(horizontal=True):

@@ -185,9 +185,24 @@ class UmaExporterApp:
         self.on_settings_dir_selected = (
             self.settings_controller.on_settings_dir_selected
         )
+        self.on_settings_thumbnail_cache_dir_selected = (
+            self.settings_controller.on_settings_thumbnail_cache_dir_selected
+        )
+        self.on_thumbnail_cache_path_changed = (
+            self.settings_controller.on_thumbnail_cache_path_changed
+        )
         self.apply_settings = self.settings_controller.apply_settings
         self.on_clear_thumbnail_cache = (
             self.settings_controller.on_clear_thumbnail_cache
+        )
+        self.on_migrate_cache_to_custom = (
+            self.settings_controller.on_migrate_cache_to_custom
+        )
+        self.on_migrate_cache_to_default = (
+            self.settings_controller.on_migrate_cache_to_default
+        )
+        self.on_pause_cache_migration = (
+            self.settings_controller.on_pause_cache_migration
         )
         self.on_update_translations = self.settings_controller.on_update_translations
         self.on_check_runtime = self.settings_controller.on_check_runtime
