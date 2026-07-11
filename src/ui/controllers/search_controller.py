@@ -437,6 +437,7 @@ class SearchController:
                                         width=100,
                                         height=100,
                                     )
+                                    self.app.file_item_data[img_id] = u_data
 
                                     with dpg.item_handler_registry() as handler:
                                         dpg.add_item_clicked_handler(

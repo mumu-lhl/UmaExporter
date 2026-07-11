@@ -58,7 +58,7 @@ class UmaExporterApp:
         self.drag_preview_active = False
         self.current_view_is_drag_preview = False
         self.last_hover_scan_time = 0
-        self.hover_scan_interval = 0.05
+        self.hover_scan_interval = 1.0 / 60.0
         self.last_drag_preview_item = None
         self.pending_drag_preview = None
         self.drag_preview_interval = 0.05
@@ -68,6 +68,11 @@ class UmaExporterApp:
         self.middle_drag_start_mouse_y = None
         self.middle_drag_start_scroll_y = None
         self.middle_drag_speed = 1.0
+        self.left_mouse_gesture_active = False
+        self.left_scrollbar_drag_active = False
+        self.left_scroll_candidate_target = None
+        self.left_scroll_candidate_y = None
+        self.left_drag_preview_occurred = False
         self.last_tab_drag_switch_target = None
         self.last_tab_drag_switch_time = 0
         self.tab_drag_switch_interval = 0.5
@@ -304,6 +309,10 @@ class UmaExporterApp:
 
             with dpg.handler_registry(tag="global_drag_handlers"):
                 dpg.add_mouse_move_handler(callback=self.drag_controller._on_mouse_move)
+                dpg.add_mouse_down_handler(
+                    button=dpg.mvMouseButton_Left,
+                    callback=self.drag_controller._on_left_mouse_down,
+                )
                 dpg.add_mouse_drag_handler(
                     button=dpg.mvMouseButton_Left,
                     callback=self.drag_controller._on_mouse_move,
@@ -669,6 +678,7 @@ class UmaExporterApp:
             while dpg.is_dearpygui_running():
                 with Monitor.time_block("frame_time"):
                     self._drain_ui_tasks()
+                    self.drag_controller.process_pending_drag_preview()
                     self.search_controller.process_lazy_thumbnails()
                     self.search_controller.process_global_search_load_more()
                     dpg.render_dearpygui_frame()

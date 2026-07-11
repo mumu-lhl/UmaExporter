@@ -21,6 +21,13 @@ class DragController:
             self.app.last_tab_drag_switch_target = None
             return
 
+        self._update_left_scrollbar_drag_state()
+
+        # A scrollbar drag must remain a pure scrolling gesture even if the
+        # pointer slips left over an item while the button is still held.
+        if self.app.left_scrollbar_drag_active:
+            return
+
         self._handle_tab_drag_switch()
         now = time.monotonic()
         if now - self.app.last_hover_scan_time < self.app.hover_scan_interval:
@@ -44,11 +51,46 @@ class DragController:
             return
 
         self.app.last_drag_preview_item = hovered_item
+        self._select_drag_item(hovered_item)
         if now - self.app.last_drag_preview_time < self.app.drag_preview_interval:
             self.app.pending_drag_preview = (hovered_item, file_data)
             return
 
         self._trigger_drag_preview(hovered_item, file_data)
+
+    def _on_left_mouse_down(self, *args):
+        if self.app.left_mouse_gesture_active:
+            return
+        self.app.left_mouse_gesture_active = True
+        self.app.left_drag_preview_occurred = False
+        # Do not classify the gesture from a synthetic scrollbar rectangle.
+        # Selectable rows and the child-window scrollbar can overlap in DPG's
+        # reported item rectangles, which caused ordinary row drags to be
+        # locked out as scrollbar drags.  The gesture is promoted to a pure
+        # scrollbar drag below only after the container actually scrolls.
+        self.app.left_scrollbar_drag_active = False
+        target = self._pick_scroll_target_under_mouse()
+        self.app.left_scroll_candidate_target = target
+        try:
+            self.app.left_scroll_candidate_y = (
+                dpg.get_y_scroll(target) if target else None
+            )
+        except Exception:
+            self.app.left_scroll_candidate_y = None
+
+    def _update_left_scrollbar_drag_state(self):
+        if self.app.left_scrollbar_drag_active:
+            return
+        target = self.app.left_scroll_candidate_target
+        start_y = self.app.left_scroll_candidate_y
+        if not target or start_y is None or not dpg.does_item_exist(target):
+            return
+        try:
+            if abs(dpg.get_y_scroll(target) - start_y) > 0.5:
+                self.app.left_scrollbar_drag_active = True
+                self.app.pending_drag_preview = None
+        except Exception:
+            pass
 
     def _trigger_drag_preview(self, item, file_data):
         now = time.monotonic()
@@ -56,6 +98,7 @@ class DragController:
         prev_drag_state = self.app.drag_preview_active
         self.app.is_navigating = True
         self.app.drag_preview_active = True
+        self.app.left_drag_preview_occurred = True
         try:
             self.app.on_file_click(item, None, file_data)
         finally:
@@ -63,17 +106,46 @@ class DragController:
             self.app.drag_preview_active = prev_drag_state
             self.app.last_drag_preview_time = now
 
-        if self.app.pending_drag_preview:
-            pending_item, pending_data = self.app.pending_drag_preview
-            self.app.pending_drag_preview = None
-            if dpg.does_item_exist(
-                pending_item
-            ) and self.app.current_asset_id != pending_data.get("id"):
-                if (
-                    time.monotonic() - self.app.last_drag_preview_time
-                    >= self.app.drag_preview_interval
-                ):
-                    self._trigger_drag_preview(pending_item, pending_data)
+    def process_pending_drag_preview(self):
+        if (
+            not self.app.pending_drag_preview
+            or self.app.left_scrollbar_drag_active
+            or not dpg.is_mouse_button_down(dpg.mvMouseButton_Left)
+            or time.monotonic() - self.app.last_drag_preview_time
+            < self.app.drag_preview_interval
+        ):
+            return
+
+        item, file_data = self.app.pending_drag_preview
+        self.app.pending_drag_preview = None
+        if (
+            dpg.does_item_exist(item)
+            and self.app.current_asset_id != file_data.get("id")
+        ):
+            self._trigger_drag_preview(item, file_data)
+
+    def _select_drag_item(self, item):
+        previous = self.app.last_selected
+        if previous == item:
+            return
+        try:
+            if previous and dpg.does_item_exist(previous):
+                previous_type = dpg.get_item_type(previous)
+                if "mvSelectable" in previous_type:
+                    dpg.set_value(previous, False)
+                elif "mvImage" in previous_type:
+                    dpg.configure_item(
+                        previous, tint_color=[255, 255, 255, 255]
+                    )
+            if dpg.does_item_exist(item):
+                item_type = dpg.get_item_type(item)
+                if "mvSelectable" in item_type:
+                    dpg.set_value(item, True)
+                elif "mvImage" in item_type:
+                    dpg.configure_item(item, tint_color=[150, 200, 255, 255])
+                self.app.last_selected = item
+        except Exception:
+            pass
 
     def _on_middle_mouse_down(self, *args):
         if self.app.middle_drag_active:
@@ -131,7 +203,21 @@ class DragController:
         self.app.middle_drag_start_scroll_y = None
 
     def _on_left_mouse_release(self, *args):
-        self._finalize_drag_preview_selection()
+        self.app.left_mouse_gesture_active = False
+        self.app.left_scroll_candidate_target = None
+        self.app.left_scroll_candidate_y = None
+        if self.app.left_scrollbar_drag_active:
+            self.app.left_scrollbar_drag_active = False
+            self.app.last_drag_preview_item = None
+            self.app.pending_drag_preview = None
+            self.app.last_tab_drag_switch_target = None
+            self.app.left_drag_preview_occurred = False
+            return
+
+        self.app.left_scrollbar_drag_active = False
+        if self.app.left_drag_preview_occurred:
+            self._finalize_drag_preview_selection()
+        self.app.left_drag_preview_occurred = False
         self.app.last_drag_preview_item = None
         self.app.pending_drag_preview = None
         self.app.last_tab_drag_switch_target = None
@@ -201,9 +287,19 @@ class DragController:
             else:
                 candidates = ["home_browse_scroll", "home_details_scroll"]
         elif active_tab == "scene_tab":
-            candidates = ["scene_results_parent", "scene_details_scroll"]
+            scene_container = (
+                "scene_thumbnails_parent"
+                if self.app.scene_view_mode == "thumbnail"
+                else "scene_results_parent"
+            )
+            candidates = [scene_container, "scene_details_scroll"]
         elif active_tab == "prop_tab":
-            candidates = ["prop_results_parent", "prop_details_scroll"]
+            prop_container = (
+                "prop_thumbnails_parent"
+                if self.app.prop_view_mode == "thumbnail"
+                else "prop_results_parent"
+            )
+            candidates = [prop_container, "prop_details_scroll"]
 
         # 3. Precise rect-based hit testing
         for tag in candidates:
@@ -227,9 +323,17 @@ class DragController:
                 return "search_results"
             return "home_browse_scroll"
         elif active_tab == "scene_tab":
-            return "scene_results_parent"
+            return (
+                "scene_thumbnails_parent"
+                if self.app.scene_view_mode == "thumbnail"
+                else "scene_results_parent"
+            )
         elif active_tab == "prop_tab":
-            return "prop_results_parent"
+            return (
+                "prop_thumbnails_parent"
+                if self.app.prop_view_mode == "thumbnail"
+                else "prop_results_parent"
+            )
 
         return None
 
@@ -292,9 +396,17 @@ class DragController:
             else:
                 container = "home_browse_scroll"
         elif active_tab == "scene_tab":
-            container = "scene_results_parent"
+            container = (
+                "scene_thumbnails_parent"
+                if self.app.scene_view_mode == "thumbnail"
+                else "scene_results_parent"
+            )
         elif active_tab == "prop_tab":
-            container = "prop_results_parent"
+            container = (
+                "prop_thumbnails_parent"
+                if self.app.prop_view_mode == "thumbnail"
+                else "prop_results_parent"
+            )
 
         if not container or not dpg.does_item_exist(container):
             return None
@@ -308,6 +420,19 @@ class DragController:
             for child in reversed(children):
                 if not dpg.is_item_shown(child):
                     continue
+
+                # A tree node's item rectangle covers only its header, not
+                # its expanded descendants. Recurse before the header rect
+                # test so Home-page rows do not fall through to the global
+                # O(N) file-item scan on every mouse movement.
+                try:
+                    child_type = dpg.get_item_type(child)
+                except Exception:
+                    child_type = ""
+                if "mvTreeNode" in child_type and dpg.get_value(child):
+                    result = find_item_recursive(child)
+                    if result:
+                        return result
 
                 # Try direct hovered check (but might fail during drag)
                 if dpg.is_item_hovered(child):
@@ -325,13 +450,7 @@ class DragController:
                             return child
 
                         # If it's a container, recurse
-                        t = dpg.get_item_type(child)
-                        if "mvTreeNode" in t:
-                            if dpg.get_value(child):
-                                res = find_item_recursive(child)
-                                if res:
-                                    return res
-                        elif "mvChildWindow" in t or "mvGroup" in t:
+                        if "mvChildWindow" in child_type or "mvGroup" in child_type:
                             res = find_item_recursive(child)
                             if res:
                                 return res
