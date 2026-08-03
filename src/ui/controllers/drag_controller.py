@@ -7,6 +7,14 @@ class DragController:
     def __init__(self, app):
         self.app = app
 
+    @staticmethod
+    def _is_item_hovered(item):
+        try:
+            return bool(dpg.is_item_hovered(item))
+        except (KeyError, RuntimeError):
+            # Some Dear PyGui item states do not expose a hovered key.
+            return False
+
     def _on_mouse_move(self, *args):
         # Fallback initialization for middle-drag
         if dpg.is_mouse_button_down(dpg.mvMouseButton_Middle):
@@ -435,7 +443,7 @@ class DragController:
                         return result
 
                 # Try direct hovered check (but might fail during drag)
-                if dpg.is_item_hovered(child):
+                if self._is_item_hovered(child):
                     if child in self.app.file_item_data:
                         return child
 

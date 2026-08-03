@@ -107,6 +107,28 @@ class DragPreviewItemTests(unittest.TestCase):
 
         self.assertEqual(found, 7, dpg.mock_calls)
 
+    def test_hit_test_survives_missing_hover_state(self):
+        app = SimpleNamespace(file_item_data={7: {"id": 7}}, prop_view_mode="list")
+        controller = DragController(app)
+
+        with patch.object(drag_module, "dpg", Mock()) as dpg:
+            dpg.get_mouse_pos.return_value = (50, 50)
+            dpg.get_value.return_value = "prop_tab"
+            dpg.does_item_exist.return_value = True
+            dpg.is_item_shown.return_value = True
+            dpg.get_item_children.side_effect = lambda item, slot=1: {
+                "prop_results_parent": [7],
+                7: [],
+            }.get(item, [])
+            dpg.is_item_hovered.side_effect = KeyError("hovered")
+            dpg.get_item_type.return_value = "mvAppItemType::mvSelectable"
+            dpg.get_item_rect_min.return_value = (0, 0)
+            dpg.get_item_rect_max.return_value = (100, 100)
+
+            found = controller._pick_file_item_under_mouse()
+
+        self.assertEqual(found, 7)
+
 
 if __name__ == "__main__":
     unittest.main()
