@@ -460,7 +460,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "cython", specifier = ">=3.2.4" },
-    { name = "setuptools", specifier = ">=82.0.0" },
+    { name = "setuptools", specifier = ">=83.0.0" },
 ]
 
 [[package]]
