@@ -487,16 +487,41 @@ class DragController:
         # BRUTE FORCE FALLBACK for items that might be outside the main hierarchy slot
         if not found:
             for item in list(self.app.file_item_data.keys()):
-                if dpg.does_item_exist(item) and dpg.is_item_shown(item):
-                    try:
-                        mi = dpg.get_item_rect_min(item)
-                        ma = dpg.get_item_rect_max(item)
-                        if mi[0] <= mouse_x <= ma[0] and mi[1] <= mouse_y <= ma[1]:
-                            return item
-                    except:
-                        continue
+                if not dpg.does_item_exist(item) or not dpg.is_item_shown(item):
+                    continue
+                if not self._is_item_descendant_of(item, container):
+                    continue
+                try:
+                    mi = dpg.get_item_rect_min(item)
+                    ma = dpg.get_item_rect_max(item)
+                    if mi[0] <= mouse_x <= ma[0] and mi[1] <= mouse_y <= ma[1]:
+                        return item
+                except:
+                    continue
 
         return found
+
+    def _is_item_descendant_of(self, item, ancestor):
+        """Keep fallback hit testing inside the active page hierarchy."""
+        current = item
+        visited = set()
+        while current and current not in visited:
+            visited.add(current)
+            if current == ancestor:
+                return True
+
+            try:
+                if dpg.get_item_alias(current) == ancestor:
+                    return True
+            except Exception:
+                pass
+
+            try:
+                current = dpg.get_item_parent(current)
+            except Exception:
+                return False
+
+        return False
 
     def _find_scroll_target_for_item(self, item):
         current = item

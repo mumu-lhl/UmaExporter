@@ -107,6 +107,53 @@ class DragPreviewItemTests(unittest.TestCase):
 
         self.assertEqual(found, 7, dpg.mock_calls)
 
+    def test_home_hit_test_ignores_thumbnail_from_inactive_tab(self):
+        app = SimpleNamespace(
+            file_item_data={7: {"id": 7}},
+            prop_view_mode="thumbnail",
+        )
+        controller = DragController(app)
+
+        with patch.object(drag_module, "dpg", Mock()) as dpg:
+            dpg.get_mouse_pos.return_value = (50, 50)
+            dpg.get_value.return_value = "home_tab"
+            dpg.does_item_exist.return_value = True
+            dpg.is_item_shown.side_effect = lambda item: item != "search_group"
+            dpg.get_item_children.return_value = []
+            dpg.get_item_parent.side_effect = lambda item: {
+                7: "prop_thumbnails_parent",
+                "prop_thumbnails_parent": "prop_tab",
+            }.get(item)
+            dpg.get_item_rect_min.return_value = (0, 0)
+            dpg.get_item_rect_max.return_value = (100, 100)
+
+            found = controller._pick_file_item_under_mouse()
+
+        self.assertIsNone(found)
+
+    def test_thumbnail_fallback_stays_inside_active_container(self):
+        app = SimpleNamespace(
+            file_item_data={7: {"id": 7}},
+            prop_view_mode="thumbnail",
+        )
+        controller = DragController(app)
+
+        with patch.object(drag_module, "dpg", Mock()) as dpg:
+            dpg.get_mouse_pos.return_value = (50, 50)
+            dpg.get_value.return_value = "prop_tab"
+            dpg.does_item_exist.return_value = True
+            dpg.is_item_shown.return_value = True
+            dpg.get_item_children.return_value = []
+            dpg.get_item_parent.side_effect = lambda item: {
+                7: "prop_thumbnails_parent",
+            }.get(item)
+            dpg.get_item_rect_min.return_value = (0, 0)
+            dpg.get_item_rect_max.return_value = (100, 100)
+
+            found = controller._pick_file_item_under_mouse()
+
+        self.assertEqual(found, 7)
+
     def test_hit_test_survives_missing_hover_state(self):
         app = SimpleNamespace(file_item_data={7: {"id": 7}}, prop_view_mode="list")
         controller = DragController(app)
