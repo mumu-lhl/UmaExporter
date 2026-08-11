@@ -19,6 +19,7 @@ def main():
     if "--my-worker-flag" in sys.argv:
         # Run worker logic directly and EXIT
         from my_app.worker import run_worker
+
         run_worker()
         return
 ```

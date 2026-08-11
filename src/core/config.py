@@ -159,7 +159,7 @@ class Config:
                     )
                     try:
                         cls.CHARACTER_OUTFIT_IMAGE_SIZE = max(1, int(image_size))
-                    except (TypeError, ValueError):
+                    except TypeError, ValueError:
                         print(
                             "Invalid character_outfit_image_size in config; "
                             f"using {cls.CHARACTER_OUTFIT_IMAGE_SIZE}."
@@ -170,7 +170,7 @@ class Config:
                     )
                     try:
                         cls.CHARACTER_3D_OUTFIT_ICON_SIZE = max(1, int(icon_size))
-                    except (TypeError, ValueError):
+                    except TypeError, ValueError:
                         print(
                             "Invalid character_3d_outfit_icon_size in config; "
                             f"using {cls.CHARACTER_3D_OUTFIT_ICON_SIZE}."
@@ -281,7 +281,9 @@ class Config:
         cls.BASE_PATH = path
 
     @classmethod
-    def update_config(cls, base_path, region=None, language=None, thumbnail_cache_path=None):
+    def update_config(
+        cls, base_path, region=None, language=None, thumbnail_cache_path=None
+    ):
         """Update in-memory config and persist it to disk."""
         cls.BASE_PATH = (base_path or "").strip()
         if region is not None:

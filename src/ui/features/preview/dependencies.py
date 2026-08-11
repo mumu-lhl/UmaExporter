@@ -37,7 +37,9 @@ class DependencyPanelController:
         cached = cache.get(asset_id)
         if cached is not None:
             self.app._queue_ui_task(
-                lambda: self._apply(asset_id, request_id, cached, parent_suffix, empty_message)
+                lambda: self._apply(
+                    asset_id, request_id, cached, parent_suffix, empty_message
+                )
             )
             return
 
@@ -50,7 +52,9 @@ class DependencyPanelController:
                 data = []
             cache[asset_id] = data
             self.app._queue_ui_task(
-                lambda: self._apply(asset_id, request_id, data, parent_suffix, empty_message)
+                lambda: self._apply(
+                    asset_id, request_id, data, parent_suffix, empty_message
+                )
             )
 
         future.add_done_callback(done)

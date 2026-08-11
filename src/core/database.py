@@ -231,7 +231,7 @@ class UmaDatabase:
                     cursor.execute("SELECT name FROM sqlite_master LIMIT 1")
                     success = True
                     break
-                except (apsw.NotADBError, apsw.AuthError, apsw.ExecutionCompleteError):
+                except apsw.NotADBError, apsw.AuthError, apsw.ExecutionCompleteError:
                     continue
 
             if not success:
@@ -261,7 +261,7 @@ class UmaDatabase:
         for pragma in pragmas:
             try:
                 cursor.execute(pragma)
-            except (sqlite3.DatabaseError, apsw.Error):
+            except sqlite3.DatabaseError, apsw.Error:
                 continue
 
     @staticmethod
@@ -638,7 +638,13 @@ class UmaDatabase:
                 continue
             body_assets.setdefault(
                 (match.group(1), match.group(2)),
-                {"id": i_id, "full_path": name, "size": size, "hash": f_hash, "key": key_val},
+                {
+                    "id": i_id,
+                    "full_path": name,
+                    "size": size,
+                    "hash": f_hash,
+                    "key": key_val,
+                },
             )
 
         dress_data = self.master_db.get_all_dress_data()
@@ -737,9 +743,7 @@ class UmaDatabase:
         # Equivalent to the prior SQL LIKE pattern ``dress_%{dress_id}_%``.
         # In SQL LIKE, each ``_`` is a one-character wildcard, including the
         # final character after the dress ID.
-        pattern = re.compile(
-            rf"^outgame/dress/dress..*{re.escape(str(dress_id))}..*$"
-        )
+        pattern = re.compile(rf"^outgame/dress/dress..*{re.escape(str(dress_id))}..*$")
         icon_row = next(
             (row for row in self._dress_icon_rows if pattern.match(row[1])),
             None,

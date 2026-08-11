@@ -33,10 +33,11 @@ Dear PyGui (DPG) is highly sensitive to main-thread blocking, especially when co
     req_id = self.app.thumbnail_request_ids[prefix]
     self.app.executor.submit(worker, req_id)
 
+
     # 2. Callback (Main Thread)
     def apply_result(req_id, data):
         if req_id != self.app.thumbnail_request_ids.get(prefix):
-            return # Request is stale, user already clicked something else
+            return  # Request is stale, user already clicked something else
         # Proceed with UI update...
     ```
 

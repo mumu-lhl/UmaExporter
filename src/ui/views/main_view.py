@@ -398,7 +398,9 @@ class MainView:
                             width=420,
                             hint=Config.get_default_thumbnail_dir(),
                         )
-                        with dpg.item_handler_registry() as thumbnail_cache_path_handler:
+                        with (
+                            dpg.item_handler_registry() as thumbnail_cache_path_handler
+                        ):
                             dpg.add_item_deactivated_after_edit_handler(
                                 callback=self.controller.on_thumbnail_cache_path_changed
                             )

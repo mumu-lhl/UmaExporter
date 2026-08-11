@@ -65,7 +65,9 @@ class UiArchitectureTests(unittest.TestCase):
         app = module_source("src/ui/main_window.py")
         controller = module_source("src/ui/features/characters/export_controller.py")
         self.assertIn("CharacterExportController", app)
-        self.assertIn("self.character_export_controller.on_character_export_selected", app)
+        self.assertIn(
+            "self.character_export_controller.on_character_export_selected", app
+        )
         self.assertIn("class CharacterExportController", controller)
         self.assertNotIn("def on_export_selected", controller)
         self.assertNotIn("def on_export_all_objects", controller)

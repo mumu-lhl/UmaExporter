@@ -237,9 +237,7 @@ class CharacterExportController:
         _, outfit_suffix = self._get_character_outfit_main_suffix(outfit_id)
         if outfit_suffix:
             folder_name = f"tail{chara_id}_{outfit_suffix}"
-            exclusive_path = (
-                f"3d/chara/tail/{folder_name}/pfb_{folder_name}"
-            )
+            exclusive_path = f"3d/chara/tail/{folder_name}/pfb_{folder_name}"
             if self.app.db.get_asset_by_path(exclusive_path) is not None:
                 return {
                     "label": "tail",
@@ -296,9 +294,7 @@ class CharacterExportController:
                 if not os.path.exists(phys_path):
                     continue
                 paths, bundle_keys = [phys_path], [asset.get("key")]
-            export_configs.append(
-                {"physical_paths": paths, "bundle_keys": bundle_keys}
-            )
+            export_configs.append({"physical_paths": paths, "bundle_keys": bundle_keys})
 
     def _resolve_character_mini_tail_target(self, chara_id):
         if not chara_id or not self.app.db:

@@ -62,7 +62,9 @@ class CharacterController:
         request_id = self.app.thumbnail_request_ids["character_icons"]
         if not entries:
             self.app._queue_ui_task(
-                lambda: dpg.add_text(i18n("label_no_characters"), parent=self.list_container)
+                lambda: dpg.add_text(
+                    i18n("label_no_characters"), parent=self.list_container
+                )
             )
             return
 
@@ -80,7 +82,9 @@ class CharacterController:
                     data["item_tag"] = image_tag
                     with dpg.item_handler_registry() as handler:
                         dpg.add_item_clicked_handler(
-                            callback=lambda s, a, u, tag=image_tag: self.on_selected(tag, a, u),
+                            callback=lambda s, a, u, tag=image_tag: self.on_selected(
+                                tag, a, u
+                            ),
                             user_data=data,
                         )
                     dpg.bind_item_handler_registry(image_tag, handler)
@@ -94,7 +98,9 @@ class CharacterController:
                     {
                         "img_id": image_tag,
                         "cache_name": data["cache_name"],
-                        "cache_path": thumb_manager.get_character_cache_path(data["cache_name"]),
+                        "cache_path": thumb_manager.get_character_cache_path(
+                            data["cache_name"]
+                        ),
                         "hash": data["hash"],
                         "key": data["key"],
                         "texture_name": data["texture_name"],
@@ -103,7 +109,11 @@ class CharacterController:
                 )
             self.app.character_state.entries = ui_entries
             selected = next(
-                (item for item in ui_entries if item["chara_id"] == self.app.character_state.current_id),
+                (
+                    item
+                    for item in ui_entries
+                    if item["chara_id"] == self.app.character_state.current_id
+                ),
                 ui_entries[0],
             )
             self.on_selected(selected["item_tag"], None, selected)
@@ -142,13 +152,19 @@ class CharacterController:
         def load_outfits():
             outfits = self.app.db.get_character_outfit_assets(user_data["chara_id"])
             self.app._queue_ui_task(
-                lambda: self.render_outfit_grid(user_data["chara_id"], outfits, request_id)
+                lambda: self.render_outfit_grid(
+                    user_data["chara_id"], outfits, request_id
+                )
             )
 
         self.app.executor.submit(load_outfits)
 
     def render_outfit_grid(self, chara_id, items, request_id=None):
-        items = [item for item in items if item.get("texture_name") or item.get("icon_texture_name")]
+        items = [
+            item
+            for item in items
+            if item.get("texture_name") or item.get("icon_texture_name")
+        ]
         if request_id != self.app.thumbnail_request_ids.get("character_outfits"):
             return
         image_size = Config.CHARACTER_OUTFIT_IMAGE_SIZE
@@ -178,9 +194,15 @@ class CharacterController:
             dpg.set_value("character_export_status", i18n("msg_select_outfit"))
             dpg.add_separator(parent=self.outfits_container)
             if not items:
-                dpg.add_text(i18n("label_no_character_outfits"), parent=self.outfits_container)
+                dpg.add_text(
+                    i18n("label_no_character_outfits"), parent=self.outfits_container
+                )
                 return
-            with dpg.table(header_row=False, parent=self.outfits_container, policy=dpg.mvTable_SizingStretchProp):
+            with dpg.table(
+                header_row=False,
+                parent=self.outfits_container,
+                policy=dpg.mvTable_SizingStretchProp,
+            ):
                 for _ in range(columns):
                     dpg.add_table_column()
                 for offset in range(0, len(items), columns):
@@ -198,12 +220,16 @@ class CharacterController:
         has_stand = bool(item.get("texture_name"))
         card_size = image_size if has_stand else Config.CHARACTER_3D_OUTFIT_ICON_SIZE
         with dpg.group():
-            image_tag = dpg.add_image("thumb_placeholder", width=card_size, height=card_size)
+            image_tag = dpg.add_image(
+                "thumb_placeholder", width=card_size, height=card_size
+            )
             item["item_tag"] = image_tag
             item["selection_tags"] = [image_tag]
             with dpg.item_handler_registry() as handler:
                 dpg.add_item_clicked_handler(
-                    callback=lambda s, a, u, tag=image_tag: self.on_outfit_selected(tag, a, u),
+                    callback=lambda s, a, u, tag=image_tag: self.on_outfit_selected(
+                        tag, a, u
+                    ),
                     user_data=item,
                 )
             dpg.bind_item_handler_registry(image_tag, handler)
@@ -211,22 +237,34 @@ class CharacterController:
                 dpg.add_text(item["dress_name"])
                 if item.get("outfit_id"):
                     dpg.add_text(f"ID: {item['outfit_id']}")
-            source = item if has_stand else {
-                "cache_name": item["icon_cache_name"], "hash": item["icon_hash"],
-                "key": item["icon_key"], "texture_name": item["icon_texture_name"],
-            }
+            source = (
+                item
+                if has_stand
+                else {
+                    "cache_name": item["icon_cache_name"],
+                    "hash": item["icon_hash"],
+                    "key": item["icon_key"],
+                    "texture_name": item["icon_texture_name"],
+                }
+            )
             self.app.lazy_thumb_queues["character_outfits"].append(
                 {
                     "img_id": image_tag,
                     "cache_name": source["cache_name"],
-                    "cache_path": thumb_manager.get_character_cache_path(source["cache_name"]),
-                    "hash": source["hash"], "key": source["key"],
-                    "texture_name": source["texture_name"], "size": card_size,
+                    "cache_path": thumb_manager.get_character_cache_path(
+                        source["cache_name"]
+                    ),
+                    "hash": source["hash"],
+                    "key": source["key"],
+                    "texture_name": source["texture_name"],
+                    "size": card_size,
                 }
             )
             dpg.add_text(item["dress_name"], wrap=image_size)
             if item.get("outfit_id"):
-                dpg.add_text(f"ID {item['outfit_id']}", wrap=image_size, color=[150, 150, 150])
+                dpg.add_text(
+                    f"ID {item['outfit_id']}", wrap=image_size, color=[150, 150, 150]
+                )
 
     def on_outfit_selected(self, sender, app_data, user_data, *args):
         def tint(tag, color):
@@ -237,7 +275,9 @@ class CharacterController:
         for tag in previous:
             if tag != sender:
                 tint(tag, [255, 255, 255, 255])
-        selected = user_data.get("selection_tags") or [sender or user_data.get("item_tag")]
+        selected = user_data.get("selection_tags") or [
+            sender or user_data.get("item_tag")
+        ]
         for tag in selected:
             tint(tag, [150, 200, 255, 255])
         self.app.character_state.selected_outfit_tags = selected

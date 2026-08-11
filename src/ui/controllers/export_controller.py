@@ -51,7 +51,9 @@ class ExportController:
         object_name = user_data[4] if len(user_data) > 4 else None
         bundle_key = user_data[5] if len(user_data) > 5 else None
         if object_type == "Animator" and self.app.current_asset_id:
-            paths, bundle_keys = self._recursive_export_inputs(self.app.current_asset_id)
+            paths, bundle_keys = self._recursive_export_inputs(
+                self.app.current_asset_id
+            )
             if paths:
                 self._submit(
                     prefix,
@@ -84,13 +86,21 @@ class ExportController:
             paths = [os.path.join(Config.get_data_root(), asset_hash[:2], asset_hash)]
             key = (self.app.current_asset_data or {}).get("key")
             bundle_keys = [key] if key is not None else None
-        self._submit(prefix, UnityLogic.export_unity_assets, paths, target_dir, bundle_keys=bundle_keys)
+        self._submit(
+            prefix,
+            UnityLogic.export_unity_assets,
+            paths,
+            target_dir,
+            bundle_keys=bundle_keys,
+        )
 
     def _recursive_export_inputs(self, asset_id):
         if not asset_id or not self.app.db:
             return [], []
         paths, bundle_keys = [], []
-        for asset_hash, key in self.app.preview_controller._get_recursive_hashes(asset_id):
+        for asset_hash, key in self.app.preview_controller._get_recursive_hashes(
+            asset_id
+        ):
             path = os.path.join(Config.get_data_root(), asset_hash[:2], asset_hash)
             if os.path.exists(path):
                 paths.append(path)

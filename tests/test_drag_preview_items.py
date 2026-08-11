@@ -35,9 +35,7 @@ class DragPreviewItemTests(unittest.TestCase):
 
             controller._select_drag_item(42)
 
-        dpg.configure_item.assert_called_once_with(
-            42, tint_color=[150, 200, 255, 255]
-        )
+        dpg.configure_item.assert_called_once_with(42, tint_color=[150, 200, 255, 255])
         self.assertEqual(app.last_selected, 42)
 
     def test_home_tree_finds_child_outside_tree_header_without_global_scan(self):

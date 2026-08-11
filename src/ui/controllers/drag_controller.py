@@ -11,7 +11,7 @@ class DragController:
     def _is_item_hovered(item):
         try:
             return bool(dpg.is_item_hovered(item))
-        except (KeyError, RuntimeError):
+        except KeyError, RuntimeError:
             # Some Dear PyGui item states do not expose a hovered key.
             return False
 
@@ -126,9 +126,8 @@ class DragController:
 
         item, file_data = self.app.pending_drag_preview
         self.app.pending_drag_preview = None
-        if (
-            dpg.does_item_exist(item)
-            and self.app.current_asset_id != file_data.get("id")
+        if dpg.does_item_exist(item) and self.app.current_asset_id != file_data.get(
+            "id"
         ):
             self._trigger_drag_preview(item, file_data)
 
@@ -142,9 +141,7 @@ class DragController:
                 if "mvSelectable" in previous_type:
                     dpg.set_value(previous, False)
                 elif "mvImage" in previous_type:
-                    dpg.configure_item(
-                        previous, tint_color=[255, 255, 255, 255]
-                    )
+                    dpg.configure_item(previous, tint_color=[255, 255, 255, 255])
             if dpg.does_item_exist(item):
                 item_type = dpg.get_item_type(item)
                 if "mvSelectable" in item_type:

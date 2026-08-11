@@ -107,12 +107,14 @@ class UmaExporterApp:
         self.scene_view_mode = "list"
         self.prop_view_mode = "list"
         self.search_thumbnail_textures = self.texture_registry.tags_by_domain
-        self.search_thumbnail_textures.update({
-            "scene_": [],
-            "prop_": [],
-            "character_icons": [],
-            "character_outfits": [],
-        })
+        self.search_thumbnail_textures.update(
+            {
+                "scene_": [],
+                "prop_": [],
+                "character_icons": [],
+                "character_outfits": [],
+            }
+        )
         self.thumbnail_columns = {
             "scene_": 0,
             "prop_": 0,
@@ -172,9 +174,7 @@ class UmaExporterApp:
         self.on_prop_search = self.search_controller.on_prop_search
         self.clear_prop_search = self.search_controller.clear_prop_search
         self.on_character_selected = self.character_controller.on_selected
-        self.on_character_outfit_selected = (
-            self.character_controller.on_outfit_selected
-        )
+        self.on_character_outfit_selected = self.character_controller.on_outfit_selected
         self._on_view_mode_change = self.search_controller.on_view_mode_change
         self._on_batch_cat_all_change = self.batch_controller.on_batch_cat_all_change
         self.on_start_batch_click = self.batch_controller.on_start_batch_click

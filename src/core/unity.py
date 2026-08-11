@@ -117,7 +117,7 @@ class UnityLogic:
             if bundle_key is not None and str(bundle_key).strip() != "":
                 try:
                     decryption_key = int(bundle_key)
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     pass
 
             with open(physical_path, "rb") as f:

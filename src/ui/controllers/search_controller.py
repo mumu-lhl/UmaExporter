@@ -480,10 +480,7 @@ class SearchController:
                 width = dpg.get_item_rect_size("character_outfits_panel")[0]
                 expected_columns = max(
                     1,
-                    int(
-                        max(width, 1)
-                        / (Config.CHARACTER_OUTFIT_IMAGE_SIZE + 40)
-                    ),
+                    int(max(width, 1) / (Config.CHARACTER_OUTFIT_IMAGE_SIZE + 40)),
                 )
             except Exception:
                 expected_columns = self.app.thumbnail_columns.get(

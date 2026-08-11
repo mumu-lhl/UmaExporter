@@ -120,8 +120,8 @@ class SettingsController:
                 return
             last_ui_update = now
             self.app._queue_ui_task(
-                lambda p=processed, d=discovered, c=copied, s=skipped, f=failed: self._update_cache_migration_progress(
-                    p, d, c, s, f
+                lambda p=processed, d=discovered, c=copied, s=skipped, f=failed: (
+                    self._update_cache_migration_progress(p, d, c, s, f)
                 )
             )
 
@@ -153,7 +153,9 @@ class SettingsController:
         try:
             if not os.path.isdir(source_dir):
                 self.app._queue_ui_task(
-                    lambda: self._finish_cache_migration(True, copied, skipped, failed, 0, None)
+                    lambda: self._finish_cache_migration(
+                        True, copied, skipped, failed, 0, None
+                    )
                 )
                 return
 
@@ -186,9 +188,7 @@ class SettingsController:
                         pending.add(pool.submit(migrate_one, source_path))
 
                         if len(pending) >= max_pending:
-                            done, pending = wait(
-                                pending, return_when=FIRST_COMPLETED
-                            )
+                            done, pending = wait(pending, return_when=FIRST_COMPLETED)
                             for future in done:
                                 apply_result(future.result())
                             send_progress()
@@ -251,9 +251,13 @@ class SettingsController:
         if error:
             msg = i18n("msg_cache_migration_failed").format(error)
         elif completed:
-            msg = i18n("msg_cache_migration_done").format(total, copied, skipped, failed)
+            msg = i18n("msg_cache_migration_done").format(
+                total, copied, skipped, failed
+            )
         else:
-            msg = i18n("msg_cache_migration_paused").format(total, copied, skipped, failed)
+            msg = i18n("msg_cache_migration_paused").format(
+                total, copied, skipped, failed
+            )
         self._set_cache_migration_status(msg)
 
     def _set_cache_migration_status(self, message):
