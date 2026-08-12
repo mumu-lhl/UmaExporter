@@ -2,7 +2,10 @@ import struct
 
 
 # Asset Bundle Constants
-DEFAULT_BASE_KEYS = bytes(
+ASSET_BASE_KEYS_JAPAN = bytes(
+    [0x53, 0x2B, 0x46, 0x31, 0xE4, 0xA7, 0xB9, 0x47, 0x3E, 0x7C, 0xFB]
+)
+ASSET_BASE_KEYS_GLOBAL = bytes(
     [0x36, 0x23, 0x6b, 0x4c, 0x2a, 0x39,
      0x21, 0x75, 0x52, 0x26, 0x32, 0x76,
      0x25, 0x50, 0x3f, 0x35, 0x5d, 0x77,
@@ -10,6 +13,7 @@ DEFAULT_BASE_KEYS = bytes(
      0x4c, 0x31, 0x28, 0x74, 0x29, 0x59,
      0x37, 0x24, 0x53]
 )
+DEFAULT_BASE_KEYS = ASSET_BASE_KEYS_JAPAN
 DEFAULT_KEY = -7673907454518172050
 
 # Database Constants
@@ -130,9 +134,15 @@ def decrypt_bundle(
     data: bytearray,
     region: str = "jp",
     key: int = DEFAULT_KEY,
-    base_keys: bytes = DEFAULT_BASE_KEYS,
+    base_keys: bytes | None = None,
 ) -> bytearray:
     """Decrypt UMA encrypted asset bundle."""
+    if base_keys is None:
+        if region.lower() in ("global", "en"):
+            base_keys = ASSET_BASE_KEYS_GLOBAL
+        else:
+            base_keys = ASSET_BASE_KEYS_JAPAN
+
     if HAS_CYTHON:
         uma_decryptor.decrypt_inplace(data, key, base_keys)
         return data
