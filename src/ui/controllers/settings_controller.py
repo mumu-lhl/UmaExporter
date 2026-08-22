@@ -440,11 +440,11 @@ class SettingsController:
             }
 
         normalized_path = os.path.normpath(path)
-        if os.path.basename(normalized_path) != "Persistent":
+        if not Config.is_supported_data_root(normalized_path):
             return {
                 "label": label,
                 "ok": False,
-                "status": i18n("runtime_status_data_root_not_persistent"),
+                "status": i18n("runtime_status_data_root_invalid_name"),
             }
 
         if not os.path.isdir(normalized_path):

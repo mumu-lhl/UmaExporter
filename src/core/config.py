@@ -33,6 +33,8 @@ class Config:
 
     # Default fallback path
     BASE_PATH = ""
+    # Supported game data root directory names.
+    DATA_ROOT_NAMES = ("Persistent", "umamusume")
     # Language: "Auto", "English", "Chinese"
     LANGUAGE = "Auto"
     # Data region (jp, global, tw)
@@ -135,6 +137,13 @@ class Config:
         has_meta = os.path.exists(os.path.join(path, "meta"))
         has_dat = os.path.isdir(os.path.join(path, "dat"))
         return has_meta and has_dat
+
+    @classmethod
+    def is_supported_data_root(cls, path):
+        if not path:
+            return False
+        normalized_path = os.path.normpath(path)
+        return os.path.basename(normalized_path) in cls.DATA_ROOT_NAMES
 
     @classmethod
     def load(cls):
