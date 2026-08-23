@@ -3,6 +3,10 @@ import shutil
 import subprocess
 import tempfile
 import json
+import contextlib
+import ctypes
+import sys
+import threading
 from functools import lru_cache
 
 import numpy as np
@@ -75,6 +79,7 @@ from src.core.monitor import Monitor
 
 class UnityLogic:
     _key_provider = None
+    _cli_process_lock = threading.RLock()
 
     @staticmethod
     def set_key_provider(provider):
@@ -984,7 +989,166 @@ class UnityLogic:
         return results
 
     @staticmethod
+    def _is_pyinstaller_runtime():
+        """Return whether the current process is a PyInstaller executable."""
+        return bool(getattr(sys, "frozen", False)) and not is_nuitka()
+
+    @staticmethod
+    def _is_ascii_path(path):
+        try:
+            os.fsencode(os.fspath(path)).decode("ascii")
+            return True
+        except (UnicodeEncodeError, TypeError, ValueError):
+            return False
+
+    @staticmethod
+    def _get_windows_short_path(path):
+        """Return an ASCII 8.3 alias for *path* when Windows provides one."""
+        if os.name != "nt" or not path:
+            return None
+
+        try:
+            get_short_path_name = ctypes.windll.kernel32.GetShortPathNameW
+            buffer = ctypes.create_unicode_buffer(32768)
+            length = get_short_path_name(
+                os.fspath(path), buffer, len(buffer)
+            )
+            if not length or length >= len(buffer):
+                return None
+            short_path = buffer.value
+            return short_path if UnityLogic._is_ascii_path(short_path) else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _get_cli_path(path):
+        """Use an ASCII Windows alias for a path passed to native CLI code."""
+        path = os.fspath(path)
+        return UnityLogic._get_windows_short_path(path) or path
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _cli_temp_directory():
+        """Create a staging directory safe for native CLI path handling.
+
+        AssetStudio's FBX native layer is not guaranteed to accept non-ASCII
+        paths on Windows.  Prefer an 8.3 alias for the system temp directory,
+        then fall back to other ASCII-only locations before using the default
+        Python temporary directory.
+        """
+        candidates = []
+        default_temp = tempfile.gettempdir()
+
+        if os.name == "nt":
+            short_temp = UnityLogic._get_windows_short_path(default_temp)
+            if short_temp:
+                candidates.append(short_temp)
+
+            system_root = os.environ.get("SystemRoot")
+            if system_root:
+                candidates.append(os.path.join(system_root, "Temp"))
+
+            system_drive = os.environ.get("SystemDrive", "C:")
+            candidates.append(os.path.join(system_drive, "Temp"))
+
+        candidates.extend((default_temp, Config.get_bundle_dir()))
+
+        seen = set()
+        for candidate in candidates:
+            if not candidate or candidate in seen:
+                continue
+            seen.add(candidate)
+            if not UnityLogic._is_ascii_path(candidate):
+                continue
+            try:
+                with tempfile.TemporaryDirectory(
+                    prefix="uma-cli-", dir=candidate
+                ) as path:
+                    yield path
+                    return
+            except OSError:
+                continue
+
+        with tempfile.TemporaryDirectory(prefix="uma-cli-") as path:
+            yield path
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _cli_process_context():
+        """Prepare the parent process before launching the external CLI.
+
+        PyInstaller sets a process-wide DLL search directory so bundled native
+        extensions are found.  That directory must not leak into AssetStudio's
+        child process, where it can make the child load incompatible DLLs.
+        """
+        with UnityLogic._cli_process_lock:
+            if os.name != "nt" or not UnityLogic._is_pyinstaller_runtime():
+                yield
+                return
+
+            kernel32 = None
+            previous_directory = None
+            try:
+                kernel32 = ctypes.windll.kernel32
+                buffer = ctypes.create_unicode_buffer(32768)
+                length = kernel32.GetDllDirectoryW(len(buffer), buffer)
+                if length and length < len(buffer):
+                    previous_directory = buffer.value
+                kernel32.SetDllDirectoryW(None)
+            except Exception:
+                kernel32 = None
+
+            try:
+                yield
+            finally:
+                if kernel32 is not None:
+                    try:
+                        kernel32.SetDllDirectoryW(previous_directory or None)
+                    except Exception:
+                        pass
+
+    @staticmethod
+    def _get_cli_environment():
+        """Return an environment suitable for a child CLI process."""
+        env = os.environ.copy()
+
+        # PyInstaller preserves the original loader variables with an _ORIG
+        # suffix.  Restore those values before running an external program.
+        for key in ("LD_LIBRARY_PATH", "LIBPATH"):
+            original_key = f"{key}_ORIG"
+            if original_key in env:
+                env[key] = env[original_key]
+            elif UnityLogic._is_pyinstaller_runtime():
+                env.pop(key, None)
+
+        if is_nuitka():
+            env["NUITKA_SELF_EXECUTION"] = "0"
+        return env
+
+    @staticmethod
+    def _run_cli_process(command):
+        """Run AssetStudioModCLI with encoding and frozen-app safeguards."""
+        creationflags = 0
+        if os.name == "nt":
+            creationflags = subprocess.CREATE_NO_WINDOW
+
+        with UnityLogic._cli_process_context():
+            return subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=UnityLogic._get_cli_environment(),
+                creationflags=creationflags,
+                close_fds=True,
+            )
+
+    @staticmethod
     def _run_as_cli(input_path, output_dir, mode="animator"):
+        input_path = os.fspath(input_path)
+        output_dir = os.fspath(output_dir)
         cli_name = "AssetStudioModCLI"
         if os.name == "nt":
             cli_name += ".exe"
@@ -996,6 +1160,8 @@ class UnityLogic:
         if not os.path.exists(cli_path):
             return 0
 
+        cli_command_path = UnityLogic._get_cli_path(cli_path)
+
         if os.name != "nt":
             try:
                 os.chmod(cli_path, 0o755)
@@ -1003,41 +1169,18 @@ class UnityLogic:
                 pass
 
         cmd = [
-            cli_path,
-            input_path,
+            cli_command_path,
+            UnityLogic._get_cli_path(input_path),
             "--mode",
             mode,
             "--output",
-            output_dir,
+            UnityLogic._get_cli_path(output_dir),
             "--fbx-animation",
             "auto",
         ]
 
-        # Prepare creationflags for Windows to hide terminal window
-        creationflags = 0
-        if os.name == "nt":
-            creationflags = subprocess.CREATE_NO_WINDOW
-
         try:
-            if is_nuitka():
-                env = os.environ.copy()
-                env["NUITKA_SELF_EXECUTION"] = "0"
-                subprocess.run(
-                    cmd,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    env=env,
-                    creationflags=creationflags,
-                )
-            else:
-                subprocess.run(
-                    cmd,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    creationflags=creationflags,
-                )
+            UnityLogic._run_cli_process(cmd)
             return True
         except Exception as e:
             print(f"AS CLI Error: {e}")
@@ -1045,7 +1188,17 @@ class UnityLogic:
 
     @staticmethod
     def _export_via_cli(physical_paths, export_dir, mode="animator", bundle_keys=None):
-        """Export assets using AssetStudioModCLI in a temporary directory"""
+        """Export assets using AssetStudioModCLI through ASCII-only staging.
+
+        The requested directory is intentionally never passed to the native
+        AssetStudio exporter.  Python performs the final move, so a Windows
+        path containing Chinese (or any other non-ASCII characters) remains
+        supported even when the FBX native layer is not Unicode-safe.
+        """
+        if not export_dir:
+            return 0
+
+        export_dir = os.fspath(export_dir)
         if isinstance(physical_paths, str) and os.path.isdir(physical_paths):
             # If a directory is passed, collect all files in it
             unique_paths = []
@@ -1056,8 +1209,6 @@ class UnityLogic:
             # Deduplicate paths to avoid duplicate link attempts
             unique_paths = list(dict.fromkeys(physical_paths))
 
-        exported_count = 0
-
         # Map paths to keys for easier retrieval
         key_map = {}
         if isinstance(bundle_keys, dict):
@@ -1067,12 +1218,23 @@ class UnityLogic:
                 if i < len(bundle_keys):
                     key_map[p] = bundle_keys[i]
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        try:
+            os.makedirs(export_dir, exist_ok=True)
+        except OSError as e:
+            print(f"Failed to create export directory {export_dir}: {e}")
+            return 0
+
+        with UnityLogic._cli_temp_directory() as cli_root:
+            input_dir = os.path.join(cli_root, "input")
+            cli_output_dir = os.path.join(cli_root, "output")
+            os.makedirs(input_dir, exist_ok=True)
+            os.makedirs(cli_output_dir, exist_ok=True)
+
             # Decrypt and save all files to temporary directory
             for p in unique_paths:
                 if not os.path.exists(p):
                     continue
-                target = os.path.join(tmp_dir, os.path.basename(p))
+                target = os.path.join(input_dir, os.path.basename(p))
 
                 # Skip if already exists
                 if os.path.exists(target):
@@ -1116,6 +1278,8 @@ class UnityLogic:
                 print(f"Error: AssetStudioModCLI not found at {cli_path}")
                 return 0
 
+            cli_command_path = UnityLogic._get_cli_path(cli_path)
+
             # Ensure executable on Unix-like systems
             if os.name != "nt":
                 try:
@@ -1124,67 +1288,35 @@ class UnityLogic:
                     pass
 
             cmd = [
-                cli_path,
-                tmp_dir,
+                cli_command_path,
+                input_dir,
                 "--mode",
                 mode,
                 "--output",
-                export_dir,
+                cli_output_dir,
                 "--fbx-animation",
                 "auto",  # Fix: value is required
             ]
 
             try:
                 print(f"Running CLI command: {' '.join(cmd)}")
-                # Scan BEFORE to compare
-                pre_files = set()
-                for root, _, files in os.walk(export_dir):
-                    for f in files:
-                        pre_files.add(os.path.join(root, f))
-
-                # Prepare creationflags for Windows to hide terminal window
-                creationflags = 0
-                if os.name == "nt":
-                    creationflags = subprocess.CREATE_NO_WINDOW
-
-                # Disable Nuitka self-execution mechanism for subprocess calls
-                if is_nuitka():
-                    env = os.environ.copy()
-                    env["NUITKA_SELF_EXECUTION"] = "0"
-                    result = subprocess.run(
-                        cmd,
-                        check=True,
-                        capture_output=True,
-                        text=True,
-                        env=env,
-                        creationflags=creationflags,
-                    )
-                else:
-                    result = subprocess.run(
-                        cmd,
-                        check=True,
-                        capture_output=True,
-                        text=True,
-                        creationflags=creationflags,
-                    )
-
-                # Scan AFTER to count new files
-                for root, dirs, files in os.walk(export_dir):
-                    for f in files:
-                        p = os.path.join(root, f)
-                        if p not in pre_files:
-                            exported_count += 1
+                result = UnityLogic._run_cli_process(cmd)
+                exported_count = UnityLogic._flatten_directory(
+                    cli_output_dir, export_dir
+                )
 
                 if exported_count == 0:
                     print("CLI finished but no new files were created. Output:")
                     print(result.stdout)
+
+                return exported_count
 
             except subprocess.CalledProcessError as e:
                 print(f"AssetStudioModCLI failed with error: {e.stderr}")
             except Exception as e:
                 print(f"Failed to run AssetStudioModCLI: {e}")
 
-        return exported_count
+        return 0
 
     @staticmethod
     def _save_asset(base_dir, type_name, filename, content):
