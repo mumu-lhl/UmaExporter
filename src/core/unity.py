@@ -260,7 +260,9 @@ class UnityLogic:
                 if os.path.exists(direct_path):
                     return direct_path
 
-            # 2. Fallback: Scoped os.walk search (Efficient and Robust)
+            # 2. Fallback: search both the original CLI hierarchy and the
+            # flattened staging root.  The latter is used by exports that
+            # must keep non-ASCII paths away from the native CLI.
             fbx_files = []
             sanitized_obj_lower = (
                 UnityLogic._sanitize_export_name(object_name).lower()
@@ -268,14 +270,20 @@ class UnityLogic:
                 else None
             )
 
-            for root, _, files in os.walk(animator_dir):
-                for f in files:
-                    if f.lower().endswith(".fbx"):
-                        full_path = os.path.join(root, f)
-                        # If we find a filename match, return immediately
-                        if sanitized_obj_lower and sanitized_obj_lower in f.lower():
-                            return full_path
-                        fbx_files.append(full_path)
+            search_roots = (animator_dir, tmp_export_dir)
+            searched_roots = set()
+            for search_root in search_roots:
+                if search_root in searched_roots or not os.path.isdir(search_root):
+                    continue
+                searched_roots.add(search_root)
+                for root, _, files in os.walk(search_root):
+                    for f in files:
+                        if f.lower().endswith(".fbx"):
+                            full_path = os.path.join(root, f)
+                            # If we find a filename match, return immediately
+                            if sanitized_obj_lower and sanitized_obj_lower in f.lower():
+                                return full_path
+                            fbx_files.append(full_path)
 
             if fbx_files:
                 return fbx_files[0]

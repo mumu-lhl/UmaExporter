@@ -9,6 +9,24 @@ from src.core.unity import UnityLogic
 
 
 class UnicodeExportPathTests(unittest.TestCase):
+    def test_animator_preview_finds_fbx_after_cli_output_is_flattened(self):
+        def fake_export(_paths, export_dir, **_kwargs):
+            output_file = Path(export_dir) / "preview.fbx"
+            output_file.write_bytes(b"fbx")
+            return 1
+
+        with patch.object(
+            UnityLogic, "_export_via_cli", side_effect=fake_export
+        ):
+            preview_path = UnityLogic.save_animator_to_tmp(["bundle"])
+
+        try:
+            self.assertIsNotNone(preview_path)
+            self.assertTrue(Path(preview_path).exists())
+        finally:
+            if preview_path:
+                Path(preview_path).unlink(missing_ok=True)
+
     def test_pyinstaller_cli_context_restores_dll_directory(self):
         class FakeKernel32:
             def __init__(self):
