@@ -910,7 +910,12 @@ class UnityLogic:
         results = []
         from concurrent.futures import ThreadPoolExecutor
 
-        with tempfile.TemporaryDirectory() as staging_dir:
+        with UnityLogic._cli_temp_directory() as cli_root:
+            staging_dir = os.path.join(cli_root, "input")
+            cli_output_dir = os.path.join(cli_root, "output")
+            os.makedirs(staging_dir, exist_ok=True)
+            os.makedirs(cli_output_dir, exist_ok=True)
+
             # 1. Collect all unique paths to prepare
             all_unique_tasks = {}  # Map path -> (key, target_filename)
             for cfg in batch_configs:
@@ -955,8 +960,14 @@ class UnityLogic:
             with ThreadPoolExecutor(max_workers=16) as executor:
                 list(executor.map(stage_file, all_unique_tasks.items()))
 
-            # 3. Run CLI ONCE on the staging directory
-            UnityLogic._run_as_cli(staging_dir, export_dir, mode="animator")
+            # 3. Run CLI ONCE using ASCII-safe input and output directories.
+            if not UnityLogic._run_as_cli(
+                staging_dir, cli_output_dir, mode="animator"
+            ):
+                return results
+
+            os.makedirs(export_dir, exist_ok=True)
+            shutil.copytree(cli_output_dir, export_dir, dirs_exist_ok=True)
 
             # 3. Match exported FBX files back to assets
             # AS CLI structure: {export_dir}/FBX_Animator/{logical_name}/{animator_name}.fbx
@@ -1056,8 +1067,8 @@ class UnityLogic:
             if system_root:
                 candidates.append(os.path.join(system_root, "Temp"))
 
-            system_drive = os.environ.get("SystemDrive", "C:")
-            candidates.append(os.path.join(system_drive, "Temp"))
+            system_drive = os.environ.get("SystemDrive", "C:").rstrip("\\/")
+            candidates.append(f"{system_drive}\\Temp")
 
         candidates.extend((default_temp, Config.get_bundle_dir()))
 

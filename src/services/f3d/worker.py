@@ -2,6 +2,20 @@ import os
 import sys
 
 
+def _worker_log(message):
+    """Write worker diagnostics without crashing on invalid windowed handles."""
+    seen = set()
+    for stream in (sys.stdout, sys.stderr):
+        if stream is None or id(stream) in seen:
+            continue
+        seen.add(id(stream))
+        try:
+            print(message, file=stream, flush=True)
+            return
+        except (AttributeError, OSError, ValueError):
+            continue
+
+
 def generate_thumbnail(model_path, output_path, engine=None):
     """Generates a thumbnail image for a 3D model using f3d.
 
@@ -55,7 +69,7 @@ def launch_f3d_viewer_stdin():
     try:
         import f3d
     except ImportError:
-        print("[F3D] Error: f3d module not found.", flush=True)
+        _worker_log("[F3D] Error: f3d module not found.")
         return
 
     import threading
@@ -119,10 +133,10 @@ def launch_f3d_viewer_stdin():
                 time.sleep(0.1)  # Small delay to ensure model is processed
                 interactor.trigger_command("set_camera isometric")
             except Exception as e:
-                print(f"[F3D] Warning: Could not set isometric view: {e}", flush=True)
+                _worker_log(f"[F3D] Warning: Could not set isometric view: {e}")
 
             window.render()
-            print(f"[F3D] Loaded: {path}", flush=True)
+            _worker_log(f"[F3D] Loaded: {path}")
 
         def timer_callback(t=None):
             # Non-blocking check for new paths from the queue
@@ -147,11 +161,11 @@ def launch_f3d_viewer_stdin():
     except KeyboardInterrupt:
         pass
     except Exception as e:
-        print(f"F3D Viewer Error: {e}", flush=True)
+        _worker_log(f"F3D Viewer Error: {e}")
     finally:
         if current_mesh and os.path.exists(current_mesh):
             try:
                 os.remove(current_mesh)
             except:
                 pass
-        print("[F3D] Viewer exiting.", flush=True)
+        _worker_log("[F3D] Viewer exiting.")

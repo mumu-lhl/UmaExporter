@@ -1,3 +1,4 @@
+import contextlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,6 +10,83 @@ from src.core.unity import UnityLogic
 
 
 class UnicodeExportPathTests(unittest.TestCase):
+    def test_windows_system_drive_temp_is_absolute(self):
+        attempted_dirs = []
+
+        @contextlib.contextmanager
+        def fake_temp_directory(prefix, dir=None):
+            attempted_dirs.append(dir)
+            if dir not in (r"C:\Temp", None):
+                raise OSError(dir)
+            yield r"C:\Temp\uma-cli-test"
+
+        with (
+            patch.object(unity_module.os, "name", "nt"),
+            patch.dict(unity_module.os.environ, {"SystemDrive": "C:"}, clear=True),
+            patch.object(
+                unity_module.tempfile,
+                "gettempdir",
+                return_value=r"C:\Users\中文\AppData\Local\Temp",
+            ),
+            patch.object(UnityLogic, "_get_windows_short_path", return_value=None),
+            patch.object(
+                unity_module.Config,
+                "get_bundle_dir",
+                return_value=r"C:\Users\中文\UmaExporter",
+            ),
+            patch.object(
+                unity_module.tempfile,
+                "TemporaryDirectory",
+                side_effect=fake_temp_directory,
+            ),
+        ):
+            with UnityLogic._cli_temp_directory():
+                pass
+
+        self.assertIn(r"C:\Temp", attempted_dirs)
+
+    def test_batch_thumbnail_cli_uses_ascii_staging_for_unicode_temp(self):
+        with tempfile.TemporaryDirectory() as root:
+            root_path = Path(root)
+            source_path = root_path / "bundle"
+            source_path.write_bytes(b"bundle")
+            target_path = root_path / "中文批量缩略图"
+            target_path.mkdir()
+            captured = {}
+
+            def fake_run(command):
+                captured["command"] = command
+                output_dir = Path(command[command.index("--output") + 1])
+                output_file = output_dir / "FBX_Animator" / "logical" / "model.fbx"
+                output_file.parent.mkdir(parents=True, exist_ok=True)
+                output_file.write_bytes(b"fbx")
+                return SimpleNamespace(stdout="", stderr="")
+
+            with (
+                patch.object(UnityLogic, "_load_bundle_data", return_value=b"data"),
+                patch.object(UnityLogic, "_run_cli_process", side_effect=fake_run),
+                patch("src.core.unity.tempfile.gettempdir", return_value=root),
+            ):
+                results = UnityLogic.batch_export_to_fbx(
+                    [
+                        {
+                            "hash": "asset-hash",
+                            "paths": [str(source_path)],
+                            "keys": [1],
+                            "logical_name": "logical",
+                        }
+                    ],
+                    str(target_path),
+                )
+
+            output_arg = captured["command"][
+                captured["command"].index("--output") + 1
+            ]
+            expected_fbx = target_path / "FBX_Animator" / "logical" / "model.fbx"
+            self.assertNotIn("中文", output_arg)
+            self.assertEqual(results, [("asset-hash", str(expected_fbx))])
+            self.assertTrue(expected_fbx.exists())
+
     def test_animator_preview_finds_fbx_after_cli_output_is_flattened(self):
         def fake_export(_paths, export_dir, **_kwargs):
             output_file = Path(export_dir) / "preview.fbx"
