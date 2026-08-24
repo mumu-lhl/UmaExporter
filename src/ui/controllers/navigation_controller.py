@@ -52,13 +52,23 @@ class NavigationController:
         candidate_tags = (
             f"search_item_{asset_id}",
             f"scene_item_{asset_id}",
+            f"scene_thumb_{asset_id}",
             f"prop_item_{asset_id}",
+            f"prop_thumb_{asset_id}",
         )
         for tag in candidate_tags:
             if not dpg.does_item_exist(tag):
                 continue
             try:
-                dpg.set_value(tag, True)
+                item_type = dpg.get_item_type(tag)
+                if "mvSelectable" in item_type:
+                    dpg.set_value(tag, True)
+                elif "mvImage" in item_type:
+                    dpg.configure_item(
+                        tag, tint_color=[150, 200, 255, 255]
+                    )
+                else:
+                    continue
                 return tag
             except Exception:
                 continue

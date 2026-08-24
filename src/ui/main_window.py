@@ -122,19 +122,39 @@ class UmaExporterApp:
         }
         self.thumbnail_items = {"scene_": [], "prop_": [], "character_outfits": []}
         self.lazy_thumb_queues = {
+            "": [],
             "scene_": [],
             "prop_": [],
             "character_icons": [],
             "character_outfits": [],
         }
         self.character_state = CharacterState()
-        self.global_search_query = ""
-        self.global_search_limit = 500
-        self.global_search_offset = 0
-        self.global_search_has_more = False
-        self.global_search_loading_more = False
-        self.global_search_request_id = 0
-        self.global_search_scroll_threshold = 24
+        self.search_request_ids: dict[str, int] = {
+            "": 0,
+            "scene_": 0,
+            "prop_": 0,
+        }
+        self.search_queries: dict[str, str] = {
+            "": "",
+            "scene_": "",
+            "prop_": "",
+        }
+        self.search_rows: dict[str, tuple] = {
+            "": (),
+            "scene_": (),
+            "prop_": (),
+        }
+        self.search_item_tags: dict[str, list] = {
+            "": [],
+            "scene_": [],
+            "prop_": [],
+        }
+        self.pending_search_builds: dict[str, dict | None] = {
+            "": None,
+            "scene_": None,
+            "prop_": None,
+        }
+        self.search_thumbnail_inflight: dict[tuple[str, int], int] = {}
 
         # Batch Processor State
         self.is_batch_running = False
@@ -678,9 +698,9 @@ class UmaExporterApp:
             while dpg.is_dearpygui_running():
                 with Monitor.time_block("frame_time"):
                     self._drain_ui_tasks()
+                    self.search_controller.process_pending_search_builds()
                     self.drag_controller.process_pending_drag_preview()
                     self.search_controller.process_lazy_thumbnails()
-                    self.search_controller.process_global_search_load_more()
                     dpg.render_dearpygui_frame()
         except KeyboardInterrupt:
             pass

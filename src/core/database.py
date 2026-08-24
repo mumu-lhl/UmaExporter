@@ -1,3 +1,4 @@
+import functools
 import sqlite3
 import threading
 import re
@@ -10,6 +11,17 @@ from src.core.utils import normalize_outfit_id
 
 
 from src.core.monitor import Monitor
+
+
+def _with_connection_lock(method):
+    """Serialize every operation using an UmaDatabase connection."""
+
+    @functools.wraps(method)
+    def serialized(self, *args, **kwargs):
+        with self._connection_lock:
+            return method(self, *args, **kwargs)
+
+    return serialized
 
 
 class MasterDatabase:
@@ -173,6 +185,7 @@ class MasterDatabase:
 
 class UmaDatabase:
     def __init__(self, db_path=None, translation_service=None):
+        self._connection_lock = threading.RLock()
         self.db_path = db_path or Config.get_db_path()
         self.conn = self._connect(self.db_path)
         self._apply_read_pragmas()
@@ -245,6 +258,7 @@ class UmaDatabase:
             print(f"Encrypted connection error: {e}")
             raise
 
+    @_with_connection_lock
     def _apply_read_pragmas(self):
         cursor = self.conn.cursor()
         # apsw.Connection doesn't have a direct cursor().execute() in the same way?
@@ -272,6 +286,7 @@ class UmaDatabase:
             cols.insert(0, "i")
         return ", ".join(cols)
 
+    @_with_connection_lock
     def load_index(self):
         """Parse database path structure with IDs"""
         print("Parsing database index...")
@@ -326,6 +341,7 @@ class UmaDatabase:
         print(f"Parsing complete. Total assets: {count}")
         return tree_data
 
+    @_with_connection_lock
     def _ensure_dependency_graph(self, include_reverse=False):
         if self._deps_by_from is not None and (
             not include_reverse or self._deps_by_to is not None
@@ -371,6 +387,7 @@ class UmaDatabase:
         if len(self._asset_info_by_id) > self._asset_info_cache_limit:
             self._asset_info_by_id.popitem(last=False)
 
+    @_with_connection_lock
     def _get_asset_info(self, asset_id):
         """Fetch basic asset info (name, size, hash, key) and cache it"""
         key = int(asset_id)
@@ -386,6 +403,7 @@ class UmaDatabase:
             self._cache_asset_info(key, row)
         return row
 
+    @_with_connection_lock
     def get_dependencies(self, asset_id):
         """Fetch forward dependencies"""
         self._ensure_dependency_graph()
@@ -399,6 +417,7 @@ class UmaDatabase:
             rows.append((name, dep_type, target_id, size, f_hash, key_val))
         return rows
 
+    @_with_connection_lock
     def get_reverse_dependencies(self, asset_id):
         """Fetch reverse dependencies"""
         self._ensure_dependency_graph(include_reverse=True)
@@ -412,16 +431,18 @@ class UmaDatabase:
             rows.append((name, dep_type, source_id, size, f_hash, key_val))
         return rows
 
-    def search_assets(self, query, limit=500, offset=0):
-        """Search assets via database LIKE query"""
+    @_with_connection_lock
+    def search_assets(self, query):
+        """Search assets via database LIKE query."""
         cursor = self.conn.cursor()
         cols = self._asset_cols()
         cursor.execute(
-            f"SELECT {cols} FROM a WHERE n LIKE ? ORDER BY n LIMIT ? OFFSET ?",
-            (f"%{query}%", limit, offset),
+            f"SELECT {cols} FROM a WHERE n LIKE ? ORDER BY n",
+            (f"%{query}%",),
         )
         return cursor.fetchall()
 
+    @_with_connection_lock
     def get_all_recursive_dependencies(self, asset_id):
         """Recursively fetch all dependencies for an asset"""
         self._ensure_dependency_graph()
@@ -446,24 +467,19 @@ class UmaDatabase:
 
         return results
 
-    def search_scenes(self, query="", limit=None):
-        """Search specifically for scene assets in 3d/env/"""
+    @_with_connection_lock
+    def search_scenes(self, query=""):
+        """Search specifically for scene assets in 3d/env/."""
         cursor = self.conn.cursor()
         cols = self._asset_cols()
         excluded_filters = (
             "n NOT LIKE '%_cloth00/%' AND n NOT LIKE '%_cloth00' "
             "AND n NOT LIKE '%/ast_%' AND n NOT LIKE 'ast_%'"
         )
-        if limit is None:
-            cursor.execute(
-                f"SELECT {cols} FROM a WHERE n LIKE ? AND n LIKE '3d/env/%' AND {excluded_filters}",
-                (f"%{query}%",),
-            )
-        else:
-            cursor.execute(
-                f"SELECT {cols} FROM a WHERE n LIKE ? AND n LIKE '3d/env/%' AND {excluded_filters} LIMIT ?",
-                (f"%{query}%", limit),
-            )
+        cursor.execute(
+            f"SELECT {cols} FROM a WHERE n LIKE ? AND n LIKE '3d/env/%' AND {excluded_filters}",
+            (f"%{query}%",),
+        )
         rows = cursor.fetchall()
 
         def asset_name_sort_key(row):
@@ -475,8 +491,9 @@ class UmaDatabase:
         rows.sort(key=asset_name_sort_key)
         return rows
 
-    def search_props(self, query="", limit=None):
-        """Search specifically for prop assets in 3d/chara/prop, 3d/chara/toonprop, and 3d/chara/richprop"""
+    @_with_connection_lock
+    def search_props(self, query=""):
+        """Search specifically for prop assets in supported prop directories."""
         cursor = self.conn.cursor()
         cols = self._asset_cols()
         excluded_filters = (
@@ -490,16 +507,10 @@ class UmaDatabase:
         ]
         path_filter = f"({' OR '.join(conditions)})"
 
-        if limit is None:
-            cursor.execute(
-                f"SELECT {cols} FROM a WHERE n LIKE ? AND {path_filter} AND {excluded_filters}",
-                (f"%{query}%",),
-            )
-        else:
-            cursor.execute(
-                f"SELECT {cols} FROM a WHERE n LIKE ? AND {path_filter} AND {excluded_filters} LIMIT ?",
-                (f"%{query}%", limit),
-            )
+        cursor.execute(
+            f"SELECT {cols} FROM a WHERE n LIKE ? AND {path_filter} AND {excluded_filters}",
+            (f"%{query}%",),
+        )
         rows = cursor.fetchall()
 
         # Sort by the asset directory name, e.g. prop1811_00 for
@@ -513,6 +524,7 @@ class UmaDatabase:
         rows.sort(key=prop_sort_key)
         return rows
 
+    @_with_connection_lock
     def get_character_entries(self):
         """Return character logo assets, excluding placeholder character chr0000."""
         cursor = self.conn.cursor()
@@ -566,6 +578,7 @@ class UmaDatabase:
         rows.sort(key=lambda x: int(x["chara_id"]))
         return rows
 
+    @_with_connection_lock
     def get_character_outfit_assets(self, chara_id):
         """Return stand and 3D-discoverable outfits for one character.
 
@@ -724,6 +737,7 @@ class UmaDatabase:
             key=lambda item: (not item.get("has_stand", False), item["outfit_id"]),
         )
 
+    @_with_connection_lock
     def _get_dress_icon_for_dress_id(self, dress_id):
         """Return the first dress icon matching *dress_id*, cached per DB session."""
         if dress_id in self._dress_icon_by_dress_id:
@@ -751,6 +765,7 @@ class UmaDatabase:
         self._dress_icon_by_dress_id[dress_id] = icon_row
         return icon_row
 
+    @_with_connection_lock
     def get_asset_by_path(self, logical_path):
         cursor = self.conn.cursor()
         cols = self._asset_cols()
@@ -768,6 +783,7 @@ class UmaDatabase:
             "key": key_val,
         }
 
+    @_with_connection_lock
     def get_assets_by_prefix(self, logical_prefix):
         cursor = self.conn.cursor()
         cols = self._asset_cols()
@@ -789,6 +805,7 @@ class UmaDatabase:
             )
         return rows
 
+    @_with_connection_lock
     def debug_find_related_paths(self, category, chara_id, outfit_id, limit=40):
         outfit_id = normalize_outfit_id(outfit_id)
         cursor = self.conn.cursor()
@@ -835,6 +852,7 @@ class UmaDatabase:
                 continue
         return results[:limit]
 
+    @_with_connection_lock
     def find_character_component_candidates(
         self, category, chara_id, outfit_id, is_mini=False
     ):
@@ -917,6 +935,7 @@ class UmaDatabase:
         )
         return candidates
 
+    @_with_connection_lock
     def get_all_animator_assets(self, categories=None):
         """Retrieves all asset info for specified categories (scene, prop)."""
         cursor = self.conn.cursor()
@@ -944,6 +963,7 @@ class UmaDatabase:
         cursor.execute(f"{query_base} ({' OR '.join(conditions)})")
         return cursor.fetchall()
 
+    @_with_connection_lock
     def close(self):
         self._asset_info_by_id.clear()
         self._deps_by_from = None
@@ -952,6 +972,7 @@ class UmaDatabase:
             self.master_db.close()
         self.conn.close()
 
+    @_with_connection_lock
     def get_key_by_hash(self, f_hash):
         """Quick look up for decryption key by file hash."""
         if not Config.DB_ENCRYPTED:

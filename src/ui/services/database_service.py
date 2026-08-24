@@ -80,12 +80,15 @@ class DatabaseService:
             "",
         )
 
-        self.app.search_controller.render_scene_results()
-        self.app.search_controller.render_prop_results()
+        # Character discovery is synchronous; finish it before starting the
+        # scene/prop workers that share the same database connection.
         self.app.character_controller.render_results()
+        self.app.search_controller.request_results("scene_", reuse_rows=False)
+        self.app.search_controller.request_results("prop_", reuse_rows=False)
 
     def reset_database_state(self):
         """Reset all database-related state and clear UI."""
+        self.app.search_controller.reset_search_state()
         if self.app.db:
             try:
                 self.app.db.close()
