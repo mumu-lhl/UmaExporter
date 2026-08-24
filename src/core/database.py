@@ -1,16 +1,16 @@
 import functools
+import os
+import re
 import sqlite3
 import threading
-import re
-import os
-import apsw
 from collections import OrderedDict
+
+import apsw
+
 from src.core.config import Config
 from src.core.decryptor import get_db_hex_key
-from src.core.utils import normalize_outfit_id
-
-
 from src.core.monitor import Monitor
+from src.core.utils import normalize_outfit_id
 
 
 def _with_connection_lock(method):
@@ -405,67 +405,145 @@ class UmaDatabase:
 
     @_with_connection_lock
     def get_dependencies(self, asset_id):
-        """Fetch forward dependencies"""
-        self._ensure_dependency_graph()
-        source_key = int(asset_id)
-        rows = []
-        for target_id, dep_type in self._deps_by_from.get(source_key, []):
-            info = self._get_asset_info(target_id)
-            if not info:
-                continue
-            name, size, f_hash, key_val = info
-            rows.append((name, dep_type, target_id, size, f_hash, key_val))
-        return rows
-
-    @_with_connection_lock
-    def get_reverse_dependencies(self, asset_id):
-        """Fetch reverse dependencies"""
-        self._ensure_dependency_graph(include_reverse=True)
-        target_key = int(asset_id)
-        rows = []
-        for source_id, dep_type in self._deps_by_to.get(target_key, []):
-            info = self._get_asset_info(source_id)
-            if not info:
-                continue
-            name, size, f_hash, key_val = info
-            rows.append((name, dep_type, source_id, size, f_hash, key_val))
-        return rows
-
-    @_with_connection_lock
-    def search_assets(self, query):
-        """Search assets via database LIKE query."""
+        """Fetch forward dependencies without retaining the full graph."""
         cursor = self.conn.cursor()
-        cols = self._asset_cols()
+        key_col = "a.e" if Config.DB_ENCRYPTED else "NULL"
         cursor.execute(
-            f"SELECT {cols} FROM a WHERE n LIKE ? ORDER BY n",
-            (f"%{query}%",),
+            f"""
+            SELECT a.n, r.d, a.i, a.l, a.h, {key_col}
+            FROM r
+            JOIN a ON a.i = r.t
+            WHERE r.f = ? AND r.d != '0'
+            """,
+            (int(asset_id),),
         )
         return cursor.fetchall()
 
     @_with_connection_lock
-    def get_all_recursive_dependencies(self, asset_id):
-        """Recursively fetch all dependencies for an asset"""
-        self._ensure_dependency_graph()
-        start = int(asset_id)
-        visited = set()
-        stack = [start]
-        results = []  # List of (hash, key)
+    def get_reverse_dependencies(self, asset_id):
+        """Fetch reverse dependencies without retaining the full graph."""
+        cursor = self.conn.cursor()
+        key_col = "a.e" if Config.DB_ENCRYPTED else "NULL"
+        cursor.execute(
+            f"""
+            SELECT a.n, r.d, a.i, a.l, a.h, {key_col}
+            FROM r
+            JOIN a ON a.i = r.f
+            WHERE r.t = ? AND r.d != '0'
+            """,
+            (int(asset_id),),
+        )
+        return cursor.fetchall()
 
-        while stack:
-            current = stack.pop()
-            if current in visited:
+    @_with_connection_lock
+    def search_assets(self, query, limit=None, offset=0):
+        """Search assets via a bounded database LIKE query."""
+        cursor = self.conn.cursor()
+        cols = self._asset_cols()
+        sql = f"SELECT {cols} FROM a WHERE n LIKE ? ORDER BY n"
+        params = [f"%{query}%"]
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params.extend((int(limit), int(offset)))
+        cursor.execute(sql, params)
+        return cursor.fetchall()
+
+    @_with_connection_lock
+    def count_assets(self, query):
+        """Return the complete result count without materializing its rows."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM a WHERE n LIKE ?",
+            (f"%{query}%",),
+        )
+        row = cursor.fetchone()
+        return int(row[0]) if row else 0
+
+    @_with_connection_lock
+    def list_directory(self, logical_prefix=""):
+        """Return only the immediate children of a logical asset directory."""
+        prefix = (logical_prefix or "").strip("/")
+        cursor = self.conn.cursor()
+        cols = self._asset_cols()
+        if prefix:
+            cursor.execute(
+                f"""
+                SELECT {cols} FROM a
+                WHERE n = ? OR n = ? OR n LIKE ? OR n LIKE ?
+                """,
+                (
+                    prefix,
+                    f"/{prefix}",
+                    f"{prefix}/%",
+                    f"/{prefix}/%",
+                ),
+            )
+            prefix_with_separator = f"{prefix}/"
+        else:
+            cursor.execute(
+                f"SELECT {cols} FROM a WHERE n IS NOT NULL AND n != ''"
+            )
+            prefix_with_separator = ""
+
+        directories = set()
+        files = []
+        for item_id, name, size, asset_hash, key in cursor:
+            clean_name = name.lstrip("/")
+            if prefix:
+                if clean_name == prefix:
+                    relative = ""
+                elif clean_name.startswith(prefix_with_separator):
+                    relative = clean_name[len(prefix_with_separator) :]
+                else:
+                    continue
+            else:
+                relative = clean_name
+
+            child_name, separator, _remainder = relative.partition("/")
+            if separator:
+                directories.add(child_name)
                 continue
-            visited.add(current)
-            info = self._get_asset_info(current)
-            if info:
-                name, size, f_hash, key_val = info
-                if f_hash:
-                    results.append((f_hash, key_val))
-            for next_id, _dep_type in self._deps_by_from.get(current, []):
-                if next_id not in visited:
-                    stack.append(next_id)
 
-        return results
+            files.append(
+                (
+                    child_name or "(Asset Root)",
+                    {
+                        "id": item_id,
+                        "full_path": name,
+                        "size": size,
+                        "hash": asset_hash,
+                        "key": key,
+                    },
+                )
+            )
+
+        files = [item for item in files if item[0] not in directories]
+        files.sort(key=lambda item: item[0].casefold())
+        return tuple(sorted(directories, key=str.casefold)), tuple(files)
+
+    @_with_connection_lock
+    def get_all_recursive_dependencies(self, asset_id):
+        """Recursively fetch dependencies inside SQLite's native engine."""
+        cursor = self.conn.cursor()
+        key_col = "a.e" if Config.DB_ENCRYPTED else "NULL"
+        cursor.execute(
+            f"""
+            WITH RECURSIVE dependency_ids(id) AS (
+                VALUES (?)
+                UNION
+                SELECT r.t
+                FROM r
+                JOIN dependency_ids current ON r.f = current.id
+                WHERE r.d != '0'
+            )
+            SELECT a.h, {key_col}
+            FROM dependency_ids
+            JOIN a ON a.i = dependency_ids.id
+            WHERE a.h IS NOT NULL AND a.h != ''
+            """,
+            (int(asset_id),),
+        )
+        return cursor.fetchall()
 
     @_with_connection_lock
     def search_scenes(self, query=""):

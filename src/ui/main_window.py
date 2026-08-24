@@ -1,6 +1,7 @@
 import os
 import queue
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import dearpygui.dearpygui as dpg
@@ -8,6 +9,11 @@ import dearpygui.dearpygui as dpg
 from src.core.config import Config
 from src.core.i18n import i18n
 from src.core.unity import UnityLogic
+
+# Services
+from src.services.f3d.service import F3dService
+from src.services.thumbnail.service import ThumbnailService
+from src.services.translation.service import TranslationService
 
 # Controllers
 from src.ui.controllers.batch_controller import BatchController
@@ -21,14 +27,9 @@ from src.ui.controllers.settings_controller import SettingsController
 from src.ui.controllers.shortcut_controller import ShortcutController
 from src.ui.features.characters.controller import CharacterController
 from src.ui.features.characters.export_controller import CharacterExportController
-
-# Services
-from src.services.f3d.service import F3dService
-from src.services.thumbnail.service import ThumbnailService
-from src.services.translation.service import TranslationService
+from src.ui.runtime.texture_registry import TextureRegistry
 from src.ui.services.database_service import DatabaseService
 from src.ui.state import CharacterState, NavigationState
-from src.ui.runtime.texture_registry import TextureRegistry
 
 # Views
 from src.ui.views.main_view import MainView
@@ -44,11 +45,13 @@ class UmaExporterApp:
         self.ui_tasks = queue.Queue()
         self.is_db_loading = False
         self.max_ui_tasks_per_frame = 32
+        self.last_ui_activity_time = time.monotonic()
 
         # Application State
         self.node_map = {}
         self.tree_data = {}
         self.file_item_data = {}
+        self.browser_request_id = 0
         self.last_selected = None
 
         # Navigation State
@@ -471,7 +474,24 @@ class UmaExporterApp:
         dpg.show_viewport()
 
     def _queue_ui_task(self, func):
+        self._mark_ui_activity()
         self.ui_tasks.put(func)
+
+    def _mark_ui_activity(self):
+        self.last_ui_activity_time = time.monotonic()
+
+    def _target_frame_interval(self):
+        recently_active = time.monotonic() - self.last_ui_activity_time < 0.75
+        background_busy = (
+            not self.ui_tasks.empty()
+            or any(self.pending_search_builds.values())
+            or bool(self.search_thumbnail_inflight)
+            or self.pending_drag_preview is not None
+            or self.drag_preview_active
+            or self.is_batch_running
+            or self.is_db_loading
+        )
+        return 1.0 / (60.0 if recently_active or background_busy else 30.0)
 
     def _drain_ui_tasks(self):
         for _ in range(self.max_ui_tasks_per_frame):
@@ -512,6 +532,7 @@ class UmaExporterApp:
         return None
 
     def on_file_click(self, sender, app_data, user_data, *args):
+        self._mark_ui_activity()
         for input_tag in ["search_input", "scene_search_input", "prop_search_input"]:
             if dpg.does_item_exist(input_tag) and dpg.is_item_focused(input_tag):
                 if sender and dpg.does_item_exist(sender):
@@ -696,12 +717,18 @@ class UmaExporterApp:
 
         try:
             while dpg.is_dearpygui_running():
+                frame_started_at = time.perf_counter()
                 with Monitor.time_block("frame_time"):
                     self._drain_ui_tasks()
                     self.search_controller.process_pending_search_builds()
                     self.drag_controller.process_pending_drag_preview()
                     self.search_controller.process_lazy_thumbnails()
                     dpg.render_dearpygui_frame()
+                remaining = self._target_frame_interval() - (
+                    time.perf_counter() - frame_started_at
+                )
+                if remaining > 0:
+                    time.sleep(remaining)
         except KeyboardInterrupt:
             pass
         finally:

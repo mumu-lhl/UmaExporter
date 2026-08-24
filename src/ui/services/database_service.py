@@ -4,7 +4,6 @@ import dearpygui.dearpygui as dpg
 
 from src.core.config import Config
 from src.core.database import UmaDatabase
-from src.core.i18n import i18n
 from src.core.unity import UnityLogic
 
 
@@ -36,13 +35,11 @@ class DatabaseService:
                     translation_service=self.app.translation_service,
                 )
                 UnityLogic.set_key_provider(db.get_key_by_hash)
-                tree_data = db.load_index()
-
                 def finalize():
                     self.app.db = db
                     self.app.is_db_loading = False
                     dpg.hide_item("loading_modal")
-                    self._on_database_ready(tree_data)
+                    self._on_database_ready()
 
                 self.app._queue_ui_task(finalize)
 
@@ -59,9 +56,9 @@ class DatabaseService:
 
         self.app.executor.submit(run_db_load)
 
-    def _on_database_ready(self, tree_data):
+    def _on_database_ready(self):
         """Called when database has been successfully loaded."""
-        self.app.tree_data = tree_data
+        self.app.tree_data = {}
 
         if dpg.does_item_exist("browse_group"):
             dpg.delete_item("browse_group", children_only=True)
@@ -80,11 +77,8 @@ class DatabaseService:
             "",
         )
 
-        # Character discovery is synchronous; finish it before starting the
-        # scene/prop workers that share the same database connection.
+        # Scene and prop data are loaded only when their tabs are first opened.
         self.app.character_controller.render_results()
-        self.app.search_controller.request_results("scene_", reuse_rows=False)
-        self.app.search_controller.request_results("prop_", reuse_rows=False)
 
     def reset_database_state(self):
         """Reset all database-related state and clear UI."""
@@ -98,6 +92,7 @@ class DatabaseService:
         self.app.db = None
         self.app.tree_data = {}
         self.app.node_map = {}
+        self.app.browser_request_id += 1
         self.app.cached_recursive_hashes = {}
         self.app.cached_deps = {}
         self.app.cached_rev_deps = {}

@@ -16,6 +16,7 @@ class DragController:
             return False
 
     def _on_mouse_move(self, *args):
+        self.app._mark_ui_activity()
         # Fallback initialization for middle-drag
         if dpg.is_mouse_button_down(dpg.mvMouseButton_Middle):
             if not self.app.middle_drag_active:

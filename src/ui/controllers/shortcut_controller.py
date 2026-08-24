@@ -130,6 +130,7 @@ class ShortcutController:
         return tags
 
     def _on_key_press(self, sender, key_code, user_data, *args):
+        self.app._mark_ui_activity()
         for input_tag in (
             "search_input",
             "scene_search_input",
@@ -143,6 +144,14 @@ class ShortcutController:
         search_context = self._search_navigation_context()
         if search_context:
             prefix, scroll_container = search_context
+            direction = (
+                -1
+                if key_code in (dpg.mvKey_Up, dpg.mvKey_K)
+                else 1
+            )
+            self.app.drag_preview_active = True
+            if self.app.search_controller.navigate_virtual(prefix, direction):
+                return
             selectables = self._stable_search_tags(prefix)
             if not selectables:
                 return
