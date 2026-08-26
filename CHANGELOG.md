@@ -1,3 +1,22 @@
+## [0.4.8] - 2026-08-26
+
+### 🐛 Bug Fixes
+
+- *(windows)* 修复导出单个对象失败
+
+### 🚜 Refactor
+
+- *(f3d)* 使用单独进程生成缩略图
+
+### ⚡ Performance
+
+- *(search)* [**breaking**] Stream complete results
+- *(ui)* Virtualize resource browsing
+- 减少启动时间
+
+### ⚙️ Miscellaneous Tasks
+
+- *(skill)* 删除无用的nuitka skill
 ## [0.4.7] - 2026-08-23
 
 ### 🐛 Bug Fixes
