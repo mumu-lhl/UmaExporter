@@ -2,6 +2,7 @@ import errno
 import io
 import sys
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -18,6 +19,16 @@ class InvalidOutputStream:
 
 
 class F3dWorkerTests(unittest.TestCase):
+    def test_thumbnail_rendering_is_isolated_from_gui_process(self):
+        root = Path(__file__).resolve().parents[1]
+        preview = (root / "src/ui/controllers/preview_controller.py").read_text()
+        batch = (root / "src/ui/controllers/batch_controller.py").read_text()
+
+        self.assertIn("F3dThumbnailWorker", preview)
+        self.assertIn("F3dThumbnailWorker", batch)
+        self.assertNotIn("generate_thumbnail(", preview)
+        self.assertNotIn("generate_thumbnail(", batch)
+
     def test_viewer_pipe_uses_utf8_for_unicode_preview_paths(self):
         fake_process = SimpleNamespace(stdout=object(), stderr=object())
 

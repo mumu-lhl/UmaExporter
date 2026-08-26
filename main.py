@@ -7,6 +7,12 @@ from src.core.config import Config
 
 
 def main():
+    if "--f3d-thumbnail-worker" in sys.argv:
+        from src.services.f3d.worker import launch_f3d_thumbnail_worker_stdin
+
+        launch_f3d_thumbnail_worker_stdin()
+        return
+
     parser = argparse.ArgumentParser(description="Uma Musume Exporter")
     parser.add_argument("--f3d-viewer", action="store_true", help="Launch F3D viewer")
     parser.add_argument(

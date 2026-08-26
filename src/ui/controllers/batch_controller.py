@@ -8,7 +8,7 @@ import dearpygui.dearpygui as dpg
 from src.core.config import Config
 from src.core.unity import UnityLogic
 from src.core.i18n import i18n
-from src.services.f3d.worker import generate_thumbnail
+from src.services.f3d.service import F3dThumbnailWorker
 from src.services.thumbnail.manager import ThumbnailManager as thumb_manager
 
 
@@ -153,29 +153,18 @@ class BatchController:
                         batch_configs, chunk_export_dir
                     )
 
-                    batch_engine = None
-                    try:
-                        import f3d
+                    with F3dThumbnailWorker() as thumbnail_worker:
+                        for asset_hash, fbx_path in exported_results:
+                            if self.app.batch_stop_event.is_set():
+                                break
 
-                        batch_engine = f3d.Engine.create(offscreen=True)
-                    except:
-                        pass
+                            output_filename = f"{asset_hash}.png"
+                            output_path = os.path.join(
+                                Config.get_thumbnail_dir(), output_filename
+                            )
 
-                    for asset_hash, fbx_path in exported_results:
-                        if self.app.batch_stop_event.is_set():
-                            break
-
-                        output_filename = f"{asset_hash}.png"
-                        output_path = os.path.join(
-                            Config.get_thumbnail_dir(), output_filename
-                        )
-
-                        if generate_thumbnail(
-                            fbx_path, output_path, engine=batch_engine
-                        ):
-                            thumb_manager.set_thumbnail(asset_hash, output_path)
-
-                    batch_engine = None
+                            if thumbnail_worker.generate(fbx_path, output_path):
+                                thumb_manager.set_thumbnail(asset_hash, output_path)
 
                 with progress_lock:
                     processed_count += len(chunk_data)

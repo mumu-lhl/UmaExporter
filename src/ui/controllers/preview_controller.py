@@ -7,7 +7,7 @@ from src.core.config import Config
 from src.core.unity import UnityLogic
 from src.core.i18n import i18n
 from src.services.thumbnail.manager import ThumbnailManager as thumb_manager
-from src.services.f3d.worker import generate_thumbnail
+from src.services.f3d.service import F3dThumbnailWorker
 from src.ui.features.preview.dependencies import DependencyPanelController
 
 
@@ -697,7 +697,8 @@ class PreviewController:
                 output_filename = f"{asset_hash}.png"
                 output_path = os.path.join(Config.get_thumbnail_dir(), output_filename)
 
-                success = generate_thumbnail(tmp_fbx_path, output_path)
+                with F3dThumbnailWorker() as thumbnail_worker:
+                    success = thumbnail_worker.generate(tmp_fbx_path, output_path)
 
                 # Cleanup tmp FBX
                 try:

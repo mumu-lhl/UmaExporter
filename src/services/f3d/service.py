@@ -2,6 +2,11 @@ import subprocess
 import threading
 import sys
 import os
+import json
+import queue
+from pathlib import Path
+
+from src.services.f3d.worker import THUMBNAIL_RESULT_PREFIX
 
 
 class F3dService:
@@ -81,3 +86,123 @@ class F3dService:
                 self.f3d_process.wait(timeout=1)
             except:
                 self.f3d_process.terminate()
+
+
+class F3dThumbnailWorker:
+    """Persistent F3D thumbnail subprocess with crash isolation."""
+
+    def __init__(self, timeout=120):
+        self.timeout = timeout
+        self.process = None
+        self.responses = None
+        self.lock = threading.Lock()
+
+    def _start(self):
+        project_root = Path(__file__).resolve().parents[3]
+        args = [
+            sys.executable,
+            str(project_root / "main.py"),
+            "--f3d-thumbnail-worker",
+        ]
+        self.responses = queue.Queue()
+        self.process = subprocess.Popen(
+            args,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+            cwd=project_root,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+
+        def read_stdout(process, responses):
+            try:
+                for line in iter(process.stdout.readline, ""):
+                    if not line.startswith(THUMBNAIL_RESULT_PREFIX):
+                        continue
+                    try:
+                        payload = json.loads(line[len(THUMBNAIL_RESULT_PREFIX) :])
+                        responses.put(bool(payload.get("success")))
+                    except (TypeError, ValueError):
+                        responses.put(False)
+            finally:
+                responses.put(None)
+
+        def read_stderr(process):
+            try:
+                for line in iter(process.stderr.readline, ""):
+                    if line:
+                        print(f"[F3D-THUMBNAIL] {line.strip()}", flush=True)
+            except (AttributeError, OSError, ValueError):
+                pass
+
+        threading.Thread(
+            target=read_stdout,
+            args=(self.process, self.responses),
+            daemon=True,
+        ).start()
+        threading.Thread(
+            target=read_stderr,
+            args=(self.process,),
+            daemon=True,
+        ).start()
+
+    def _ensure_running(self):
+        if self.process is None or self.process.poll() is not None:
+            self.close()
+            self._start()
+
+    def generate(self, model_path, output_path):
+        with self.lock:
+            self._ensure_running()
+            request = json.dumps(
+                {
+                    "model_path": os.fspath(model_path),
+                    "output_path": os.fspath(output_path),
+                }
+            )
+            try:
+                self.process.stdin.write(request + "\n")
+                self.process.stdin.flush()
+                result = self.responses.get(timeout=self.timeout)
+            except (AttributeError, BrokenPipeError, OSError, queue.Empty):
+                self.close()
+                return False
+
+            if result is None:
+                self.close()
+                return False
+            return result
+
+    def close(self):
+        process = self.process
+        self.process = None
+        self.responses = None
+        if process is None:
+            return
+        try:
+            if process.poll() is None:
+                process.stdin.write("STOP\n")
+                process.stdin.flush()
+                process.wait(timeout=2)
+        except (AttributeError, BrokenPipeError, OSError, subprocess.TimeoutExpired):
+            try:
+                process.terminate()
+                process.wait(timeout=2)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        finally:
+            for stream in (process.stdin, process.stdout, process.stderr):
+                try:
+                    stream.close()
+                except (AttributeError, OSError, ValueError):
+                    pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()

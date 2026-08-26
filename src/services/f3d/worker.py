@@ -1,5 +1,9 @@
 import os
 import sys
+import json
+
+
+THUMBNAIL_RESULT_PREFIX = "F3D_THUMBNAIL_RESULT "
 
 
 def _worker_log(message):
@@ -59,6 +63,35 @@ def generate_thumbnail(model_path, output_path, engine=None):
     except Exception as e:
         print(f"[F3D] Thumbnail generation error: {e}")
         return False
+
+
+def launch_f3d_thumbnail_worker_stdin():
+    """Render thumbnail requests in a process isolated from the GUI."""
+    engine = None
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        if line == "STOP":
+            break
+
+        success = False
+        try:
+            request = json.loads(line)
+            if engine is None:
+                import f3d
+
+                engine = f3d.Engine.create(offscreen=True)
+            success = generate_thumbnail(
+                request["model_path"], request["output_path"], engine=engine
+            )
+        except Exception as error:
+            _worker_log(f"[F3D] Thumbnail worker error: {error}")
+
+        print(
+            THUMBNAIL_RESULT_PREFIX + json.dumps({"success": bool(success)}),
+            flush=True,
+        )
 
 
 def launch_f3d_viewer_stdin():
