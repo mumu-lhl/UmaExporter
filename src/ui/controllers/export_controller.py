@@ -22,7 +22,21 @@ class ExportController:
                 active_tab = dpg.get_item_alias(active_tab) or ""
         except Exception:
             active_tab = ""
-        return {"scene_tab": "scene_", "prop_tab": "prop_"}.get(active_tab, "")
+
+        prefix = {"scene_tab": "scene_", "prop_tab": "prop_"}.get(
+            active_tab, ""
+        )
+        if prefix:
+            return prefix
+
+        # Dear PyGui may return 0/None for a tab bar on some Windows/RDP
+        # backends. Infer the domain from the selected Unity object instead.
+        for candidate in ("scene_", "prop_"):
+            selected_tag = self.app.last_unity_selected.get(candidate)
+            if selected_tag and dpg.does_item_exist(selected_tag):
+                return candidate
+
+        return ""
 
     def _set_export_status(self, prefix, message, color=None):
         tag = f"{prefix}ui_export_status"
@@ -31,14 +45,30 @@ class ExportController:
             if color is not None:
                 dpg.configure_item(tag, color=color)
 
+    def _resolve_selected_item(self, preferred_prefix):
+        """Return the live selected item without relying solely on the tab bar."""
+        prefixes = [preferred_prefix]
+        prefixes.extend(
+            candidate
+            for candidate in ("", "scene_", "prop_")
+            if candidate not in prefixes
+        )
+        for candidate in prefixes:
+            selected_tag = self.app.last_unity_selected.get(candidate)
+            if selected_tag and dpg.does_item_exist(selected_tag):
+                return candidate, selected_tag
+        return preferred_prefix, None
+
     def on_export_selected(self, sender, app_data):
         target_dir = app_data.get("file_path_name", "")
         if not target_dir:
             return
         prefix = self._get_active_prefix()
+        prefix, selected_tag = self._resolve_selected_item(prefix)
         self._set_export_status(prefix, i18n("msg_export_started"), [255, 255, 0])
-        selected_tag = self.app.last_unity_selected.get(prefix)
         if not selected_tag or not dpg.does_item_exist(selected_tag):
+            if self._submit_current_asset(prefix, target_dir):
+                return
             self._set_export_status(prefix, i18n("msg_export_failed"), [255, 0, 0])
             return
         user_data = dpg.get_item_user_data(selected_tag)
@@ -80,9 +110,14 @@ class ExportController:
             return
         prefix = self._get_active_prefix()
         self._set_export_status(prefix, i18n("msg_export_started"), [255, 255, 0])
+        self._submit_current_asset(prefix, target_dir)
+
+    def _submit_current_asset(self, prefix, target_dir):
+        asset_hash = self.app.current_asset_hash
+        if not asset_hash:
+            return False
         paths, bundle_keys = self._recursive_export_inputs(self.app.current_asset_id)
         if not paths:
-            asset_hash = self.app.current_asset_hash
             paths = [os.path.join(Config.get_data_root(), asset_hash[:2], asset_hash)]
             key = (self.app.current_asset_data or {}).get("key")
             bundle_keys = [key] if key is not None else None
@@ -93,6 +128,7 @@ class ExportController:
             target_dir,
             bundle_keys=bundle_keys,
         )
+        return True
 
     def _recursive_export_inputs(self, asset_id):
         if not asset_id or not self.app.db:
@@ -115,6 +151,10 @@ class ExportController:
                 result = completed.result()
                 succeeded = bool(result)
             except Exception:
+                import traceback
+
+                traceback.print_exc()
+                result = None
                 succeeded = False
             self.app._queue_ui_task(
                 lambda: self._set_export_status(
