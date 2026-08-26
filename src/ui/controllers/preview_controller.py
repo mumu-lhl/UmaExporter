@@ -238,8 +238,21 @@ class PreviewController:
 
         current_hash = self.app.current_asset_hash
 
+        default_object = self._find_default_unity_object(objs)
+
         for prefix in self._detail_prefixes():
             self._render_unity_objects(prefix, phys_path, objs, bundle_key=bundle_key)
+
+            if default_object:
+                u_type, u_name, path_id = default_object
+                self.app.last_unity_selection_data[prefix] = (
+                    phys_path,
+                    path_id,
+                    u_type,
+                    prefix,
+                    u_name,
+                    bundle_key,
+                )
 
             # Performance: For scene/prop pages, we always attempt to show thumbnail if it exists,
             # regardless of animator presence.
@@ -441,6 +454,20 @@ class PreviewController:
             return texture_ids[0]
         return None
 
+    def _find_default_unity_object(self, objs):
+        """Find the object whose name corresponds to the selected asset."""
+        full_path = (self.app.current_asset_data or {}).get("full_path", "")
+        filename = os.path.basename(full_path).casefold()
+        stem = os.path.splitext(filename)[0]
+        expected_names = {name for name in (filename, stem) if name}
+        for obj in objs:
+            object_name = obj[1]
+            if isinstance(object_name, str) and object_name.casefold() in expected_names:
+                return obj
+        if len(objs) == 1:
+            return objs[0]
+        return None
+
     def _render_unity_objects(self, prefix, phys_path, objs, bundle_key=None):
         parent_tag = f"{prefix}ui_unity_parent"
         dpg.delete_item(parent_tag, children_only=True)
@@ -495,6 +522,7 @@ class PreviewController:
         if sender and sender == self.app.last_unity_selected.get(prefix):
             dpg.set_value(sender, False)
             self.app.last_unity_selected[prefix] = None
+            self.app.last_unity_selection_data[prefix] = None
             dpg.configure_item(image_container_tag, show=False)
             dpg.delete_item(image_container_tag, children_only=True)
             return
@@ -509,6 +537,7 @@ class PreviewController:
             self.app.last_unity_selected[prefix] = sender
         else:
             self.app.last_unity_selected[prefix] = None
+        self.app.last_unity_selection_data[prefix] = user_data
 
         dpg.configure_item(image_container_tag, show=False)
         dpg.delete_item(image_container_tag, children_only=True)

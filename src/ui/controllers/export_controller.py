@@ -59,19 +59,36 @@ class ExportController:
                 return candidate, selected_tag
         return preferred_prefix, None
 
+    def _resolve_selection_data(self, preferred_prefix, selected_tag):
+        if selected_tag and dpg.does_item_exist(selected_tag):
+            return preferred_prefix, dpg.get_item_user_data(selected_tag)
+
+        selections = getattr(self.app, "last_unity_selection_data", {})
+        prefixes = [preferred_prefix]
+        prefixes.extend(
+            candidate
+            for candidate in ("", "scene_", "prop_")
+            if candidate not in prefixes
+        )
+        for candidate in prefixes:
+            user_data = selections.get(candidate)
+            if user_data and len(user_data) >= 2:
+                return candidate, user_data
+        return preferred_prefix, None
+
     def on_export_selected(self, sender, app_data):
         target_dir = app_data.get("file_path_name", "")
         if not target_dir:
             return
         prefix = self._get_active_prefix()
         prefix, selected_tag = self._resolve_selected_item(prefix)
+        prefix, user_data = self._resolve_selection_data(prefix, selected_tag)
         self._set_export_status(prefix, i18n("msg_export_started"), [255, 255, 0])
-        if not selected_tag or not dpg.does_item_exist(selected_tag):
+        if not user_data:
             if self._submit_current_asset(prefix, target_dir):
                 return
             self._set_export_status(prefix, i18n("msg_export_failed"), [255, 0, 0])
             return
-        user_data = dpg.get_item_user_data(selected_tag)
         if not user_data or len(user_data) < 2:
             self._set_export_status(prefix, i18n("msg_export_failed"), [255, 0, 0])
             return

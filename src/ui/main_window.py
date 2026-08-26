@@ -91,6 +91,7 @@ class UmaExporterApp:
             "character_outfits": 0,
         }
         self.last_unity_selected = {}
+        self.last_unity_selection_data = {}
         self.thumbnail_texture_tags = {}
         self.preview_texture_tags = {}
         self.cached_recursive_hashes = {}
@@ -592,6 +593,11 @@ class UmaExporterApp:
                 self.history_forward.clear()
 
         self.last_unity_selected = {"": None, "scene_": None, "prop_": None}
+        self.last_unity_selection_data = {
+            "": None,
+            "scene_": None,
+            "prop_": None,
+        }
         self.current_asset_id = user_data["id"]
         self.current_asset_data = user_data
 
