@@ -87,6 +87,51 @@ class MasterDatabase:
     def get_character_name(self, chara_id):
         return self.get_text(6, int(chara_id))
 
+    def get_character_names(self, chara_ids):
+        """Return character names without issuing one master query per character."""
+        character_ids = list(dict.fromkeys(int(chara_id) for chara_id in chara_ids))
+        names = {}
+        unresolved_ids = []
+
+        for chara_id in character_ids:
+            translated = (
+                self.translation_service.get_text(6, chara_id)
+                if self.translation_service
+                else None
+            )
+            if translated:
+                names[chara_id] = translated
+            else:
+                unresolved_ids.append(chara_id)
+
+        if not self.conn or not unresolved_ids:
+            return names
+
+        try:
+            placeholders = ", ".join("?" for _ in unresolved_ids)
+            cursor = self.conn.cursor()
+            cursor.execute(
+                f"""
+                SELECT id, [index], text
+                FROM text_data
+                WHERE id IN (6, 59) AND [index] IN ({placeholders})
+                """,
+                unresolved_ids,
+            )
+
+            database_names = {}
+            for category_id, chara_id, text in cursor:
+                chara_id = int(chara_id)
+                if category_id == 6 or chara_id not in database_names:
+                    database_names[chara_id] = text
+
+            for chara_id, text in database_names.items():
+                names.setdefault(chara_id, text)
+        except Exception as e:
+            print(f"MasterDB character list query error: {e}")
+
+        return names
+
     def get_dress_name(self, dress_id):
         return self.get_text(14, int(dress_id))
 
@@ -612,13 +657,13 @@ class UmaDatabase:
             f"""
             SELECT {cols}
             FROM a
-            WHERE n LIKE 'chara/chr____/%'
-              AND n NOT LIKE 'chara/chr0000/%'
+            WHERE n GLOB 'chara/chr????/chr_icon_????'
+              AND n NOT GLOB 'chara/chr0000/*'
             ORDER BY n
             """
         )
 
-        rows = []
+        asset_rows = []
         for i_id, name, size, f_hash, key_val in cursor.fetchall():
             parts = name.split("/")
             if len(parts) < 3:
@@ -635,21 +680,30 @@ class UmaDatabase:
             if chara_id == "0000":
                 continue
 
-            name_en = (
-                self.master_db.get_character_name(chara_id) if self.master_db else None
-            )
+            asset_rows.append((i_id, chara_id, name, size, f_hash, key_val, parts[2]))
 
+        character_names = (
+            self.master_db.get_character_names(
+                int(chara_id) for _, chara_id, *_ in asset_rows
+            )
+            if self.master_db
+            else {}
+        )
+
+        rows = []
+        for i_id, chara_id, name, size, f_hash, key_val, texture_name in asset_rows:
             rows.append(
                 {
                     "id": i_id,
                     "chara_id": chara_id,
-                    "chara_name": name_en or f"Chara {chara_id}",
+                    "chara_name": character_names.get(int(chara_id))
+                    or f"Chara {chara_id}",
                     "full_path": name,
                     "size": size,
                     "hash": f_hash,
                     "key": key_val,
-                    "texture_name": parts[2],
-                    "cache_name": parts[2],
+                    "texture_name": texture_name,
+                    "cache_name": texture_name,
                 }
             )
 
