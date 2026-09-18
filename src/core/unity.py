@@ -483,16 +483,76 @@ class UnityLogic:
         return (macro_root,)
 
     @staticmethod
+    def find_stage_all_bundles(logical_path, db):
+        """Finds ALL bundles (prefabs + materials + textures) for a stage group.
+
+        Unlike find_stage_related_prefabs, this does not filter out material
+        bundles, returning everything needed for textured FBX export.
+        """
+        if not logical_path or not db:
+            return None, ()
+        parts = logical_path.replace("\\", "/").split("/")
+        group_name = None
+        group_pattern = None
+
+        if "live" in parts:
+            idx = parts.index("live")
+            if idx + 1 < len(parts):
+                group_name = parts[idx + 1]
+                group_pattern = f"%live/{group_name}/%"
+        elif "race" in parts:
+            idx = parts.index("race")
+            if idx + 1 < len(parts):
+                group_name = parts[idx + 1]
+                group_pattern = f"%race/{group_name}/%"
+        elif "env" in parts:
+            idx = parts.index("env")
+            if idx + 2 < len(parts):
+                group_name = f"{parts[idx+1]}_{parts[idx+2]}"
+                group_pattern = f"%{parts[idx+1]}/{parts[idx+2]}/%"
+            elif idx + 1 < len(parts):
+                group_name = parts[idx + 1]
+                group_pattern = f"%env/{group_name}/%"
+
+        if not group_pattern:
+            return None, ()
+
+        try:
+            if hasattr(db, "get_stage_all_bundles"):
+                rows = db.get_stage_all_bundles(group_pattern)
+            else:
+                lock = getattr(db, "_connection_lock", None)
+                if lock:
+                    with lock:
+                        cursor = db.conn.cursor()
+                        rows = cursor.execute(
+                            "SELECT a.i, a.n, a.h FROM a WHERE a.n LIKE ?",
+                            (group_pattern,),
+                        ).fetchall()
+                else:
+                    cursor = db.conn.cursor()
+                    rows = cursor.execute(
+                        "SELECT a.i, a.n, a.h FROM a WHERE a.n LIKE ?",
+                        (group_pattern,),
+                    ).fetchall()
+            return group_name, tuple(rows)
+        except Exception as e:
+            print(f"Error finding all stage bundles: {e}")
+            return None, ()
+
+    @staticmethod
     def export_assembled_stage_fbx(logical_path, db, export_dir=None):
         """Exports all companion prefabs of a stage to FBX files and returns their paths."""
-        group_name, prefabs = UnityLogic.find_stage_related_prefabs(logical_path, db)
-        if not prefabs:
+        # Use ALL bundles (prefabs + materials) so AssetStudioModCLI can resolve
+        # cross-bundle texture references and embed textures into the FBX output.
+        group_name, all_bundles = UnityLogic.find_stage_all_bundles(logical_path, db)
+        if not all_bundles:
             return []
 
         data_root = Config.get_data_root()
         paths = []
         keys = []
-        for p_id, p_name, p_hash in prefabs:
+        for p_id, p_name, p_hash in all_bundles:
             phys_path = os.path.join(data_root, p_hash[:2], p_hash)
             if os.path.exists(phys_path):
                 paths.append(phys_path)

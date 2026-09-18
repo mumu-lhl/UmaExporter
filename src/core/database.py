@@ -624,6 +624,20 @@ class UmaDatabase:
         ).fetchall()
 
     @_with_connection_lock
+    def get_stage_all_bundles(self, group_pattern):
+        """Find ALL bundles (prefabs + materials + textures) for a stage group.
+
+        Unlike get_stage_companion_prefabs, this does not filter out material
+        bundles, so AssetStudioModCLI can resolve cross-bundle texture references
+        and embed textures into the FBX output.
+        """
+        cursor = self.conn.cursor()
+        return cursor.execute(
+            "SELECT a.i, a.n, a.h FROM a WHERE a.n LIKE ?",
+            (group_pattern,),
+        ).fetchall()
+
+    @_with_connection_lock
     def search_props(self, query=""):
         """Search specifically for prop assets in supported prop directories."""
         cursor = self.conn.cursor()
