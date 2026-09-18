@@ -132,10 +132,6 @@ def launch_f3d_viewer_stdin():
 
         eng.options.update(
             {
-                "model.scivis.cells": True,
-                "model.scivis.enable": True,
-                "model.scivis.array_name": "Colors",
-                "model.scivis.component": 0,
                 "ui.axis": True,
                 "render.grid.enable": True,
                 "render.light.intensity": 2.5,
@@ -143,6 +139,23 @@ def launch_f3d_viewer_stdin():
                 "render.effect.tone_mapping": True,
             }
         )
+
+        try:
+            window.set_window_name("UmaExporter - 3D Viewer (Press ESC or Q to Exit)")
+            b_esc = f3d.InteractionBind(f3d.InteractionBind.ModifierKeys.NONE, "Escape")
+            b_q = f3d.InteractionBind(f3d.InteractionBind.ModifierKeys.NONE, "Q")
+            try:
+                interactor.remove_binding(b_esc)
+            except Exception:
+                pass
+            try:
+                interactor.remove_binding(b_q)
+            except Exception:
+                pass
+            interactor.add_binding(b_esc, "stop_interactor", "General")
+            interactor.add_binding(b_q, "stop_interactor", "General")
+        except Exception as e:
+            _worker_log(f"[F3D] Warning: Could not configure window title or exit bindings: {e}")
 
         def update_scene(path):
             nonlocal current_mesh
@@ -168,35 +181,45 @@ def launch_f3d_viewer_stdin():
                 _worker_log("[F3D] Warning: No valid models could be added to scene.")
                 return
 
-            # Set to Isometric view (similar to pressing '9')
             try:
-                import time
-
-                time.sleep(0.1)  # Small delay to ensure model is processed
-                interactor.trigger_command("set_camera isometric")
+                cam = window.camera
+                cam.reset_to_bounds()
+                p = cam.position
+                fp = cam.focal_point
+                dist = ((p[0] - fp[0]) ** 2 + (p[1] - fp[1]) ** 2 + (p[2] - fp[2]) ** 2) ** 0.5
+                if dist > 100:
+                    # Stage or macro environment scene: audience-facing front view
+                    cam.focal_point = [0, 5, 0]
+                    cam.position = [0, 8, 45]
+                    cam.view_up = [0, 1, 0]
+                else:
+                    interactor.trigger_command("set_camera isometric")
             except Exception as e:
-                _worker_log(f"[F3D] Warning: Could not set isometric view: {e}")
+                _worker_log(f"[F3D] Warning: Could not adjust camera: {e}")
 
             window.render()
             _worker_log(f"[F3D] Loaded {loaded_count} model(s): {path}")
 
         def timer_callback(t=None):
-            # Non-blocking check for new paths from the queue
+            # Check if parent process / stdin reader is still alive
             try:
+                if not reader_thread.is_alive():
+                    interactor.stop()
+                    return
                 while not input_queue.empty():
                     line = input_queue.get_nowait()
                     if line == "STOP":
-                        return False
+                        interactor.stop()
+                        return
                     update_scene(line)
-            except queue.Empty:
+            except Exception:
                 pass
-            return True
 
         # Initial wait for first mesh (loop until receiving mesh or stdin closed/STOP)
         line = None
         while True:
             try:
-                line = input_queue.get(timeout=1.0)
+                line = input_queue.get(timeout=0.5)
                 if not line or line == "STOP":
                     return
                 break

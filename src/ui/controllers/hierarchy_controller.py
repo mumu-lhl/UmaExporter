@@ -430,7 +430,14 @@ class HierarchyController:
                 if dpg.does_item_exist(status_text_tag):
                     dpg.configure_item(status_text_tag, show=False)
                 if fbx_files and hasattr(self.app, "f3d_service"):
-                    combined_path = ";".join(fbx_files)
+                    # Filter out volumetric light beams (blinklight) for F3D preview,
+                    # because F3D cannot render additive transparency shaders and renders them as solid black cones.
+                    preview_files = [
+                        f
+                        for f in fbx_files
+                        if "blinklight" not in os.path.basename(f).lower()
+                    ] or fbx_files
+                    combined_path = ";".join(preview_files)
                     self.app.f3d_service.load_mesh(combined_path)
 
             self.app._queue_ui_task(ui_update)

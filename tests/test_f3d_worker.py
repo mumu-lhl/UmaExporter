@@ -58,6 +58,41 @@ class F3dWorkerTests(unittest.TestCase):
         ):
             launch_f3d_viewer_stdin()
 
+    def test_viewer_worker_exits_on_empty_stdin(self):
+        fake_interactor = SimpleNamespace(
+            remove_binding=lambda *a: None,
+            add_binding=lambda *a, **kw: None,
+            start=lambda *a: None,
+            stop=lambda: None,
+            trigger_command=lambda *a: None,
+        )
+        fake_window = SimpleNamespace(
+            set_window_name=lambda *a: None,
+            camera=SimpleNamespace(
+                reset_to_bounds=lambda: None,
+                position=(0, 0, 1),
+                focal_point=(0, 0, 0),
+            ),
+            render=lambda: None,
+        )
+        fake_eng = SimpleNamespace(
+            scene=SimpleNamespace(clear=lambda: None, add=lambda *a: None),
+            window=fake_window,
+            interactor=fake_interactor,
+            options=SimpleNamespace(update=lambda *a: None),
+        )
+        fake_f3d = SimpleNamespace(
+            Engine=SimpleNamespace(create=lambda: fake_eng),
+            InteractionBind=lambda *a: object(),
+        )
+
+        with (
+            patch.dict(sys.modules, {"f3d": fake_f3d}),
+            patch("src.services.f3d.worker.sys.stdin", io.StringIO("")),
+        ):
+            # Should exit immediately without hanging
+            launch_f3d_viewer_stdin()
+
 
 if __name__ == "__main__":
     unittest.main()
