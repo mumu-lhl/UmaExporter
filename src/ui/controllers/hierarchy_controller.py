@@ -387,8 +387,14 @@ class HierarchyController:
 
         self.app.executor.submit(worker).add_done_callback(on_done)
 
-    def _set_stage_progress(self, prefix, message):
+    def _set_stage_progress(self, prefix, message, is_done=False):
         """Update stage progress text across all visible stage UI locations."""
+        color = (
+            [0, 255, 100]
+            if is_done or (message and str(message).startswith("✓"))
+            else [255, 200, 80]
+        )
+
         def update():
             for tag in (
                 f"{prefix}ui_stage_status",
@@ -397,7 +403,7 @@ class HierarchyController:
             ):
                 if dpg.does_item_exist(tag):
                     dpg.set_value(tag, message)
-                    dpg.configure_item(tag, show=bool(message))
+                    dpg.configure_item(tag, show=bool(message), color=color)
 
         if hasattr(self.app, "_queue_ui_task"):
             self.app._queue_ui_task(update)
@@ -419,8 +425,8 @@ class HierarchyController:
         if not logical_path or not getattr(self.app, "db", None):
             return
 
-        def set_status(msg):
-            self._set_stage_progress(prefix, msg)
+        def set_status(msg, is_done=False):
+            self._set_stage_progress(prefix, msg, is_done=is_done)
 
         set_status(i18n("msg_stage_scanning"))
 
@@ -452,7 +458,10 @@ class HierarchyController:
                     )
                     combined_path = ";".join(preview_files)
                     self.app.f3d_service.load_mesh(combined_path)
-                    set_status(i18n("msg_stage_done").format(len(preview_files)))
+                    set_status(
+                        i18n("msg_stage_done").format(len(preview_files)),
+                        is_done=True,
+                    )
                 else:
                     set_status("")
 

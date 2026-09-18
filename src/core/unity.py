@@ -1857,7 +1857,13 @@ class UnityLogic:
                 line_cb = None
                 if progress_callback:
                     def _cli_line(line):
-                        print(f"[CLI] {line}", flush=True)
+                        cleaned = re.sub(r"\b0+(\d+%)", r"\1", line)
+                        print(f"[CLI] {cleaned}", flush=True)
+                        m = re.search(r"(\d+%)", cleaned)
+                        if m:
+                            progress_callback(
+                                i18n("msg_stage_converting_pct").format(m.group(1))
+                            )
 
                     line_cb = _cli_line
                     progress_callback(i18n("msg_stage_converting"))
