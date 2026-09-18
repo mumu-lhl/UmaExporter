@@ -55,6 +55,7 @@ class HierarchyController:
         if dpg.does_item_exist(status_text_tag):
             dpg.set_value(status_text_tag, i18n("msg_loading_hierarchy"))
             dpg.configure_item(status_text_tag, show=True)
+        self._set_stage_progress(prefix, "")
 
         def worker():
             try:
@@ -137,6 +138,7 @@ class HierarchyController:
             "logical_path": logical_path,
         }
         self.selected_node[prefix] = None
+        self._set_stage_progress(prefix, "")
 
         has_stage = bool(stage_prefabs and len(stage_prefabs) > 1)
         banner_tag = f"{prefix}ui_stage_banner"
@@ -424,7 +426,18 @@ class HierarchyController:
         if not logical_path or not getattr(self.app, "db", None):
             return
 
+        current_req_id = self.request_ids.get(prefix, 0)
+        current_asset_id = getattr(self.app, "current_asset_id", None)
+
+        def is_still_active():
+            return (
+                self.request_ids.get(prefix, 0) == current_req_id
+                and getattr(self.app, "current_asset_id", None) == current_asset_id
+            )
+
         def set_status(msg, is_done=False):
+            if not is_still_active():
+                return
             self._set_stage_progress(prefix, msg, is_done=is_done)
 
         set_status(i18n("msg_stage_scanning"))
@@ -442,6 +455,9 @@ class HierarchyController:
                 fbx_files = []
 
             def ui_update():
+                if not is_still_active():
+                    return
+
                 if fbx_files and hasattr(self.app, "f3d_service"):
                     # Filter out volumetric light beams (blinklight) for F3D preview,
                     # because F3D cannot render additive transparency shaders and renders them as solid black cones.
@@ -456,10 +472,27 @@ class HierarchyController:
                         flush=True,
                     )
                     combined_path = ";".join(preview_files)
-                    self.app.f3d_service.load_mesh(combined_path)
-                    set_status(
-                        i18n("msg_stage_done").format(len(preview_files)),
-                        is_done=True,
+
+                    def on_f3d_loaded(success, count):
+                        def ui_done():
+                            if not is_still_active():
+                                return
+                            if success:
+                                actual_count = count or len(preview_files)
+                                set_status(
+                                    i18n("msg_stage_done").format(actual_count),
+                                    is_done=True,
+                                )
+                            else:
+                                set_status("")
+
+                        if hasattr(self.app, "_queue_ui_task"):
+                            self.app._queue_ui_task(ui_done)
+                        else:
+                            ui_done()
+
+                    self.app.f3d_service.load_mesh(
+                        combined_path, on_loaded=on_f3d_loaded
                     )
                 else:
                     set_status("")

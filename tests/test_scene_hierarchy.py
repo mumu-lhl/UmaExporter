@@ -303,4 +303,48 @@ def test_export_assembled_stage_fbx_cache(monkeypatch, tmp_path):
     assert not os.path.exists(res1[0])
 
 
+def test_hierarchy_controller_clears_stage_status_on_selection_change():
+    """Verify that stage status is cleared when switching items or applying hierarchy."""
+    import dearpygui.dearpygui as dpg
+    from src.ui.controllers.hierarchy_controller import HierarchyController
+
+    class DummyApp:
+        def __init__(self):
+            self.current_asset_id = 10
+            self.current_asset_data = {"id": 10, "name": "stage1"}
+            self.db = None
+            self.f3d_service = None
+
+    dpg.create_context()
+    try:
+        app = DummyApp()
+        ctrl = HierarchyController(app)
+
+        with dpg.window(tag="test_window_stage_clear"):
+            dpg.add_text("✓ Old Done", tag="scene_ui_stage_status", show=True)
+
+        assert dpg.get_value("scene_ui_stage_status") == "✓ Old Done"
+
+        # Switch item to 20 and apply new hierarchy result
+        app.current_asset_id = 20
+        ctrl._apply_hierarchy_result(
+            "scene_",
+            ctrl.request_ids["scene_"],
+            20,
+            "/dummy/path",
+            None,
+            (),
+            stage_group=None,
+            stage_prefabs=(),
+            logical_path="stage2",
+        )
+
+        # Stage status should be cleared and hidden
+        assert dpg.get_value("scene_ui_stage_status") == ""
+        assert dpg.is_item_shown("scene_ui_stage_status") is False
+    finally:
+        dpg.destroy_context()
+
+
+
 

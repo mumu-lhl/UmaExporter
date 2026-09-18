@@ -13,6 +13,8 @@ class F3dService:
     def __init__(self):
         self.f3d_process = None
         self.f3d_lock = threading.Lock()
+        self._load_callbacks = []
+        self._callbacks_lock = threading.Lock()
 
     def ensure_f3d_viewer(self):
         """Ensure the f3d viewer process is running via subprocess"""
@@ -24,8 +26,10 @@ class F3dService:
                 args = [executable]
                 # If running from source, main.py is the second argument
                 if not (getattr(sys, "frozen", False) or "__compiled__" in globals()):
-                    # We assume main.py is in the current directory or executable path
-                    main_py = os.path.abspath(sys.argv[0])
+                    project_root = Path(__file__).resolve().parents[3]
+                    main_py = str(project_root / "main.py")
+                    if not os.path.exists(main_py):
+                        main_py = os.path.abspath(sys.argv[0])
                     args = [executable, main_py]
 
                 args.append("--f3d-viewer")
@@ -53,10 +57,24 @@ class F3dService:
                     try:
                         for line in iter(pipe.readline, ""):
                             if line:
-                                print(f"{label}: {line.strip()}", flush=True)
+                                line_str = line.strip()
+                                if line_str.startswith("F3D_SCENE_LOADED"):
+                                    parts = line_str.split()
+                                    count = (
+                                        int(parts[1])
+                                        if len(parts) > 1 and parts[1].isdigit()
+                                        else 1
+                                    )
+                                    self._notify_loaded(True, count)
+                                elif line_str.startswith("F3D_SCENE_FAILED"):
+                                    self._notify_loaded(False, 0)
+                                else:
+                                    print(f"{label}: {line_str}", flush=True)
                         pipe.close()
                     except:
                         pass
+                    finally:
+                        self._notify_loaded(False, 0)
 
                 threading.Thread(
                     target=log_pipe,
@@ -69,14 +87,30 @@ class F3dService:
                     daemon=True,
                 ).start()
 
-    def load_mesh(self, fbx_path):
+    def _notify_loaded(self, success, count):
+        with self._callbacks_lock:
+            cbs = list(self._load_callbacks)
+            self._load_callbacks.clear()
+        for cb in cbs:
+            try:
+                cb(success, count)
+            except Exception as e:
+                print(f"Error in F3D on_loaded callback: {e}", flush=True)
+
+    def load_mesh(self, fbx_path, on_loaded=None):
         self.ensure_f3d_viewer()
+        if on_loaded:
+            with self._callbacks_lock:
+                self._load_callbacks.append(on_loaded)
         if self.f3d_process and self.f3d_process.poll() is None:
             try:
-                self.f3d_process.stdin.write(f"{fbx_path}\\n")
+                self.f3d_process.stdin.write(f"{fbx_path}\n")
                 self.f3d_process.stdin.flush()
             except Exception as e:
                 print(f"Failed to send mesh to F3D viewer: {e}")
+                self._notify_loaded(False, 0)
+        else:
+            self._notify_loaded(False, 0)
 
     def cleanup(self):
         if self.f3d_process and self.f3d_process.poll() is None:

@@ -186,6 +186,7 @@ def launch_f3d_viewer_stdin():
 
             if loaded_count == 0:
                 _worker_log("[F3D] Warning: No valid models could be added to scene.")
+                _worker_log("F3D_SCENE_FAILED 0")
                 return
 
             try:
@@ -197,6 +198,7 @@ def launch_f3d_viewer_stdin():
                 _worker_log(f"[F3D] Warning: Could not adjust camera: {e}")
 
             window.render()
+            _worker_log(f"F3D_SCENE_LOADED {loaded_count}")
             _worker_log(f"[F3D] Loaded {loaded_count} model(s): {path}")
 
         def timer_callback(t=None):

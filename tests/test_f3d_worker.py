@@ -93,6 +93,28 @@ class F3dWorkerTests(unittest.TestCase):
             # Should exit immediately without hanging
             launch_f3d_viewer_stdin()
 
+    def test_service_notifies_on_loaded_callback(self):
+        service = F3dService()
+        callback_results = []
+
+        def on_loaded(success, count):
+            callback_results.append((success, count))
+
+        fake_stdin = io.StringIO()
+        fake_process = SimpleNamespace(
+            stdin=fake_stdin,
+            poll=lambda: None,
+        )
+        service.f3d_process = fake_process
+
+        service.load_mesh("/path/to/model.fbx", on_loaded=on_loaded)
+        self.assertEqual(fake_stdin.getvalue(), "/path/to/model.fbx\n")
+
+        # Simulate worker emitting F3D_SCENE_LOADED
+        service._notify_loaded(True, 2)
+        self.assertEqual(callback_results, [(True, 2)])
+
 
 if __name__ == "__main__":
     unittest.main()
+

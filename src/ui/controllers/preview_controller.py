@@ -171,10 +171,23 @@ class PreviewController:
                 self._clear_preview_texture(prefix)
                 self._clear_thumbnail_texture(prefix)
 
-            # Clear export status when selection changes
+            # Clear export status and stage preview status when selection changes
             export_status_tag = f"{prefix}ui_export_status"
             if dpg.does_item_exist(export_status_tag):
                 dpg.set_value(export_status_tag, "")
+
+            stage_status_tag = f"{prefix}ui_stage_status"
+            if dpg.does_item_exist(stage_status_tag):
+                dpg.set_value(stage_status_tag, "")
+                dpg.configure_item(stage_status_tag, show=False)
+
+            stage_badge_tag = f"{prefix}ui_stage_badge"
+            if dpg.does_item_exist(stage_badge_tag):
+                dpg.set_value(stage_badge_tag, "")
+
+            stage_banner_tag = f"{prefix}ui_stage_banner"
+            if dpg.does_item_exist(stage_banner_tag):
+                dpg.configure_item(stage_banner_tag, show=False)
 
             # Special case for scene/prop: Always clear internal objects if dragging
             # to keep the preview focused only on the thumbnail.
@@ -798,12 +811,7 @@ class PreviewController:
         if dpg.does_item_exist(preview_loading_tag):
             dpg.delete_item(preview_loading_tag)
         if tmp_mesh_path:
-            self.f3d_service.ensure_f3d_viewer()
-            try:
-                self.f3d_service.f3d_process.stdin.write(f"{tmp_mesh_path}\n")
-                self.f3d_service.f3d_process.stdin.flush()
-            except Exception as e:
-                print(f"Failed to send mesh to F3D: {e}")
+            self.f3d_service.load_mesh(tmp_mesh_path)
             return
         dpg.add_text(
             "Failed to prepare mesh.",
@@ -874,12 +882,7 @@ class PreviewController:
         if dpg.does_item_exist(preview_loading_tag):
             dpg.delete_item(preview_loading_tag)
         if tmp_fbx_path:
-            self.f3d_service.ensure_f3d_viewer()
-            try:
-                self.f3d_service.f3d_process.stdin.write(f"{tmp_fbx_path}\n")
-                self.f3d_service.f3d_process.stdin.flush()
-            except Exception as e:
-                print(f"Failed to send FBX to F3D: {e}")
+            self.f3d_service.load_mesh(tmp_fbx_path)
             return
         dpg.add_text(
             "Failed to export FBX for preview.",
