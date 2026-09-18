@@ -1,7 +1,7 @@
 # Set cross-platform variables
 os-name := os()
 data-sep := if os-name == "windows" { ";" } else { ":" }
-cli-bin := if os-name == "windows" { "as_cli/AssetStudioModCLI.exe" } else { "as_cli/AssetStudioModCLI" }
+cli-bin := if os-name == "windows" { "as_cli/AssetStudioCatCLI.exe" } else { "as_cli/AssetStudioCatCLI" }
 cp-cmd := "uv run scripts/copy_dir.py"
 archspec-path := `uv run python -c "import archspec, os; print(os.path.dirname(archspec.__file__))"`
 

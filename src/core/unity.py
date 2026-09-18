@@ -543,7 +543,7 @@ class UnityLogic:
     @staticmethod
     def export_assembled_stage_fbx(logical_path, db, export_dir=None):
         """Exports all companion prefabs of a stage to FBX files and returns their paths."""
-        # Use ALL bundles (prefabs + materials) so AssetStudioModCLI can resolve
+        # Use ALL bundles (prefabs + materials) so AssetStudioCatCLI can resolve
         # cross-bundle texture references and embed textures into the FBX output.
         group_name, all_bundles = UnityLogic.find_stage_all_bundles(logical_path, db)
         if not all_bundles:
@@ -613,7 +613,7 @@ class UnityLogic:
                 physical_paths, tmp_export_dir, mode="animator", bundle_keys=bundle_keys
             )
 
-            # AssetStudioModCLI Animator mode structure: FBX_Animator/{logical_file_name}/{object_name}.fbx
+            # AssetStudioCatCLI Animator mode structure: FBX_Animator/{logical_file_name}/{object_name}.fbx
             animator_dir = os.path.join(tmp_export_dir, "FBX_Animator")
 
             # 1. Direct addressing (Efficient)
@@ -1000,7 +1000,7 @@ class UnityLogic:
                     break
 
             if has_animator:
-                print("Animator detected, using AssetStudioModCLI for export...")
+                print("Animator detected, using AssetStudioCatCLI for export...")
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     UnityLogic._export_via_cli(
                         physical_paths,
@@ -1204,7 +1204,7 @@ class UnityLogic:
 
     @staticmethod
     def export_animator_with_dependencies(physical_paths, export_dir, bundle_keys=None):
-        """Export animator(s) with AssetStudioModCLI using provided dependency paths."""
+        """Export animator(s) with AssetStudioCatCLI using provided dependency paths."""
         if not physical_paths:
             return 0
         try:
@@ -1520,7 +1520,7 @@ class UnityLogic:
 
     @staticmethod
     def _run_cli_process(command):
-        """Run AssetStudioModCLI with encoding and frozen-app safeguards."""
+        """Run AssetStudioCatCLI with encoding and frozen-app safeguards."""
         creationflags = 0
         if os.name == "nt":
             creationflags = subprocess.CREATE_NO_WINDOW
@@ -1542,7 +1542,7 @@ class UnityLogic:
     def _run_as_cli(input_path, output_dir, mode="animator"):
         input_path = os.fspath(input_path)
         output_dir = os.fspath(output_dir)
-        cli_name = "AssetStudioModCLI"
+        cli_name = "AssetStudioCatCLI"
         if os.name == "nt":
             cli_name += ".exe"
 
@@ -1581,7 +1581,7 @@ class UnityLogic:
 
     @staticmethod
     def _export_via_cli(physical_paths, export_dir, mode="animator", bundle_keys=None):
-        """Export assets using AssetStudioModCLI through ASCII-only staging.
+        """Export assets using AssetStudioCatCLI through ASCII-only staging.
 
         The requested directory is intentionally never passed to the native
         AssetStudio exporter.  Python performs the final move, so a Windows
@@ -1657,7 +1657,7 @@ class UnityLogic:
                     except Exception as e2:
                         print(f"Warning: Failed to prepare {p}: {e2}")
 
-            cli_name = "AssetStudioModCLI"
+            cli_name = "AssetStudioCatCLI"
             if os.name == "nt":
                 cli_name += ".exe"
 
@@ -1668,7 +1668,7 @@ class UnityLogic:
                 cli_path = os.path.abspath(os.path.join("as_cli", cli_name))
 
             if not os.path.exists(cli_path):
-                print(f"Error: AssetStudioModCLI not found at {cli_path}")
+                print(f"Error: AssetStudioCatCLI not found at {cli_path}")
                 return 0
 
             cli_command_path = UnityLogic._get_cli_path(cli_path)
@@ -1705,9 +1705,9 @@ class UnityLogic:
                 return exported_count
 
             except subprocess.CalledProcessError as e:
-                print(f"AssetStudioModCLI failed with error: {e.stderr}")
+                print(f"AssetStudioCatCLI failed with error: {e.stderr}")
             except Exception as e:
-                print(f"Failed to run AssetStudioModCLI: {e}")
+                print(f"Failed to run AssetStudioCatCLI: {e}")
 
         return 0
 

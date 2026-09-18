@@ -628,7 +628,7 @@ class UmaDatabase:
         """Find ALL bundles (prefabs + materials + textures) for a stage group.
 
         Unlike get_stage_companion_prefabs, this does not filter out material
-        bundles, so AssetStudioModCLI can resolve cross-bundle texture references
+        bundles, so AssetStudioCatCLI can resolve cross-bundle texture references
         and embed textures into the FBX output.
         """
         cursor = self.conn.cursor()

@@ -135,7 +135,7 @@ class UnicodeExportPathTests(unittest.TestCase):
             "src.core.unity.subprocess.run",
             return_value=SimpleNamespace(stdout="", stderr=""),
         ) as run:
-            UnityLogic._run_cli_process(["AssetStudioModCLI", "--help"])
+            UnityLogic._run_cli_process(["AssetStudioCatCLI", "--help"])
 
         options = run.call_args.kwargs
         self.assertEqual(options["encoding"], "utf-8")
@@ -150,7 +150,7 @@ class UnicodeExportPathTests(unittest.TestCase):
             target_path = root_path / "中文导出"
             target_path.mkdir()
 
-            cli_path = root_path / "as_cli" / "AssetStudioModCLI"
+            cli_path = root_path / "as_cli" / "AssetStudioCatCLI"
             cli_path.parent.mkdir()
             cli_path.write_bytes(b"")
 
