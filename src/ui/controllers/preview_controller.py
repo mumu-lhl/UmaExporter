@@ -183,19 +183,24 @@ class PreviewController:
             messages = []
             if not is_drag_preview:
                 messages.append((f"{prefix}ui_unity_parent", i18n("msg_loading_unity")))
+                messages.append((f"{prefix}ui_hierarchy_tree_parent", i18n("msg_loading_hierarchy")))
                 messages.extend(
                     [
                         (f"{prefix}ui_dep_parent", i18n("msg_loading_deps")),
                         (f"{prefix}ui_rev_dep_parent", i18n("msg_loading_rev_deps")),
                     ]
                 )
+                if dpg.does_item_exist(f"{prefix}ui_hierarchy_inspector_parent"):
+                    dpg.delete_item(f"{prefix}ui_hierarchy_inspector_parent", children_only=True)
+                    dpg.add_text(i18n("label_select_file"), parent=f"{prefix}ui_hierarchy_inspector_parent", color=[130, 130, 130])
             elif is_scene_prop:
                 # Clear objects list during drag for scene/prop to follow user's UI preference
                 dpg.delete_item(f"{prefix}ui_unity_parent", children_only=True)
 
             for tag, msg in messages:
-                dpg.delete_item(tag, children_only=True)
-                dpg.add_text(msg, parent=tag, color=[150, 150, 150])
+                if dpg.does_item_exist(tag):
+                    dpg.delete_item(tag, children_only=True)
+                    dpg.add_text(msg, parent=tag, color=[150, 150, 150])
 
     def _set_dependency_sections_visible(self, visible):
         for prefix in self._detail_prefixes():

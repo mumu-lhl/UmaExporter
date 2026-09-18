@@ -89,6 +89,8 @@ class UnityLogic:
     def clear_runtime_caches():
         UnityLogic._load_env.cache_clear()
         UnityLogic.get_unity_assets.cache_clear()
+        if hasattr(UnityLogic.get_scene_hierarchy, "cache_clear"):
+            UnityLogic.get_scene_hierarchy.cache_clear()
 
     @staticmethod
     def get_key_for_path(physical_path):
@@ -198,6 +200,180 @@ class UnityLogic:
             import traceback
 
             traceback.print_exc()
+            return ()
+
+    @staticmethod
+    @lru_cache(maxsize=32)
+    @Monitor.time_func("unity_get_scene_hierarchy")
+    def get_scene_hierarchy(physical_path, bundle_key=None):
+        """Build full Unity GameObject / Transform scene hierarchy for a bundle.
+        Returns a tuple of root node dicts (immutable for caching).
+        """
+        try:
+            env = UnityLogic._load_env(physical_path, bundle_key=bundle_key)
+            gos = {}
+            tfs = {}
+
+            # First pass: collect GameObject metadata and component relationships
+            for obj in env.objects:
+                if obj.type.name == "GameObject":
+                    try:
+                        d = obj.read()
+                        components = []
+                        mesh_name = None
+                        mesh_path_id = None
+                        materials = []
+
+                        for c in getattr(d, "m_Component", []):
+                            comp_ptr = getattr(c, "component", c)
+                            if hasattr(comp_ptr, "path_id"):
+                                comp_obj = comp_ptr.assetsfile.objects.get(comp_ptr.path_id)
+                                comp_type = comp_obj.type.name if comp_obj else "Unknown"
+                                components.append(comp_type)
+
+                                # Extract mesh or material references if applicable
+                                if comp_type == "MeshFilter":
+                                    try:
+                                        mf_data = comp_obj.read()
+                                        if hasattr(mf_data, "m_Mesh") and bool(mf_data.m_Mesh):
+                                            mesh_path_id = mf_data.m_Mesh.path_id
+                                            mesh_reader = mf_data.m_Mesh.deref()
+                                            if mesh_reader and hasattr(mesh_reader, "peek_name"):
+                                                mesh_name = mesh_reader.peek_name()
+                                    except Exception:
+                                        pass
+                                elif comp_type in ("MeshRenderer", "SkinnedMeshRenderer"):
+                                    try:
+                                        mr_data = comp_obj.read()
+                                        if comp_type == "SkinnedMeshRenderer" and not mesh_name:
+                                            if hasattr(mr_data, "m_Mesh") and bool(mr_data.m_Mesh):
+                                                mesh_path_id = mr_data.m_Mesh.path_id
+                                                sm_reader = mr_data.m_Mesh.deref()
+                                                if sm_reader and hasattr(sm_reader, "peek_name"):
+                                                    mesh_name = sm_reader.peek_name()
+                                        if hasattr(mr_data, "m_Materials"):
+                                            for mat_ptr in mr_data.m_Materials:
+                                                if bool(mat_ptr):
+                                                    try:
+                                                        mat_reader = mat_ptr.deref()
+                                                        if mat_reader and hasattr(mat_reader, "peek_name"):
+                                                            mname = mat_reader.peek_name()
+                                                            if mname:
+                                                                materials.append(mname)
+                                                    except Exception:
+                                                        materials.append(f"Material #{mat_ptr.path_id}")
+                                    except Exception:
+                                        pass
+
+                        gos[obj.path_id] = {
+                            "name": d.m_Name or f"GameObject #{obj.path_id}",
+                            "components": tuple(components),
+                            "mesh_name": mesh_name,
+                            "mesh_path_id": mesh_path_id,
+                            "materials": tuple(materials),
+                        }
+                    except Exception:
+                        gos[obj.path_id] = {
+                            "name": f"GameObject #{obj.path_id}",
+                            "components": (),
+                            "mesh_name": None,
+                            "mesh_path_id": None,
+                            "materials": (),
+                        }
+
+                elif obj.type.name in ("Transform", "RectTransform"):
+                    try:
+                        d = obj.read()
+                        father_id = (
+                            d.m_Father.path_id
+                            if bool(getattr(d, "m_Father", None))
+                            else None
+                        )
+                        child_ids = tuple(
+                            c.path_id
+                            for c in getattr(d, "m_Children", [])
+                            if hasattr(c, "path_id")
+                        )
+                        go_id = (
+                            d.m_GameObject.path_id
+                            if bool(getattr(d, "m_GameObject", None))
+                            else None
+                        )
+
+                        pos = (
+                            round(float(d.m_LocalPosition.x), 4),
+                            round(float(d.m_LocalPosition.y), 4),
+                            round(float(d.m_LocalPosition.z), 4),
+                        ) if hasattr(d, "m_LocalPosition") else (0.0, 0.0, 0.0)
+
+                        rot = (
+                            round(float(d.m_LocalRotation.x), 4),
+                            round(float(d.m_LocalRotation.y), 4),
+                            round(float(d.m_LocalRotation.z), 4),
+                            round(float(d.m_LocalRotation.w), 4),
+                        ) if hasattr(d, "m_LocalRotation") else (0.0, 0.0, 0.0, 1.0)
+
+                        scale = (
+                            round(float(d.m_LocalScale.x), 4),
+                            round(float(d.m_LocalScale.y), 4),
+                            round(float(d.m_LocalScale.z), 4),
+                        ) if hasattr(d, "m_LocalScale") else (1.0, 1.0, 1.0)
+
+                        tfs[obj.path_id] = {
+                            "go_id": go_id,
+                            "father_id": father_id,
+                            "child_ids": child_ids,
+                            "pos": pos,
+                            "rot": rot,
+                            "scale": scale,
+                        }
+                    except Exception:
+                        pass
+
+            # Second pass: assemble hierarchy tree
+            def build_node(tf_id):
+                tf_info = tfs[tf_id]
+                go_id = tf_info["go_id"]
+                go_info = gos.get(
+                    go_id,
+                    {
+                        "name": f"GameObject #{go_id}" if go_id else f"Transform #{tf_id}",
+                        "components": ("Transform",),
+                        "mesh_name": None,
+                        "mesh_path_id": None,
+                        "materials": (),
+                    },
+                )
+
+                children = []
+                for cid in tf_info["child_ids"]:
+                    if cid in tfs:
+                        children.append(build_node(cid))
+
+                return {
+                    "name": go_info["name"],
+                    "go_path_id": go_id or 0,
+                    "tf_path_id": tf_id,
+                    "components": go_info["components"],
+                    "mesh_name": go_info["mesh_name"],
+                    "mesh_path_id": go_info["mesh_path_id"],
+                    "materials": go_info["materials"],
+                    "local_pos": tf_info["pos"],
+                    "local_rot": tf_info["rot"],
+                    "local_scale": tf_info["scale"],
+                    "children": tuple(children),
+                }
+
+            roots = [
+                tid
+                for tid, t in tfs.items()
+                if t["father_id"] is None or t["father_id"] not in tfs
+            ]
+
+            tree = tuple(build_node(r) for r in roots)
+            return tree
+        except Exception as e:
+            print(f"Error getting scene hierarchy for {physical_path}: {e}")
             return ()
 
     @staticmethod

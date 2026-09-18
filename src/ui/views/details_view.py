@@ -70,10 +70,49 @@ class DetailsView:
 
             dpg.add_spacer(height=20)
             with dpg.group(tag=f"{prefix}ui_unity_section"):
-                dpg.add_text(i18n("label_unity_objs"), color=[0, 255, 255])
-                dpg.add_separator()
-                with dpg.child_window(height=250, border=True, tag=unity_parent_tag):
-                    pass
+                with dpg.tab_bar(tag=f"{prefix}ui_unity_view_tabbar"):
+                    with dpg.tab(
+                        label=i18n("label_unity_flat_objs"),
+                        tag=f"{prefix}ui_unity_tab_flat",
+                    ):
+                        with dpg.child_window(
+                            height=250, border=True, tag=unity_parent_tag
+                        ):
+                            pass
+                    with dpg.tab(
+                        label=i18n("label_unity_scene_hierarchy"),
+                        tag=f"{prefix}ui_unity_tab_hierarchy",
+                    ):
+                        with dpg.group(horizontal=True):
+                            dpg.add_button(
+                                label=i18n("btn_detach_hierarchy"),
+                                callback=lambda s, a, u: getattr(
+                                    self.controller, "app", self.controller
+                                ).hierarchy_controller.open_detached_window(u),
+                                user_data=prefix,
+                            )
+                            dpg.add_text(
+                                "",
+                                tag=f"{prefix}ui_hierarchy_status",
+                                color=[255, 200, 100],
+                                show=False,
+                            )
+                        with dpg.child_window(
+                            height=180,
+                            border=True,
+                            tag=f"{prefix}ui_hierarchy_tree_parent",
+                        ):
+                            pass
+                        dpg.add_spacer(height=5)
+                        dpg.add_text(
+                            i18n("label_hierarchy_inspector"), color=[0, 255, 0]
+                        )
+                        with dpg.child_window(
+                            height=150,
+                            border=True,
+                            tag=f"{prefix}ui_hierarchy_inspector_parent",
+                        ):
+                            pass
 
             with dpg.group(tag=unity_image_container_tag, show=False):
                 pass

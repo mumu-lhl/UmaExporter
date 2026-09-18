@@ -21,6 +21,7 @@ from src.ui.controllers.browser_controller import BrowserController
 from src.ui.controllers.drag_controller import DragController
 from src.ui.controllers.export_controller import ExportController
 from src.ui.controllers.navigation_controller import NavigationController
+from src.ui.controllers.hierarchy_controller import HierarchyController
 from src.ui.controllers.preview_controller import PreviewController
 from src.ui.controllers.search_controller import SearchController
 from src.ui.controllers.settings_controller import SettingsController
@@ -173,6 +174,7 @@ class UmaExporterApp:
 
         # Initialize Controllers
         self.preview_controller = PreviewController(self)
+        self.hierarchy_controller = HierarchyController(self)
         self.drag_controller = DragController(self)
         self.navigation_controller = NavigationController(self)
         self.search_controller = SearchController(self)
@@ -701,6 +703,10 @@ class UmaExporterApp:
         self.preview_controller._load_unity_async(
             phys_path, asset_id, request_id, bundle_key=bundle_key
         )
+        for prefix in self.preview_controller._detail_prefixes():
+            self.hierarchy_controller.load_hierarchy_async(
+                prefix, phys_path, bundle_key, asset_id
+            )
         self.preview_controller._load_deps_async(asset_id, request_id)
         self.preview_controller._load_rev_deps_async(asset_id, request_id)
 
