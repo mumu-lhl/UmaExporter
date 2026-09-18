@@ -9,9 +9,9 @@ archspec-path := `uv run python -c "import archspec, os; print(os.path.dirname(a
 as-cli-setup:
     uv run python scripts/setup_as_cli.py
 
-# Internal check for Asset Studio CLI: run setup if directory is missing or empty
+# Internal check for Asset Studio CLI: run setup if CLI binary is missing
 check-as-cli:
-    @uv run python -c "import os, sys; d='as_cli'; sys.exit(0 if os.path.exists(d) and os.listdir(d) else 1)" || just as-cli-setup
+    @uv run python -c "import os, sys; b='{{cli-bin}}'; sys.exit(0 if os.path.exists(b) else 1)" || just as-cli-setup
 
 # Build Cython extension (skip if already in src/core/)
 build-cython:
