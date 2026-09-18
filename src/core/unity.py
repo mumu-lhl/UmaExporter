@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -549,6 +550,24 @@ class UnityLogic:
         if not all_bundles:
             return []
 
+        # If export_dir is None (preview mode), check persistent preview cache
+        # so subsequent preview requests load instantly without re-running AssetStudioCatCLI.
+        safe_group = re.sub(r"[^\w\-_\.]", "_", group_name or "stage")
+        preview_cache_dir = os.path.join(
+            tempfile.gettempdir(), f"uma_stage_preview_{safe_group}"
+        )
+        target_dir = export_dir or preview_cache_dir
+
+        if export_dir is None and os.path.exists(preview_cache_dir):
+            cached_fbx = [
+                os.path.join(root, f)
+                for root, _, files in os.walk(preview_cache_dir)
+                for f in files
+                if f.lower().endswith(".fbx")
+            ]
+            if cached_fbx:
+                return cached_fbx
+
         data_root = Config.get_data_root()
         paths = []
         keys = []
@@ -561,7 +580,6 @@ class UnityLogic:
         if not paths:
             return []
 
-        target_dir = export_dir or tempfile.mkdtemp(prefix="uma_stage_")
         os.makedirs(target_dir, exist_ok=True)
         UnityLogic._export_via_cli(
             paths, target_dir, mode="splitObjects", bundle_keys=keys
@@ -1623,19 +1641,15 @@ class UnityLogic:
             os.makedirs(input_dir, exist_ok=True)
             os.makedirs(cli_output_dir, exist_ok=True)
 
-            # Decrypt and save all files to temporary directory
-            for p in unique_paths:
+            # Decrypt and save all files to temporary directory in parallel
+            def _prepare_bundle(p):
                 if not os.path.exists(p):
-                    continue
+                    return
                 target = os.path.join(input_dir, os.path.basename(p))
-
-                # Skip if already exists
                 if os.path.exists(target):
-                    continue
-
+                    return
                 try:
                     success = False
-                    # All data is now encrypted, so we must decrypt first
                     data = UnityLogic._load_bundle_data(p, bundle_key=key_map.get(p))
                     if data:
                         with open(target, "wb") as f:
@@ -1643,19 +1657,27 @@ class UnityLogic:
                         success = True
 
                     if not success:
-                        # Link/Copy for unencrypted files or decryption failure
                         if hasattr(os, "symlink"):
                             os.symlink(p, target)
                         else:
                             os.link(p, target)
                 except Exception:
-                    # Fallback to copy if linking/decryption fails
                     try:
                         shutil.copy2(p, target)
                     except shutil.SameFileError:
                         pass
                     except Exception as e2:
                         print(f"Warning: Failed to prepare {p}: {e2}")
+
+            if len(unique_paths) > 1:
+                from concurrent.futures import ThreadPoolExecutor
+
+                with ThreadPoolExecutor(
+                    max_workers=min(16, len(unique_paths))
+                ) as executor:
+                    list(executor.map(_prepare_bundle, unique_paths))
+            elif unique_paths:
+                _prepare_bundle(unique_paths[0])
 
             cli_name = "AssetStudioCatCLI"
             if os.name == "nt":

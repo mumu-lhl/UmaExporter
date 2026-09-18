@@ -134,28 +134,31 @@ def launch_f3d_viewer_stdin():
             {
                 "ui.axis": True,
                 "render.grid.enable": True,
-                "render.light.intensity": 2.5,
+                "render.light.intensity": 3.5,
                 "render.hdri.ambient": True,
                 "render.effect.tone_mapping": True,
+                "render.background.color": [0.22, 0.22, 0.25],
             }
         )
 
         try:
             window.set_window_name("UmaExporter - 3D Viewer (Press ESC or Q to Exit)")
-            b_esc = f3d.InteractionBind(f3d.InteractionBind.ModifierKeys.NONE, "Escape")
-            b_q = f3d.InteractionBind(f3d.InteractionBind.ModifierKeys.NONE, "Q")
-            try:
-                interactor.remove_binding(b_esc)
-            except Exception:
-                pass
-            try:
-                interactor.remove_binding(b_q)
-            except Exception:
-                pass
-            interactor.add_binding(b_esc, "stop_interactor", "General")
-            interactor.add_binding(b_q, "stop_interactor", "General")
+            for key_name in ["Escape", "q", "Q", "Return", "BackSpace", "x", "X"]:
+                try:
+                    b = f3d.InteractionBind(
+                        f3d.InteractionBind.ModifierKeys.NONE, key_name
+                    )
+                    try:
+                        interactor.remove_binding(b)
+                    except Exception:
+                        pass
+                    interactor.add_binding(b, "stop_interactor", "General")
+                except Exception:
+                    pass
         except Exception as e:
-            _worker_log(f"[F3D] Warning: Could not configure window title or exit bindings: {e}")
+            _worker_log(
+                f"[F3D] Warning: Could not configure window title or exit bindings: {e}"
+            )
 
         def update_scene(path):
             nonlocal current_mesh
@@ -163,7 +166,11 @@ def launch_f3d_viewer_stdin():
             if not path:
                 return
 
-            paths = [p.strip() for p in path.split(";") if p.strip() and os.path.exists(p.strip())]
+            paths = [
+                p.strip()
+                for p in path.split(";")
+                if p.strip() and os.path.exists(p.strip())
+            ]
             if not paths:
                 return
 
@@ -184,16 +191,8 @@ def launch_f3d_viewer_stdin():
             try:
                 cam = window.camera
                 cam.reset_to_bounds()
-                p = cam.position
-                fp = cam.focal_point
-                dist = ((p[0] - fp[0]) ** 2 + (p[1] - fp[1]) ** 2 + (p[2] - fp[2]) ** 2) ** 0.5
-                if dist > 100:
-                    # Stage or macro environment scene: audience-facing front view
-                    cam.focal_point = [0, 5, 0]
-                    cam.position = [0, 8, 45]
-                    cam.view_up = [0, 1, 0]
-                else:
-                    interactor.trigger_command("set_camera isometric")
+                cam.azimuth(25)
+                cam.elevation(15)
             except Exception as e:
                 _worker_log(f"[F3D] Warning: Could not adjust camera: {e}")
 

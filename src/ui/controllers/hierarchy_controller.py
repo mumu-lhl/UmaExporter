@@ -536,6 +536,11 @@ class HierarchyController:
                                 callback=lambda: self.preview_stage_fbx(prefix),
                             )
                             dpg.add_button(
+                                label=i18n("btn_close_f3d_preview"),
+                                callback=lambda: getattr(self.app, "f3d_service", None)
+                                and self.app.f3d_service.cleanup(),
+                            )
+                            dpg.add_button(
                                 label=i18n("btn_export_stage_fbx"),
                                 callback=lambda: self.on_export_stage_click(prefix),
                             )

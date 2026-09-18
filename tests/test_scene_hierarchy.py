@@ -1,4 +1,6 @@
 import os
+import shutil
+import tempfile
 import pytest
 
 from src.core.config import Config
@@ -248,5 +250,53 @@ def test_hierarchy_controller_stage_buttons_and_inspector_sync():
 
     finally:
         dpg.destroy_context()
+
+
+def test_export_assembled_stage_fbx_cache(monkeypatch, tmp_path):
+    """Verify that export_assembled_stage_fbx caches and reuses results in preview mode."""
+    class FakeDb:
+        def get_key_by_hash(self, h):
+            return None
+
+    fake_db = FakeDb()
+    called = []
+
+    def fake_find(logical_path, db):
+        return "live99999", [(1, "live99999_main", "hash1")]
+
+    def fake_cli(paths, target_dir, mode="splitObjects", bundle_keys=None):
+        called.append(target_dir)
+        # Create a dummy FBX in target_dir
+        with open(os.path.join(target_dir, "test.fbx"), "w") as f:
+            f.write("FBX")
+
+    monkeypatch.setattr(UnityLogic, "find_stage_all_bundles", fake_find)
+    monkeypatch.setattr(UnityLogic, "_export_via_cli", fake_cli)
+    monkeypatch.setattr(Config, "get_data_root", lambda: str(tmp_path))
+
+    # Create dummy physical file
+    bundle_dir = tmp_path / "ha"
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    bundle_file = bundle_dir / "hash1"
+    bundle_file.write_text("bundle")
+
+    cache_dir = os.path.join(tempfile.gettempdir(), "uma_stage_preview_live99999")
+    if os.path.exists(cache_dir):
+        shutil.rmtree(cache_dir, ignore_errors=True)
+
+    try:
+        # First call: should call CLI
+        res1 = UnityLogic.export_assembled_stage_fbx("3d/env/live/live99999", fake_db)
+        assert len(called) == 1
+        assert len(res1) == 1
+        assert res1[0].endswith("test.fbx")
+
+        # Second call: should hit cache and NOT call CLI again
+        res2 = UnityLogic.export_assembled_stage_fbx("3d/env/live/live99999", fake_db)
+        assert len(called) == 1  # Not incremented
+        assert res2 == res1
+    finally:
+        shutil.rmtree(cache_dir, ignore_errors=True)
+
 
 
