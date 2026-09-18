@@ -268,15 +268,17 @@ class Config:
 
     @classmethod
     def get_stage_cache_dir(cls):
-        """Returns the persistent disk directory for stage preview cache, avoiding /tmp (tmpfs RAM)."""
-        path = os.path.join(cls.get_app_data_dir(), "stage_cache")
+        """Returns the memory/tmp directory for stage preview cache (/tmp on Linux, avoiding SSD wear)."""
+        import tempfile
+
+        path = os.path.join(tempfile.gettempdir(), "uma_stage_cache")
         if not os.path.exists(path):
             os.makedirs(path, exist_ok=True)
         return path
 
     @classmethod
     def clear_stage_cache(cls):
-        """Clears all cached stage models from disk and temporary directories, returning freed bytes."""
+        """Clears all cached stage models from memory /tmp cache, returning freed bytes."""
         freed = 0
         cache_dir = cls.get_stage_cache_dir()
         if os.path.exists(cache_dir):
@@ -297,27 +299,10 @@ class Config:
                 except OSError:
                     pass
 
-        # Also clean up any legacy uma_stage_preview_* folders in system tempdir to free RAM
-        import tempfile
-
-        tmp_dir = tempfile.gettempdir()
-        try:
-            for entry in os.listdir(tmp_dir):
-                if entry.startswith("uma_stage_preview_"):
-                    full_path = os.path.join(tmp_dir, entry)
-                    try:
-                        if os.path.isdir(full_path):
-                            for root, _, files in os.walk(full_path):
-                                for f in files:
-                                    try:
-                                        freed += os.path.getsize(os.path.join(root, f))
-                                    except OSError:
-                                        pass
-                            shutil.rmtree(full_path, ignore_errors=True)
-                    except OSError:
-                        pass
-        except OSError:
-            pass
+        # Also clean up previous disk directory if present to free disk space
+        old_disk_dir = os.path.join(cls.get_app_data_dir(), "stage_cache")
+        if os.path.exists(old_disk_dir):
+            shutil.rmtree(old_disk_dir, ignore_errors=True)
 
         return freed
 
