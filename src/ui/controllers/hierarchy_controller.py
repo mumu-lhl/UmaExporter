@@ -157,15 +157,6 @@ class HierarchyController:
             if dpg.does_item_exist(btn_tag):
                 dpg.configure_item(btn_tag, show=has_stage)
 
-        if has_stage:
-            tabbar = f"{prefix}ui_unity_view_tabbar"
-            target_tab = f"{prefix}ui_unity_tab_hierarchy"
-            if dpg.does_item_exist(tabbar) and dpg.does_item_exist(target_tab):
-                try:
-                    dpg.set_value(tabbar, target_tab)
-                except Exception:
-                    pass
-
         self.render_tree(prefix)
 
     def render_tree(self, prefix, parent_tag=None):
