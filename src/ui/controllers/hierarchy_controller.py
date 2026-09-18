@@ -46,7 +46,10 @@ class HierarchyController:
         req_id = self.request_ids[prefix]
 
         if not logical_path and hasattr(self.app, "current_asset_data") and self.app.current_asset_data:
-            logical_path = self.app.current_asset_data.get("name")
+            logical_path = (
+                self.app.current_asset_data.get("full_path")
+                or self.app.current_asset_data.get("name")
+            )
 
         status_text_tag = f"{prefix}ui_hierarchy_status"
         if dpg.does_item_exist(status_text_tag):
@@ -136,6 +139,15 @@ class HierarchyController:
         self.selected_node[prefix] = None
 
         has_stage = bool(stage_prefabs and len(stage_prefabs) > 1)
+        banner_tag = f"{prefix}ui_stage_banner"
+        if dpg.does_item_exist(banner_tag):
+            dpg.configure_item(banner_tag, show=has_stage)
+
+        badge_tag = f"{prefix}ui_stage_badge"
+        if dpg.does_item_exist(badge_tag):
+            badge_text = f"🏟️ {stage_group} ({len(stage_prefabs)} Parts)" if has_stage else ""
+            dpg.set_value(badge_tag, badge_text)
+
         for btn_name in (
             "ui_assemble_stage_btn",
             "ui_preview_stage_fbx_btn",
@@ -144,6 +156,15 @@ class HierarchyController:
             btn_tag = f"{prefix}{btn_name}"
             if dpg.does_item_exist(btn_tag):
                 dpg.configure_item(btn_tag, show=has_stage)
+
+        if has_stage:
+            tabbar = f"{prefix}ui_unity_view_tabbar"
+            target_tab = f"{prefix}ui_unity_tab_hierarchy"
+            if dpg.does_item_exist(tabbar) and dpg.does_item_exist(target_tab):
+                try:
+                    dpg.set_value(tabbar, target_tab)
+                except Exception:
+                    pass
 
         self.render_tree(prefix)
 
@@ -328,10 +349,26 @@ class HierarchyController:
     def assemble_stage_hierarchy(self, prefix):
         """Assembles all companion prefabs into a unified macro stage hierarchy."""
         info = self.stage_info.get(prefix)
-        if not info or not info.get("logical_path") or not getattr(self.app, "db", None):
+        logical_path = None
+        if info and info.get("logical_path"):
+            logical_path = info["logical_path"]
+        elif hasattr(self.app, "current_asset_data") and self.app.current_asset_data:
+            logical_path = (
+                self.app.current_asset_data.get("full_path")
+                or self.app.current_asset_data.get("name")
+            )
+
+        if not logical_path or not getattr(self.app, "db", None):
             return
 
-        logical_path = info["logical_path"]
+        tabbar = f"{prefix}ui_unity_view_tabbar"
+        target_tab = f"{prefix}ui_unity_tab_hierarchy"
+        if dpg.does_item_exist(tabbar) and dpg.does_item_exist(target_tab):
+            try:
+                dpg.set_value(tabbar, target_tab)
+            except Exception:
+                pass
+
         status_text_tag = f"{prefix}ui_hierarchy_status"
         if dpg.does_item_exist(status_text_tag):
             dpg.set_value(status_text_tag, i18n("msg_stage_assembling"))
@@ -362,10 +399,18 @@ class HierarchyController:
     def preview_stage_fbx(self, prefix):
         """Exports all companion prefabs of the stage to temporary FBX files and loads them into F3D viewer."""
         info = self.stage_info.get(prefix)
-        if not info or not info.get("logical_path") or not getattr(self.app, "db", None):
+        logical_path = None
+        if info and info.get("logical_path"):
+            logical_path = info["logical_path"]
+        elif hasattr(self.app, "current_asset_data") and self.app.current_asset_data:
+            logical_path = (
+                self.app.current_asset_data.get("full_path")
+                or self.app.current_asset_data.get("name")
+            )
+
+        if not logical_path or not getattr(self.app, "db", None):
             return
 
-        logical_path = info["logical_path"]
         status_text_tag = f"{prefix}ui_hierarchy_status"
         if dpg.does_item_exist(status_text_tag):
             dpg.set_value(status_text_tag, i18n("msg_stage_assembling"))
@@ -410,7 +455,10 @@ class HierarchyController:
         if info and info.get("logical_path"):
             logical_path = info["logical_path"]
         elif hasattr(self.app, "current_asset_data") and self.app.current_asset_data:
-            logical_path = self.app.current_asset_data.get("name")
+            logical_path = (
+                self.app.current_asset_data.get("full_path")
+                or self.app.current_asset_data.get("name")
+            )
 
         if not logical_path or not getattr(self.app, "db", None):
             return

@@ -197,6 +197,8 @@ def test_hierarchy_controller_stage_buttons_and_inspector_sync():
         ctrl = HierarchyController(app)
 
         with dpg.window(tag="test_window_stage"):
+            dpg.add_group(tag="scene_ui_stage_banner", show=False)
+            dpg.add_text(tag="scene_ui_stage_badge")
             dpg.add_button(tag="scene_ui_assemble_stage_btn", show=False)
             dpg.add_button(tag="scene_ui_preview_stage_fbx_btn", show=False)
             dpg.add_button(tag="scene_ui_export_stage_fbx_btn", show=False)
@@ -220,6 +222,8 @@ def test_hierarchy_controller_stage_buttons_and_inspector_sync():
             logical_path="3d/env/live/live10101/pfb_env_live10101_main000",
         )
 
+        assert dpg.is_item_shown("scene_ui_stage_banner") is True
+        assert "live10101" in dpg.get_value("scene_ui_stage_badge")
         assert dpg.is_item_shown("scene_ui_assemble_stage_btn") is True
         assert dpg.is_item_shown("scene_ui_preview_stage_fbx_btn") is True
         assert dpg.is_item_shown("scene_ui_export_stage_fbx_btn") is True

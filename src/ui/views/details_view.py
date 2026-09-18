@@ -70,6 +70,37 @@ class DetailsView:
 
             dpg.add_spacer(height=20)
             with dpg.group(tag=f"{prefix}ui_unity_section"):
+                with dpg.group(tag=f"{prefix}ui_stage_banner", horizontal=True, show=False):
+                    dpg.add_button(
+                        label=i18n("btn_assemble_stage"),
+                        tag=f"{prefix}ui_assemble_stage_btn",
+                        callback=lambda s, a, u: getattr(
+                            self.controller, "app", self.controller
+                        ).hierarchy_controller.assemble_stage_hierarchy(u),
+                        user_data=prefix,
+                    )
+                    dpg.add_button(
+                        label=i18n("btn_preview_stage_fbx"),
+                        tag=f"{prefix}ui_preview_stage_fbx_btn",
+                        callback=lambda s, a, u: getattr(
+                            self.controller, "app", self.controller
+                        ).hierarchy_controller.preview_stage_fbx(u),
+                        user_data=prefix,
+                    )
+                    dpg.add_button(
+                        label=i18n("btn_export_stage_fbx"),
+                        tag=f"{prefix}ui_export_stage_fbx_btn",
+                        callback=lambda s, a, u: getattr(
+                            self.controller, "app", self.controller
+                        ).hierarchy_controller.on_export_stage_click(u),
+                        user_data=prefix,
+                    )
+                    dpg.add_text(
+                        "",
+                        tag=f"{prefix}ui_stage_badge",
+                        color=[0, 255, 255],
+                    )
+
                 with dpg.tab_bar(tag=f"{prefix}ui_unity_view_tabbar"):
                     with dpg.tab(
                         label=i18n("label_unity_flat_objs"),
@@ -84,33 +115,6 @@ class DetailsView:
                         tag=f"{prefix}ui_unity_tab_hierarchy",
                     ):
                         with dpg.group(horizontal=True):
-                            dpg.add_button(
-                                label=i18n("btn_assemble_stage"),
-                                tag=f"{prefix}ui_assemble_stage_btn",
-                                callback=lambda s, a, u: getattr(
-                                    self.controller, "app", self.controller
-                                ).hierarchy_controller.assemble_stage_hierarchy(u),
-                                user_data=prefix,
-                                show=False,
-                            )
-                            dpg.add_button(
-                                label=i18n("btn_preview_stage_fbx"),
-                                tag=f"{prefix}ui_preview_stage_fbx_btn",
-                                callback=lambda s, a, u: getattr(
-                                    self.controller, "app", self.controller
-                                ).hierarchy_controller.preview_stage_fbx(u),
-                                user_data=prefix,
-                                show=False,
-                            )
-                            dpg.add_button(
-                                label=i18n("btn_export_stage_fbx"),
-                                tag=f"{prefix}ui_export_stage_fbx_btn",
-                                callback=lambda s, a, u: getattr(
-                                    self.controller, "app", self.controller
-                                ).hierarchy_controller.on_export_stage_click(u),
-                                user_data=prefix,
-                                show=False,
-                            )
                             dpg.add_button(
                                 label=i18n("btn_detach_hierarchy"),
                                 callback=lambda s, a, u: getattr(
