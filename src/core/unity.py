@@ -408,11 +408,23 @@ class UnityLogic:
             return None, ()
 
         try:
-            cursor = db.conn.cursor()
-            rows = cursor.execute(
-                'SELECT a.i, a.n, a.h FROM a WHERE a.n LIKE ? AND (a.n LIKE "%/pfb_%" OR a.n LIKE "%/prefabs/%") AND a.n NOT LIKE "%/materials/%"',
-                (group_pattern,),
-            ).fetchall()
+            if hasattr(db, "get_stage_companion_prefabs"):
+                rows = db.get_stage_companion_prefabs(group_pattern)
+            else:
+                lock = getattr(db, "_connection_lock", None)
+                if lock:
+                    with lock:
+                        cursor = db.conn.cursor()
+                        rows = cursor.execute(
+                            'SELECT a.i, a.n, a.h FROM a WHERE a.n LIKE ? AND (a.n LIKE "%/pfb_%" OR a.n LIKE "%/prefabs/%") AND a.n NOT LIKE "%/materials/%"',
+                            (group_pattern,),
+                        ).fetchall()
+                else:
+                    cursor = db.conn.cursor()
+                    rows = cursor.execute(
+                        'SELECT a.i, a.n, a.h FROM a WHERE a.n LIKE ? AND (a.n LIKE "%/pfb_%" OR a.n LIKE "%/prefabs/%") AND a.n NOT LIKE "%/materials/%"',
+                        (group_pattern,),
+                    ).fetchall()
             return group_name, tuple(rows)
         except Exception as e:
             print(f"Error finding related stage prefabs: {e}")

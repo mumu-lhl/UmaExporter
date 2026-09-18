@@ -615,6 +615,15 @@ class UmaDatabase:
         return rows
 
     @_with_connection_lock
+    def get_stage_companion_prefabs(self, group_pattern):
+        """Find companion prefabs matching the stage pattern safely across threads."""
+        cursor = self.conn.cursor()
+        return cursor.execute(
+            'SELECT a.i, a.n, a.h FROM a WHERE a.n LIKE ? AND (a.n LIKE "%/pfb_%" OR a.n LIKE "%/prefabs/%") AND a.n NOT LIKE "%/materials/%"',
+            (group_pattern,),
+        ).fetchall()
+
+    @_with_connection_lock
     def search_props(self, query=""):
         """Search specifically for prop assets in supported prop directories."""
         cursor = self.conn.cursor()

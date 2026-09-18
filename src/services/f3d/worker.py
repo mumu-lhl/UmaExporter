@@ -154,12 +154,19 @@ def launch_f3d_viewer_stdin():
             if not paths:
                 return
 
-            current_mesh = paths[0] if len(paths) == 1 else path
+            current_mesh = paths[0] if len(paths) == 1 else None
             scene.clear()
-            if len(paths) == 1:
-                scene.add(paths[0])
-            else:
-                scene.add(paths)
+            loaded_count = 0
+            for p in paths:
+                try:
+                    scene.add(p)
+                    loaded_count += 1
+                except Exception as ex:
+                    _worker_log(f"[F3D] Warning: Failed to add {p}: {ex}")
+
+            if loaded_count == 0:
+                _worker_log("[F3D] Warning: No valid models could be added to scene.")
+                return
 
             # Set to Isometric view (similar to pressing '9')
             try:
@@ -171,7 +178,7 @@ def launch_f3d_viewer_stdin():
                 _worker_log(f"[F3D] Warning: Could not set isometric view: {e}")
 
             window.render()
-            _worker_log(f"[F3D] Loaded: {path}")
+            _worker_log(f"[F3D] Loaded {loaded_count} model(s): {path}")
 
         def timer_callback(t=None):
             # Non-blocking check for new paths from the queue
@@ -185,10 +192,17 @@ def launch_f3d_viewer_stdin():
                 pass
             return True
 
-        # Initial wait for first mesh (via the queue)
-        line = input_queue.get(timeout=30)  # Wait up to 30s for first load
-        if not line or line == "STOP":
-            return
+        # Initial wait for first mesh (loop until receiving mesh or stdin closed/STOP)
+        line = None
+        while True:
+            try:
+                line = input_queue.get(timeout=1.0)
+                if not line or line == "STOP":
+                    return
+                break
+            except queue.Empty:
+                if not reader_thread.is_alive():
+                    return
 
         update_scene(line)
         interactor.start(0.1, timer_callback)
@@ -196,7 +210,9 @@ def launch_f3d_viewer_stdin():
     except KeyboardInterrupt:
         pass
     except Exception as e:
-        _worker_log(f"F3D Viewer Error: {e}")
+        import traceback
+
+        _worker_log(f"F3D Viewer Error: {type(e).__name__}: {e}\n{traceback.format_exc()}")
     finally:
         if current_mesh and os.path.exists(current_mesh):
             try:
