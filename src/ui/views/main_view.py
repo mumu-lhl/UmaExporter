@@ -458,6 +458,31 @@ class MainView:
                         show=False,
                     )
 
+                    dpg.add_spacer(height=6)
+                    dpg.add_text(i18n("label_stage_cache_title"))
+                    with dpg.group(horizontal=True):
+                        dpg.add_text(i18n("label_stage_cache_limit"))
+                        dpg.add_input_int(
+                            tag="settings_stage_cache_limit",
+                            default_value=Config.STAGE_CACHE_MAX_MB,
+                            width=140,
+                            min_value=50,
+                            max_value=10000,
+                            step=100,
+                            callback=self.controller.on_stage_cache_limit_changed,
+                        )
+                        dpg.add_button(
+                            label=i18n("btn_clear_stage_cache"),
+                            width=160,
+                            callback=self.controller.on_clear_stage_cache,
+                        )
+                    dpg.add_text(
+                        "",
+                        tag="settings_stage_cache_status",
+                        wrap=620,
+                        show=False,
+                    )
+
                     dpg.add_spacer(height=4)
                     dpg.add_text(i18n("label_download_source"))
                     dpg.add_combo(

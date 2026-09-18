@@ -55,11 +55,17 @@ class SettingsController:
             i18n("region_global"): "global",
             i18n("region_tw"): "tw",
         }
+        stage_cache_max_mb = (
+            dpg.get_value("settings_stage_cache_limit")
+            if dpg.does_item_exist("settings_stage_cache_limit")
+            else None
+        )
         Config.update_config(
             base_path,
             region_map.get(region, "jp"),
             lang,
             thumbnail_cache_path,
+            stage_cache_max_mb=stage_cache_max_mb,
         )
         self.app._reset_database_state()
         dpg.set_value("settings_status_msg", i18n("msg_loading"))
@@ -280,6 +286,29 @@ class SettingsController:
             if dpg.does_item_exist(status_tag):
                 dpg.configure_item(status_tag, show=True)
             dpg.set_value(status_tag, f"Failed to clear cache: {e}")
+
+    def on_stage_cache_limit_changed(self, sender, app_data, user_data):
+        val = dpg.get_value("settings_stage_cache_limit")
+        try:
+            val = max(50, int(val))
+            Config.STAGE_CACHE_MAX_MB = val
+            Config.save()
+            from src.core.unity import UnityLogic
+
+            UnityLogic.enforce_stage_cache_limit(val)
+        except (TypeError, ValueError):
+            pass
+
+    def on_clear_stage_cache(self, sender, app_data, user_data):
+        freed = Config.clear_stage_cache()
+        freed_mb = freed / (1024 * 1024)
+        status_tag = "settings_stage_cache_status"
+        if dpg.does_item_exist(status_tag):
+            dpg.configure_item(status_tag, show=True)
+            dpg.set_value(
+                status_tag,
+                i18n("msg_stage_cache_cleared").format(freed_mb),
+            )
 
     def on_check_updates(self, sender, app_data, user_data):
         dpg.set_value("settings_update_status", i18n("msg_update_checking"))

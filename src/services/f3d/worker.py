@@ -143,7 +143,7 @@ def launch_f3d_viewer_stdin():
 
         try:
             window.set_window_name("UmaExporter - 3D Viewer (Press ESC or Q to Exit)")
-            for key_name in ["Escape", "q", "Q", "Return", "BackSpace", "x", "X"]:
+            for key_name in ["Escape", "q", "Q"]:
                 try:
                     b = f3d.InteractionBind(
                         f3d.InteractionBind.ModifierKeys.NONE, key_name

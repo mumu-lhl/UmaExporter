@@ -88,14 +88,6 @@ class DetailsView:
                         user_data=prefix,
                     )
                     dpg.add_button(
-                        label=i18n("btn_close_f3d_preview"),
-                        tag=f"{prefix}ui_close_stage_f3d_btn",
-                        callback=lambda s, a, u: getattr(
-                            self.controller, "app", self.controller
-                        ).f3d_service.cleanup(),
-                        user_data=prefix,
-                    )
-                    dpg.add_button(
                         label=i18n("btn_export_stage_fbx"),
                         tag=f"{prefix}ui_export_stage_fbx_btn",
                         callback=lambda s, a, u: getattr(

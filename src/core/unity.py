@@ -542,6 +542,61 @@ class UnityLogic:
             return None, ()
 
     @staticmethod
+    def enforce_stage_cache_limit(max_mb=None):
+        """Enforce LRU cache limit on stage preview directory.
+
+        Removes oldest stage folders if total size exceeds max_mb.
+        Also cleans up legacy temporary folders in system temp directory to free RAM.
+        """
+        if max_mb is None:
+            max_mb = Config.STAGE_CACHE_MAX_MB
+        if max_mb <= 0:
+            return
+
+        # Clean legacy preview folders from tempdir to free RAM on Linux (tmpfs)
+        try:
+            tmp_dir = tempfile.gettempdir()
+            for entry in os.listdir(tmp_dir):
+                if entry.startswith("uma_stage_preview_"):
+                    shutil.rmtree(os.path.join(tmp_dir, entry), ignore_errors=True)
+        except OSError:
+            pass
+
+        cache_dir = Config.get_stage_cache_dir()
+        if not os.path.exists(cache_dir):
+            return
+
+        stage_dirs = []
+        total_size = 0
+        for entry in os.listdir(cache_dir):
+            full_path = os.path.join(cache_dir, entry)
+            if os.path.isdir(full_path) and entry.startswith("uma_stage_preview_"):
+                dir_size = 0
+                for root, _, files in os.walk(full_path):
+                    for f in files:
+                        try:
+                            dir_size += os.path.getsize(os.path.join(root, f))
+                        except OSError:
+                            pass
+                total_size += dir_size
+                mtime = os.path.getmtime(full_path)
+                stage_dirs.append((mtime, dir_size, full_path))
+
+        max_bytes = max_mb * 1024 * 1024
+        if total_size > max_bytes:
+            # Sort by mtime ascending (oldest accessed first)
+            stage_dirs.sort(key=lambda x: x[0])
+            target_size = max_bytes * 0.8  # Leave 20% headroom
+            for mtime, dir_size, full_path in stage_dirs:
+                try:
+                    shutil.rmtree(full_path, ignore_errors=True)
+                    total_size -= dir_size
+                except OSError:
+                    pass
+                if total_size <= target_size:
+                    break
+
+    @staticmethod
     def export_assembled_stage_fbx(logical_path, db, export_dir=None):
         """Exports all companion prefabs of a stage to FBX files and returns their paths."""
         # Use ALL bundles (prefabs + materials) so AssetStudioCatCLI can resolve
@@ -550,11 +605,11 @@ class UnityLogic:
         if not all_bundles:
             return []
 
-        # If export_dir is None (preview mode), check persistent preview cache
-        # so subsequent preview requests load instantly without re-running AssetStudioCatCLI.
+        # If export_dir is None (preview mode), check persistent preview cache on disk
+        # (avoiding /tmp which is in RAM/tmpfs on Linux), so subsequent previews load instantly.
         safe_group = re.sub(r"[^\w\-_\.]", "_", group_name or "stage")
         preview_cache_dir = os.path.join(
-            tempfile.gettempdir(), f"uma_stage_preview_{safe_group}"
+            Config.get_stage_cache_dir(), f"uma_stage_preview_{safe_group}"
         )
         target_dir = export_dir or preview_cache_dir
 
@@ -566,6 +621,10 @@ class UnityLogic:
                 if f.lower().endswith(".fbx")
             ]
             if cached_fbx:
+                try:
+                    os.utime(preview_cache_dir, None)
+                except OSError:
+                    pass
                 return cached_fbx
 
         data_root = Config.get_data_root()
@@ -580,6 +639,9 @@ class UnityLogic:
         if not paths:
             return []
 
+        if export_dir is None:
+            UnityLogic.enforce_stage_cache_limit()
+
         os.makedirs(target_dir, exist_ok=True)
         UnityLogic._export_via_cli(
             paths, target_dir, mode="splitObjects", bundle_keys=keys
@@ -590,6 +652,10 @@ class UnityLogic:
             for f in files:
                 if f.lower().endswith(".fbx"):
                     fbx_files.append(os.path.join(root, f))
+
+        if export_dir is None:
+            UnityLogic.enforce_stage_cache_limit()
+
         return fbx_files
 
     @staticmethod

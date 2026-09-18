@@ -272,6 +272,9 @@ def test_export_assembled_stage_fbx_cache(monkeypatch, tmp_path):
 
     monkeypatch.setattr(UnityLogic, "find_stage_all_bundles", fake_find)
     monkeypatch.setattr(UnityLogic, "_export_via_cli", fake_cli)
+    stage_cache_dir = tmp_path / "stage_cache"
+    stage_cache_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(Config, "get_stage_cache_dir", lambda: str(stage_cache_dir))
     monkeypatch.setattr(Config, "get_data_root", lambda: str(tmp_path))
 
     # Create dummy physical file
@@ -280,23 +283,22 @@ def test_export_assembled_stage_fbx_cache(monkeypatch, tmp_path):
     bundle_file = bundle_dir / "hash1"
     bundle_file.write_text("bundle")
 
-    cache_dir = os.path.join(tempfile.gettempdir(), "uma_stage_preview_live99999")
-    if os.path.exists(cache_dir):
-        shutil.rmtree(cache_dir, ignore_errors=True)
+    # First call: should call CLI and save to stage_cache_dir
+    res1 = UnityLogic.export_assembled_stage_fbx("3d/env/live/live99999", fake_db)
+    assert len(called) == 1
+    assert len(res1) == 1
+    assert res1[0].endswith("test.fbx")
+    assert str(stage_cache_dir) in res1[0]
 
-    try:
-        # First call: should call CLI
-        res1 = UnityLogic.export_assembled_stage_fbx("3d/env/live/live99999", fake_db)
-        assert len(called) == 1
-        assert len(res1) == 1
-        assert res1[0].endswith("test.fbx")
+    # Second call: should hit cache and NOT call CLI again
+    res2 = UnityLogic.export_assembled_stage_fbx("3d/env/live/live99999", fake_db)
+    assert len(called) == 1  # Not incremented
+    assert res2 == res1
 
-        # Second call: should hit cache and NOT call CLI again
-        res2 = UnityLogic.export_assembled_stage_fbx("3d/env/live/live99999", fake_db)
-        assert len(called) == 1  # Not incremented
-        assert res2 == res1
-    finally:
-        shutil.rmtree(cache_dir, ignore_errors=True)
+    # Test clearing cache
+    freed = Config.clear_stage_cache()
+    assert freed > 0
+    assert not os.path.exists(res1[0])
 
 
 

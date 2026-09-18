@@ -1,4 +1,5 @@
 import os
+import shutil
 import json
 import platform
 import locale
@@ -49,6 +50,8 @@ class Config:
     CHARACTER_3D_OUTFIT_ICON_SIZE = 96
     # Empty means the default application data thumbnail directory.
     THUMBNAIL_CACHE_PATH = ""
+    # Stage preview cache size upper limit in megabytes.
+    STAGE_CACHE_MAX_MB = 1024
 
     @classmethod
     def get_profile_dir(cls):
@@ -185,6 +188,13 @@ class Config:
                             f"using {cls.CHARACTER_3D_OUTFIT_ICON_SIZE}."
                         )
                     cls.THUMBNAIL_CACHE_PATH = data.get("thumbnail_cache_path", "")
+                    stage_cache_max_mb = data.get(
+                        "stage_cache_max_mb", cls.STAGE_CACHE_MAX_MB
+                    )
+                    try:
+                        cls.STAGE_CACHE_MAX_MB = max(50, int(stage_cache_max_mb))
+                    except (TypeError, ValueError):
+                        pass
                     print(f"Loaded language: {cls.LANGUAGE}, region: {cls.REGION}")
                     return
             except Exception as e:
@@ -213,6 +223,7 @@ class Config:
                         cls.CHARACTER_3D_OUTFIT_ICON_SIZE
                     ),
                     "thumbnail_cache_path": cls.THUMBNAIL_CACHE_PATH,
+                    "stage_cache_max_mb": cls.STAGE_CACHE_MAX_MB,
                 }
                 json.dump(data, f, indent=4)
                 print(f"Saved config to {CONFIG_FILE}")
@@ -256,6 +267,61 @@ class Config:
         return os.path.join(cls.get_app_data_dir(), "thumbnails")
 
     @classmethod
+    def get_stage_cache_dir(cls):
+        """Returns the persistent disk directory for stage preview cache, avoiding /tmp (tmpfs RAM)."""
+        path = os.path.join(cls.get_app_data_dir(), "stage_cache")
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+        return path
+
+    @classmethod
+    def clear_stage_cache(cls):
+        """Clears all cached stage models from disk and temporary directories, returning freed bytes."""
+        freed = 0
+        cache_dir = cls.get_stage_cache_dir()
+        if os.path.exists(cache_dir):
+            for entry in os.listdir(cache_dir):
+                full_path = os.path.join(cache_dir, entry)
+                try:
+                    if os.path.isdir(full_path):
+                        for root, _, files in os.walk(full_path):
+                            for f in files:
+                                try:
+                                    freed += os.path.getsize(os.path.join(root, f))
+                                except OSError:
+                                    pass
+                        shutil.rmtree(full_path, ignore_errors=True)
+                    else:
+                        freed += os.path.getsize(full_path)
+                        os.remove(full_path)
+                except OSError:
+                    pass
+
+        # Also clean up any legacy uma_stage_preview_* folders in system tempdir to free RAM
+        import tempfile
+
+        tmp_dir = tempfile.gettempdir()
+        try:
+            for entry in os.listdir(tmp_dir):
+                if entry.startswith("uma_stage_preview_"):
+                    full_path = os.path.join(tmp_dir, entry)
+                    try:
+                        if os.path.isdir(full_path):
+                            for root, _, files in os.walk(full_path):
+                                for f in files:
+                                    try:
+                                        freed += os.path.getsize(os.path.join(root, f))
+                                    except OSError:
+                                        pass
+                            shutil.rmtree(full_path, ignore_errors=True)
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+
+        return freed
+
+    @classmethod
     def get_db_path(cls):
         if not cls.BASE_PATH:
             return ""
@@ -291,7 +357,12 @@ class Config:
 
     @classmethod
     def update_config(
-        cls, base_path, region=None, language=None, thumbnail_cache_path=None
+        cls,
+        base_path,
+        region=None,
+        language=None,
+        thumbnail_cache_path=None,
+        stage_cache_max_mb=None,
     ):
         """Update in-memory config and persist it to disk."""
         cls.BASE_PATH = (base_path or "").strip()
@@ -302,4 +373,9 @@ class Config:
             cls.LANGUAGE = language
         if thumbnail_cache_path is not None:
             cls.THUMBNAIL_CACHE_PATH = (thumbnail_cache_path or "").strip()
+        if stage_cache_max_mb is not None:
+            try:
+                cls.STAGE_CACHE_MAX_MB = max(50, int(stage_cache_max_mb))
+            except (TypeError, ValueError):
+                pass
         cls.save()
