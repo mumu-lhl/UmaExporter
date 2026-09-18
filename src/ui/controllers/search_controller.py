@@ -9,13 +9,13 @@ from src.core.monitor import Monitor
 from src.ui.features.characters.thumbnails import CharacterThumbnailLoader
 
 SEARCH_LIST_ROWS_PER_FRAME = 256
-SEARCH_THUMBNAIL_ROWS_PER_FRAME = 8
+SEARCH_THUMBNAIL_ROWS_PER_FRAME = 48
 SEARCH_THUMBNAIL_DECODE_BATCH_SIZE = 8
 SEARCH_THUMBNAIL_MAX_INFLIGHT = 2
 SEARCH_LIST_WINDOW_ROWS = 256
 SEARCH_LIST_WINDOW_STEP = 96
-SEARCH_THUMBNAIL_WINDOW_GRID_ROWS = 12
-SEARCH_THUMBNAIL_WINDOW_STEP_ROWS = 4
+SEARCH_THUMBNAIL_WINDOW_GRID_ROWS = 48
+SEARCH_THUMBNAIL_WINDOW_STEP_ROWS = 16
 
 _SEARCH_PREFIXES = ("", "scene_", "prop_")
 _LIST_ROW_HEIGHT = 24
@@ -982,9 +982,7 @@ class SearchController:
                     break
             except Exception:
                 continue
-        if first_visible is None:
-            return []
-        start = first_visible
+        start = first_visible if first_visible is not None else 0
         end = min(len(queue), start + SEARCH_THUMBNAIL_DECODE_BATCH_SIZE)
         batch = queue[start:end]
         del queue[start:end]

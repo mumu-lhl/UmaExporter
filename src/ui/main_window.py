@@ -357,6 +357,9 @@ class UmaExporterApp:
                     button=dpg.mvMouseButton_Left,
                     callback=self.drag_controller._on_left_mouse_release,
                 )
+                dpg.add_mouse_wheel_handler(
+                    callback=lambda *_: self._mark_ui_activity()
+                )
 
             self.shortcut_controller.setup_shortcuts()
 
