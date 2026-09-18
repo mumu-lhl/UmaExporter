@@ -226,6 +226,12 @@ class UmaExporterApp:
         self.on_clear_thumbnail_cache = (
             self.settings_controller.on_clear_thumbnail_cache
         )
+        self.on_stage_cache_limit_changed = (
+            self.settings_controller.on_stage_cache_limit_changed
+        )
+        self.on_clear_stage_cache = (
+            self.settings_controller.on_clear_stage_cache
+        )
         self.on_migrate_cache_to_custom = (
             self.settings_controller.on_migrate_cache_to_custom
         )
