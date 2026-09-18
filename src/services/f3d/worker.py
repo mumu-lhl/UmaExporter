@@ -133,10 +133,11 @@ def launch_f3d_viewer_stdin():
         eng.options.update(
             {
                 "ui.axis": True,
-                "render.grid.enable": True,
-                "render.light.intensity": 3.5,
-                "render.hdri.ambient": True,
-                "render.effect.tone_mapping": True,
+                "ui.fps": True,
+                "render.grid.enable": False,
+                "render.light.intensity": 2.5,
+                "render.hdri.ambient": False,
+                "render.effect.tone_mapping": False,
                 "render.background.color": [0.22, 0.22, 0.25],
             }
         )
@@ -229,7 +230,7 @@ def launch_f3d_viewer_stdin():
                     return
 
         update_scene(line)
-        interactor.start(0.1, timer_callback)
+        interactor.start(0.016, timer_callback)
 
     except KeyboardInterrupt:
         pass
