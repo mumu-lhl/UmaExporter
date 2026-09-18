@@ -398,7 +398,6 @@ class HierarchyController:
         def update():
             for tag in (
                 f"{prefix}ui_stage_status",
-                f"{prefix}ui_hierarchy_status",
                 f"{self.detached_window_tag}_stage_status",
             ):
                 if dpg.does_item_exist(tag):

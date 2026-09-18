@@ -1854,22 +1854,11 @@ class UnityLogic:
             ]
 
             try:
-                line_cb = None
                 if progress_callback:
-                    def _cli_line(line):
-                        cleaned = re.sub(r"\b0+(\d+%)", r"\1", line)
-                        print(f"[CLI] {cleaned}", flush=True)
-                        m = re.search(r"(\d+%)", cleaned)
-                        if m:
-                            progress_callback(
-                                i18n("msg_stage_converting_pct").format(m.group(1))
-                            )
-
-                    line_cb = _cli_line
                     progress_callback(i18n("msg_stage_converting"))
 
                 print(f"[STAGE] Running CLI command: {' '.join(cmd)}", flush=True)
-                result = UnityLogic._run_cli_process(cmd, line_callback=line_cb)
+                result = UnityLogic._run_cli_process(cmd)
                 exported_count = UnityLogic._flatten_directory(
                     cli_output_dir, export_dir
                 )
