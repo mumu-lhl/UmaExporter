@@ -135,3 +135,114 @@ def test_hierarchy_controller_render_tree_no_callback_error():
     finally:
         dpg.destroy_context()
 
+
+def test_find_stage_related_prefabs():
+    """Verify companion prefab discovery for live and race stages."""
+    class FakeCursor:
+        def __init__(self, query_results):
+            self.query_results = query_results
+        def execute(self, sql, params):
+            return self
+        def fetchall(self):
+            return self.query_results
+
+    class FakeDb:
+        def __init__(self, results):
+            self.conn = type("Conn", (), {"cursor": lambda s: FakeCursor(results)})()
+
+    # Live stage test
+    live_db = FakeDb([
+        (1, "3d/env/live/live10101/pfb_env_live10101_main000", "HASH1"),
+        (2, "3d/env/live/live10101/pfb_env_live10101_roof_truss", "HASH2"),
+    ])
+    group, prefabs = UnityLogic.find_stage_related_prefabs(
+        "3d/env/live/live10101/pfb_env_live10101_main000", live_db
+    )
+    assert group == "live10101"
+    assert len(prefabs) == 2
+
+    # Race stage test
+    race_db = FakeDb([
+        (1, "3d/env/race/race00000/pfb_env_race00000_001", "HASH1"),
+    ])
+    group, prefabs = UnityLogic.find_stage_related_prefabs(
+        "3d/env/race/race00000/pfb_env_race00000_001", race_db
+    )
+    assert group == "race00000"
+    assert len(prefabs) == 1
+
+    # Non-stage asset test
+    group, prefabs = UnityLogic.find_stage_related_prefabs(
+        "3d/chara/body/bdy0001_00/pfb_bdy0001_00", live_db
+    )
+    assert group is None
+    assert prefabs == ()
+
+
+def test_hierarchy_controller_stage_buttons_and_inspector_sync():
+    """Verify that stage buttons toggle correctly and detached inspector syncs."""
+    import dearpygui.dearpygui as dpg
+    from src.ui.controllers.hierarchy_controller import HierarchyController
+
+    class DummyApp:
+        def __init__(self):
+            self.current_asset_id = 10
+            self.current_asset_data = {"id": 10, "name": "3d/env/live/live10101/pfb_env_live10101_main000"}
+            self.db = None
+            self.f3d_service = None
+
+    dpg.create_context()
+    try:
+        app = DummyApp()
+        ctrl = HierarchyController(app)
+
+        with dpg.window(tag="test_window_stage"):
+            dpg.add_button(tag="scene_ui_assemble_stage_btn", show=False)
+            dpg.add_button(tag="scene_ui_preview_stage_fbx_btn", show=False)
+            dpg.add_button(tag="scene_ui_export_stage_fbx_btn", show=False)
+            dpg.add_child_window(tag="scene_ui_hierarchy_tree_parent")
+            dpg.add_child_window(tag="scene_ui_hierarchy_inspector_parent")
+
+        # Case 1: Multiple stage prefabs -> buttons should become visible
+        fake_prefabs = (
+            (1, "part1", "h1"),
+            (2, "part2", "h2"),
+        )
+        ctrl._apply_hierarchy_result(
+            "scene_",
+            ctrl.request_ids["scene_"],
+            10,
+            "/dummy/phys",
+            None,
+            (),
+            stage_group="live10101",
+            stage_prefabs=fake_prefabs,
+            logical_path="3d/env/live/live10101/pfb_env_live10101_main000",
+        )
+
+        assert dpg.is_item_shown("scene_ui_assemble_stage_btn") is True
+        assert dpg.is_item_shown("scene_ui_preview_stage_fbx_btn") is True
+        assert dpg.is_item_shown("scene_ui_export_stage_fbx_btn") is True
+
+        # Case 2: Detached window inspector synchronization
+        with dpg.window(tag=ctrl.detached_window_tag):
+            dpg.add_child_window(tag=f"{ctrl.detached_window_tag}_inspector_container")
+
+        node = {
+            "name": "LiveSpeaker",
+            "go_path_id": 999,
+            "tf_path_id": 998,
+            "components": ("Transform",),
+        }
+        ctrl.on_node_selected(node, "scene_")
+
+        # Ensure both regular and detached inspector containers received node content
+        reg_children = dpg.get_item_children("scene_ui_hierarchy_inspector_parent", slot=1)
+        det_children = dpg.get_item_children(f"{ctrl.detached_window_tag}_inspector_container", slot=1)
+        assert len(reg_children) > 0
+        assert len(det_children) > 0
+
+    finally:
+        dpg.destroy_context()
+
+

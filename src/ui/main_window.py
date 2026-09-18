@@ -705,7 +705,7 @@ class UmaExporterApp:
         )
         for prefix in self.preview_controller._detail_prefixes():
             self.hierarchy_controller.load_hierarchy_async(
-                prefix, phys_path, bundle_key, asset_id
+                prefix, phys_path, bundle_key, asset_id, logical_path=user_data.get("name")
             )
         self.preview_controller._load_deps_async(asset_id, request_id)
         self.preview_controller._load_rev_deps_async(asset_id, request_id)

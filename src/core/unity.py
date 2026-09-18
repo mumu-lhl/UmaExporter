@@ -377,6 +377,132 @@ class UnityLogic:
             return ()
 
     @staticmethod
+    def find_stage_related_prefabs(logical_path, db):
+        """Finds all companion prefabs that belong to the same scene or live stage."""
+        if not logical_path or not db:
+            return None, ()
+        parts = logical_path.replace("\\", "/").split("/")
+        group_name = None
+        group_pattern = None
+
+        if "live" in parts:
+            idx = parts.index("live")
+            if idx + 1 < len(parts):
+                group_name = parts[idx + 1]
+                group_pattern = f"%live/{group_name}/%"
+        elif "race" in parts:
+            idx = parts.index("race")
+            if idx + 1 < len(parts):
+                group_name = parts[idx + 1]
+                group_pattern = f"%race/{group_name}/%"
+        elif "env" in parts:
+            idx = parts.index("env")
+            if idx + 2 < len(parts):
+                group_name = f"{parts[idx+1]}_{parts[idx+2]}"
+                group_pattern = f"%{parts[idx+1]}/{parts[idx+2]}/%"
+            elif idx + 1 < len(parts):
+                group_name = parts[idx + 1]
+                group_pattern = f"%env/{group_name}/%"
+
+        if not group_pattern:
+            return None, ()
+
+        try:
+            cursor = db.conn.cursor()
+            rows = cursor.execute(
+                'SELECT a.i, a.n, a.h FROM a WHERE a.n LIKE ? AND (a.n LIKE "%/pfb_%" OR a.n LIKE "%/prefabs/%") AND a.n NOT LIKE "%/materials/%"',
+                (group_pattern,),
+            ).fetchall()
+            return group_name, tuple(rows)
+        except Exception as e:
+            print(f"Error finding related stage prefabs: {e}")
+            return None, ()
+
+    @staticmethod
+    def get_assembled_stage_hierarchy(logical_path, db):
+        """Builds an aggregated scene hierarchy for an entire stage composed of multiple prefabs."""
+        group_name, prefabs = UnityLogic.find_stage_related_prefabs(logical_path, db)
+        if not prefabs:
+            return ()
+
+        data_root = Config.get_data_root()
+        stage_children = []
+
+        for p_id, p_name, p_hash in prefabs:
+            phys_path = os.path.join(data_root, p_hash[:2], p_hash)
+            if not os.path.exists(phys_path):
+                continue
+            key = db.get_key_by_hash(p_hash)
+            sub_tree = UnityLogic.get_scene_hierarchy(phys_path, bundle_key=key)
+            part_name = os.path.basename(p_name)
+            if sub_tree:
+                stage_children.append(
+                    {
+                        "name": f"📦 {part_name}",
+                        "go_path_id": p_id,
+                        "tf_path_id": 0,
+                        "components": ("PrefabPart",),
+                        "mesh_name": None,
+                        "mesh_path_id": None,
+                        "materials": (),
+                        "local_pos": (0.0, 0.0, 0.0),
+                        "local_rot": (0.0, 0.0, 0.0, 1.0),
+                        "local_scale": (1.0, 1.0, 1.0),
+                        "children": sub_tree,
+                    }
+                )
+
+        if not stage_children:
+            return ()
+
+        macro_root = {
+            "name": f"🏟️ Stage: {group_name} ({len(stage_children)} Parts)",
+            "go_path_id": 0,
+            "tf_path_id": 0,
+            "components": ("AssembledStageRoot",),
+            "mesh_name": None,
+            "mesh_path_id": None,
+            "materials": (),
+            "local_pos": (0.0, 0.0, 0.0),
+            "local_rot": (0.0, 0.0, 0.0, 1.0),
+            "local_scale": (1.0, 1.0, 1.0),
+            "children": tuple(stage_children),
+        }
+        return (macro_root,)
+
+    @staticmethod
+    def export_assembled_stage_fbx(logical_path, db, export_dir=None):
+        """Exports all companion prefabs of a stage to FBX files and returns their paths."""
+        group_name, prefabs = UnityLogic.find_stage_related_prefabs(logical_path, db)
+        if not prefabs:
+            return []
+
+        data_root = Config.get_data_root()
+        paths = []
+        keys = []
+        for p_id, p_name, p_hash in prefabs:
+            phys_path = os.path.join(data_root, p_hash[:2], p_hash)
+            if os.path.exists(phys_path):
+                paths.append(phys_path)
+                keys.append(db.get_key_by_hash(p_hash))
+
+        if not paths:
+            return []
+
+        target_dir = export_dir or tempfile.mkdtemp(prefix="uma_stage_")
+        os.makedirs(target_dir, exist_ok=True)
+        UnityLogic._export_via_cli(
+            paths, target_dir, mode="splitObjects", bundle_keys=keys
+        )
+
+        fbx_files = []
+        for root, _, files in os.walk(target_dir):
+            for f in files:
+                if f.lower().endswith(".fbx"):
+                    fbx_files.append(os.path.join(root, f))
+        return fbx_files
+
+    @staticmethod
     def save_mesh_to_tmp(physical_path, path_id, bundle_key=None):
         """Extract Unity Mesh and save to a temporary .obj file (For Preview Only)"""
         try:

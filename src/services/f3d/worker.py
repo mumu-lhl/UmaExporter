@@ -150,14 +150,16 @@ def launch_f3d_viewer_stdin():
             if not path:
                 return
 
-            if current_mesh and os.path.exists(current_mesh):
-                try:
-                    os.remove(current_mesh)
-                except:
-                    pass
-            current_mesh = path
+            paths = [p.strip() for p in path.split(";") if p.strip() and os.path.exists(p.strip())]
+            if not paths:
+                return
+
+            current_mesh = paths[0] if len(paths) == 1 else path
             scene.clear()
-            scene.add(path)
+            if len(paths) == 1:
+                scene.add(paths[0])
+            else:
+                scene.add(paths)
 
             # Set to Isometric view (similar to pressing '9')
             try:

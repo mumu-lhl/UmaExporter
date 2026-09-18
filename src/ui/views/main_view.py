@@ -96,6 +96,16 @@ class MainView:
         ):
             dpg.add_file_extension(".*")
 
+        with dpg.file_dialog(
+            directory_selector=True,
+            show=False,
+            callback=self.controller.hierarchy_controller.on_stage_export_directory_selected,
+            tag="stage_export_dialog",
+            width=600,
+            height=400,
+        ):
+            dpg.add_file_extension(".*")
+
     def create_main_layout(self):
         # Create a theme for disabled buttons
         if not dpg.does_alias_exist("disabled_btn_theme"):

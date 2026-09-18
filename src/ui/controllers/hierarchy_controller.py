@@ -1,3 +1,4 @@
+import os
 import dearpygui.dearpygui as dpg
 from src.core.i18n import i18n
 from src.core.unity import UnityLogic
@@ -13,6 +14,8 @@ class HierarchyController:
         self.request_ids = {"": 0, "scene_": 0, "prop_": 0, "home_": 0}
         self.current_tree_data = {}
         self.selected_node = {}
+        self.stage_info = {}
+        self.stage_export_prefix = ""
         self.detached_window_tag = "hierarchy_detached_window"
 
     def _ensure_handler_registry(self):
@@ -33,12 +36,17 @@ class HierarchyController:
                 if data and isinstance(data, (list, tuple)) and len(data) >= 2:
                     self.on_node_selected(data[0], data[1])
 
-    def load_hierarchy_async(self, prefix, phys_path, bundle_key, asset_id):
+    def load_hierarchy_async(
+        self, prefix, phys_path, bundle_key, asset_id, logical_path=None
+    ):
         """Asynchronously extracts and renders the scene hierarchy for a bundle."""
         if prefix not in self.request_ids:
             self.request_ids[prefix] = 0
         self.request_ids[prefix] += 1
         req_id = self.request_ids[prefix]
+
+        if not logical_path and hasattr(self.app, "current_asset_data") and self.app.current_asset_data:
+            logical_path = self.app.current_asset_data.get("name")
 
         status_text_tag = f"{prefix}ui_hierarchy_status"
         if dpg.does_item_exist(status_text_tag):
@@ -50,30 +58,58 @@ class HierarchyController:
                 tree = UnityLogic.get_scene_hierarchy(
                     phys_path, bundle_key=bundle_key
                 )
-                return tree
             except Exception as e:
                 print(f"[HIERARCHY] Error parsing hierarchy: {e}")
-                return ()
+                tree = ()
+
+            stage_group, stage_prefabs = None, ()
+            db = getattr(self.app, "db", None)
+            if logical_path and db:
+                try:
+                    stage_group, stage_prefabs = UnityLogic.find_stage_related_prefabs(
+                        logical_path, db
+                    )
+                except Exception as e:
+                    print(f"[HIERARCHY] Error finding stage prefabs: {e}")
+
+            return tree, stage_group, stage_prefabs
 
         future = self.app.executor.submit(worker)
 
         def done_callback(f):
             try:
-                tree = f.result()
+                tree, stage_group, stage_prefabs = f.result()
             except Exception as ex:
                 print(f"[HIERARCHY] Future error: {ex}")
-                tree = ()
+                tree, stage_group, stage_prefabs = (), None, ()
 
             self.app._queue_ui_task(
                 lambda: self._apply_hierarchy_result(
-                    prefix, req_id, asset_id, phys_path, bundle_key, tree
+                    prefix,
+                    req_id,
+                    asset_id,
+                    phys_path,
+                    bundle_key,
+                    tree,
+                    stage_group=stage_group,
+                    stage_prefabs=stage_prefabs,
+                    logical_path=logical_path,
                 )
             )
 
         future.add_done_callback(done_callback)
 
     def _apply_hierarchy_result(
-        self, prefix, req_id, asset_id, phys_path, bundle_key, tree
+        self,
+        prefix,
+        req_id,
+        asset_id,
+        phys_path,
+        bundle_key,
+        tree,
+        stage_group=None,
+        stage_prefabs=(),
+        logical_path=None,
     ):
         current_id = getattr(self.app, "current_asset_id", None)
         if (
@@ -90,8 +126,24 @@ class HierarchyController:
             "tree": tree,
             "phys_path": phys_path,
             "bundle_key": bundle_key,
+            "logical_path": logical_path,
+        }
+        self.stage_info[prefix] = {
+            "group": stage_group,
+            "prefabs": stage_prefabs,
+            "logical_path": logical_path,
         }
         self.selected_node[prefix] = None
+
+        has_stage = bool(stage_prefabs and len(stage_prefabs) > 1)
+        for btn_name in (
+            "ui_assemble_stage_btn",
+            "ui_preview_stage_fbx_btn",
+            "ui_export_stage_fbx_btn",
+        ):
+            btn_tag = f"{prefix}{btn_name}"
+            if dpg.does_item_exist(btn_tag):
+                dpg.configure_item(btn_tag, show=has_stage)
 
         self.render_tree(prefix)
 
@@ -172,95 +224,99 @@ class HierarchyController:
 
     def _update_inspector(self, prefix, node):
         """Updates the property inspector panel with the selected node's details."""
-        inspector_parent = f"{prefix}ui_hierarchy_inspector_parent"
-        if not dpg.does_item_exist(inspector_parent):
-            return
+        parents = [f"{prefix}ui_hierarchy_inspector_parent"]
+        detached_inspector = f"{self.detached_window_tag}_inspector_container"
+        if dpg.does_item_exist(detached_inspector):
+            parents.append(detached_inspector)
 
-        dpg.delete_item(inspector_parent, children_only=True)
+        for inspector_parent in parents:
+            if not dpg.does_item_exist(inspector_parent):
+                continue
+            dpg.delete_item(inspector_parent, children_only=True)
 
-        if not node:
-            dpg.add_text(
-                i18n("label_select_file"),
-                parent=inspector_parent,
-                color=[130, 130, 130],
-            )
-            return
-
-        name = node.get("name", "Unnamed")
-        go_id = node.get("go_path_id", 0)
-        tf_id = node.get("tf_path_id", 0)
-        comps = node.get("components", ())
-        mesh_name = node.get("mesh_name")
-        mesh_path_id = node.get("mesh_path_id")
-        materials = node.get("materials", ())
-        pos = node.get("local_pos", (0.0, 0.0, 0.0))
-        rot = node.get("local_rot", (0.0, 0.0, 0.0, 1.0))
-        scale = node.get("local_scale", (1.0, 1.0, 1.0))
-
-        dpg.add_text(f"{name}", parent=inspector_parent, color=[0, 255, 255])
-        dpg.add_text(
-            f"GameObject PathID: {go_id}",
-            parent=inspector_parent,
-            color=[160, 160, 160],
-        )
-        dpg.add_text(
-            f"Transform PathID: {tf_id}",
-            parent=inspector_parent,
-            color=[160, 160, 160],
-        )
-
-        dpg.add_separator(parent=inspector_parent)
-        dpg.add_text(
-            f"{i18n('label_transform')}:",
-            parent=inspector_parent,
-            color=[255, 200, 100],
-        )
-        dpg.add_text(
-            f"  Pos: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})",
-            parent=inspector_parent,
-        )
-        dpg.add_text(
-            f"  Rot: ({rot[0]:.2f}, {rot[1]:.2f}, {rot[2]:.2f}, {rot[3]:.2f})",
-            parent=inspector_parent,
-        )
-        dpg.add_text(
-            f"  Scale: ({scale[0]:.2f}, {scale[1]:.2f}, {scale[2]:.2f})",
-            parent=inspector_parent,
-        )
-
-        dpg.add_separator(parent=inspector_parent)
-        dpg.add_text(
-            f"{i18n('label_components')} ({len(comps)}):",
-            parent=inspector_parent,
-            color=[100, 255, 100],
-        )
-        for comp in comps:
-            dpg.add_text(f"  • {comp}", parent=inspector_parent)
-
-        if mesh_name:
-            dpg.add_separator(parent=inspector_parent)
-            dpg.add_text(f"Mesh: {mesh_name}", parent=inspector_parent, color=[255, 255, 0])
-            if mesh_path_id:
-                tree_info = self.current_tree_data.get(prefix, {})
-                phys_path = tree_info.get("phys_path")
-                bundle_key = tree_info.get("bundle_key")
-                dpg.add_button(
-                    label=f"3D Preview ({mesh_name})",
+            if not node:
+                dpg.add_text(
+                    i18n("label_select_file"),
                     parent=inspector_parent,
-                    callback=lambda: self._preview_mesh(
-                        phys_path, mesh_path_id, prefix, bundle_key
-                    ),
+                    color=[130, 130, 130],
                 )
+                continue
 
-        if materials:
+            name = node.get("name", "Unnamed")
+            go_id = node.get("go_path_id", 0)
+            tf_id = node.get("tf_path_id", 0)
+            comps = node.get("components", ())
+            mesh_name = node.get("mesh_name")
+            mesh_path_id = node.get("mesh_path_id")
+            materials = node.get("materials", ())
+            pos = node.get("local_pos", (0.0, 0.0, 0.0))
+            rot = node.get("local_rot", (0.0, 0.0, 0.0, 1.0))
+            scale = node.get("local_scale", (1.0, 1.0, 1.0))
+
+            dpg.add_text(f"{name}", parent=inspector_parent, color=[0, 255, 255])
+            dpg.add_text(
+                f"GameObject PathID: {go_id}",
+                parent=inspector_parent,
+                color=[160, 160, 160],
+            )
+            dpg.add_text(
+                f"Transform PathID: {tf_id}",
+                parent=inspector_parent,
+                color=[160, 160, 160],
+            )
+
             dpg.add_separator(parent=inspector_parent)
             dpg.add_text(
-                f"Materials ({len(materials)}):",
+                f"{i18n('label_transform')}:",
                 parent=inspector_parent,
-                color=[255, 150, 255],
+                color=[255, 200, 100],
             )
-            for mat in materials:
-                dpg.add_text(f"  • {mat}", parent=inspector_parent)
+            dpg.add_text(
+                f"  Pos: ({pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f})",
+                parent=inspector_parent,
+            )
+            dpg.add_text(
+                f"  Rot: ({rot[0]:.2f}, {rot[1]:.2f}, {rot[2]:.2f}, {rot[3]:.2f})",
+                parent=inspector_parent,
+            )
+            dpg.add_text(
+                f"  Scale: ({scale[0]:.2f}, {scale[1]:.2f}, {scale[2]:.2f})",
+                parent=inspector_parent,
+            )
+
+            dpg.add_separator(parent=inspector_parent)
+            dpg.add_text(
+                f"{i18n('label_components')} ({len(comps)}):",
+                parent=inspector_parent,
+                color=[100, 255, 100],
+            )
+            for comp in comps:
+                dpg.add_text(f"  • {comp}", parent=inspector_parent)
+
+            if mesh_name:
+                dpg.add_separator(parent=inspector_parent)
+                dpg.add_text(f"Mesh: {mesh_name}", parent=inspector_parent, color=[255, 255, 0])
+                if mesh_path_id:
+                    tree_info = self.current_tree_data.get(prefix, {})
+                    phys_path = tree_info.get("phys_path")
+                    bundle_key = tree_info.get("bundle_key")
+                    dpg.add_button(
+                        label=f"3D Preview ({mesh_name})",
+                        parent=inspector_parent,
+                        callback=lambda: self._preview_mesh(
+                            phys_path, mesh_path_id, prefix, bundle_key
+                        ),
+                    )
+
+            if materials:
+                dpg.add_separator(parent=inspector_parent)
+                dpg.add_text(
+                    f"Materials ({len(materials)}):",
+                    parent=inspector_parent,
+                    color=[255, 150, 255],
+                )
+                for mat in materials:
+                    dpg.add_text(f"  • {mat}", parent=inspector_parent)
 
     def _preview_mesh(self, phys_path, mesh_path_id, prefix, bundle_key):
         """Previews the mesh via the existing preview controller."""
@@ -269,22 +325,165 @@ class HierarchyController:
                 None, None, (phys_path, mesh_path_id, prefix, bundle_key)
             )
 
+    def assemble_stage_hierarchy(self, prefix):
+        """Assembles all companion prefabs into a unified macro stage hierarchy."""
+        info = self.stage_info.get(prefix)
+        if not info or not info.get("logical_path") or not getattr(self.app, "db", None):
+            return
+
+        logical_path = info["logical_path"]
+        status_text_tag = f"{prefix}ui_hierarchy_status"
+        if dpg.does_item_exist(status_text_tag):
+            dpg.set_value(status_text_tag, i18n("msg_stage_assembling"))
+            dpg.configure_item(status_text_tag, show=True)
+
+        def worker():
+            return UnityLogic.get_assembled_stage_hierarchy(logical_path, self.app.db)
+
+        def on_done(f):
+            try:
+                macro_tree = f.result()
+            except Exception as e:
+                print(f"[HIERARCHY] Error assembling stage: {e}")
+                macro_tree = ()
+
+            def ui_update():
+                if prefix in self.current_tree_data:
+                    self.current_tree_data[prefix]["tree"] = macro_tree
+                self.render_tree(prefix)
+                detached_tree_container = f"{self.detached_window_tag}_tree_container"
+                if dpg.does_item_exist(detached_tree_container):
+                    self.render_tree(prefix, parent_tag=detached_tree_container)
+
+            self.app._queue_ui_task(ui_update)
+
+        self.app.executor.submit(worker).add_done_callback(on_done)
+
+    def preview_stage_fbx(self, prefix):
+        """Exports all companion prefabs of the stage to temporary FBX files and loads them into F3D viewer."""
+        info = self.stage_info.get(prefix)
+        if not info or not info.get("logical_path") or not getattr(self.app, "db", None):
+            return
+
+        logical_path = info["logical_path"]
+        status_text_tag = f"{prefix}ui_hierarchy_status"
+        if dpg.does_item_exist(status_text_tag):
+            dpg.set_value(status_text_tag, i18n("msg_stage_assembling"))
+            dpg.configure_item(status_text_tag, show=True)
+
+        def worker():
+            return UnityLogic.export_assembled_stage_fbx(logical_path, self.app.db)
+
+        def on_done(f):
+            try:
+                fbx_files = f.result()
+            except Exception as e:
+                print(f"[HIERARCHY] Error exporting stage for preview: {e}")
+                fbx_files = []
+
+            def ui_update():
+                if dpg.does_item_exist(status_text_tag):
+                    dpg.configure_item(status_text_tag, show=False)
+                if fbx_files and hasattr(self.app, "f3d_service"):
+                    combined_path = ";".join(fbx_files)
+                    self.app.f3d_service.load_mesh(combined_path)
+
+            self.app._queue_ui_task(ui_update)
+
+        self.app.executor.submit(worker).add_done_callback(on_done)
+
+    def on_export_stage_click(self, prefix):
+        """Opens directory selector to export all assembled stage FBX models."""
+        self.stage_export_prefix = prefix
+        if dpg.does_item_exist("stage_export_dialog"):
+            dpg.show_item("stage_export_dialog")
+
+    def on_stage_export_directory_selected(self, sender, app_data):
+        """Callback when user selects an export directory for stage models."""
+        target_dir = app_data.get("file_path_name")
+        if not target_dir or not os.path.isdir(target_dir):
+            return
+
+        prefix = getattr(self, "stage_export_prefix", "")
+        info = self.stage_info.get(prefix)
+        logical_path = None
+        if info and info.get("logical_path"):
+            logical_path = info["logical_path"]
+        elif hasattr(self.app, "current_asset_data") and self.app.current_asset_data:
+            logical_path = self.app.current_asset_data.get("name")
+
+        if not logical_path or not getattr(self.app, "db", None):
+            return
+
+        status_text_tag = f"{prefix}ui_hierarchy_status"
+        if dpg.does_item_exist(status_text_tag):
+            dpg.set_value(status_text_tag, i18n("msg_stage_assembling"))
+            dpg.configure_item(status_text_tag, show=True)
+
+        def worker():
+            return UnityLogic.export_assembled_stage_fbx(
+                logical_path, self.app.db, export_dir=target_dir
+            )
+
+        def on_done(f):
+            try:
+                exported_files = f.result()
+            except Exception as e:
+                print(f"[HIERARCHY] Error exporting stage models: {e}")
+                exported_files = []
+
+            def ui_update():
+                if dpg.does_item_exist(status_text_tag):
+                    dpg.set_value(
+                        status_text_tag,
+                        f"✓ {len(exported_files)} FBX",
+                    )
+                    dpg.configure_item(status_text_tag, show=True)
+                export_status_tag = f"{prefix}ui_export_status"
+                if dpg.does_item_exist(export_status_tag):
+                    dpg.set_value(
+                        export_status_tag,
+                        i18n("msg_stage_exported").format(target_dir),
+                    )
+                    dpg.configure_item(export_status_tag, color=[0, 255, 0])
+
+            self.app._queue_ui_task(ui_update)
+
+        self.app.executor.submit(worker).add_done_callback(on_done)
+
     def open_detached_window(self, prefix):
         """Pops out the scene hierarchy into an independent, large resizable window."""
         if dpg.does_item_exist(self.detached_window_tag):
             dpg.delete_item(self.detached_window_tag)
 
+        stage_prefabs = self.stage_info.get(prefix, {}).get("prefabs", ())
+        has_stage = bool(stage_prefabs and len(stage_prefabs) > 1)
+
         with dpg.window(
             label=f"{i18n('label_unity_scene_hierarchy')} - Detached Inspector",
             tag=self.detached_window_tag,
-            width=850,
-            height=650,
+            width=900,
+            height=680,
             pos=[100, 100],
         ):
             with dpg.group(horizontal=True):
                 # Left Column: Large Tree View
-                with dpg.child_window(width=480, border=True, resizable_x=True):
-                    dpg.add_text(i18n("label_unity_scene_hierarchy"), color=[0, 255, 255])
+                with dpg.child_window(width=500, border=True, resizable_x=True):
+                    with dpg.group(horizontal=True):
+                        dpg.add_text(i18n("label_unity_scene_hierarchy"), color=[0, 255, 255])
+                        if has_stage:
+                            dpg.add_button(
+                                label=i18n("btn_assemble_stage"),
+                                callback=lambda: self.assemble_stage_hierarchy(prefix),
+                            )
+                            dpg.add_button(
+                                label=i18n("btn_preview_stage_fbx"),
+                                callback=lambda: self.preview_stage_fbx(prefix),
+                            )
+                            dpg.add_button(
+                                label=i18n("btn_export_stage_fbx"),
+                                callback=lambda: self.on_export_stage_click(prefix),
+                            )
                     dpg.add_separator()
                     with dpg.child_window(
                         tag=f"{self.detached_window_tag}_tree_container", border=False
