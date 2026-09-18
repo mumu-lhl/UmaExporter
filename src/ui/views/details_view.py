@@ -100,6 +100,12 @@ class DetailsView:
                         tag=f"{prefix}ui_stage_badge",
                         color=[0, 255, 255],
                     )
+                    dpg.add_text(
+                        "",
+                        tag=f"{prefix}ui_stage_status",
+                        color=[255, 200, 80],
+                        show=False,
+                    )
 
                 with dpg.tab_bar(tag=f"{prefix}ui_unity_view_tabbar"):
                     with dpg.tab(

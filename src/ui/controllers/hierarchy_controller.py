@@ -387,6 +387,23 @@ class HierarchyController:
 
         self.app.executor.submit(worker).add_done_callback(on_done)
 
+    def _set_stage_progress(self, prefix, message):
+        """Update stage progress text across all visible stage UI locations."""
+        def update():
+            for tag in (
+                f"{prefix}ui_stage_status",
+                f"{prefix}ui_hierarchy_status",
+                f"{self.detached_window_tag}_stage_status",
+            ):
+                if dpg.does_item_exist(tag):
+                    dpg.set_value(tag, message)
+                    dpg.configure_item(tag, show=bool(message))
+
+        if hasattr(self.app, "_queue_ui_task"):
+            self.app._queue_ui_task(update)
+        else:
+            update()
+
     def preview_stage_fbx(self, prefix):
         """Exports all companion prefabs of the stage to temporary FBX files and loads them into F3D viewer."""
         info = self.stage_info.get(prefix)
@@ -402,24 +419,24 @@ class HierarchyController:
         if not logical_path or not getattr(self.app, "db", None):
             return
 
-        status_text_tag = f"{prefix}ui_hierarchy_status"
-        if dpg.does_item_exist(status_text_tag):
-            dpg.set_value(status_text_tag, i18n("msg_stage_assembling"))
-            dpg.configure_item(status_text_tag, show=True)
+        def set_status(msg):
+            self._set_stage_progress(prefix, msg)
+
+        set_status(i18n("msg_stage_scanning"))
 
         def worker():
-            return UnityLogic.export_assembled_stage_fbx(logical_path, self.app.db)
+            return UnityLogic.export_assembled_stage_fbx(
+                logical_path, self.app.db, progress_callback=set_status
+            )
 
         def on_done(f):
             try:
                 fbx_files = f.result()
             except Exception as e:
-                print(f"[HIERARCHY] Error exporting stage for preview: {e}")
+                print(f"[HIERARCHY] Error exporting stage for preview: {e}", flush=True)
                 fbx_files = []
 
             def ui_update():
-                if dpg.does_item_exist(status_text_tag):
-                    dpg.configure_item(status_text_tag, show=False)
                 if fbx_files and hasattr(self.app, "f3d_service"):
                     # Filter out volumetric light beams (blinklight) for F3D preview,
                     # because F3D cannot render additive transparency shaders and renders them as solid black cones.
@@ -428,8 +445,16 @@ class HierarchyController:
                         for f in fbx_files
                         if "blinklight" not in os.path.basename(f).lower()
                     ] or fbx_files
+                    set_status(i18n("msg_stage_loading_f3d").format(len(preview_files)))
+                    print(
+                        f"[STAGE] Loading {len(preview_files)} model(s) into F3D viewer...",
+                        flush=True,
+                    )
                     combined_path = ";".join(preview_files)
                     self.app.f3d_service.load_mesh(combined_path)
+                    set_status(i18n("msg_stage_done").format(len(preview_files)))
+                else:
+                    set_status("")
 
             self.app._queue_ui_task(ui_update)
 
@@ -461,30 +486,28 @@ class HierarchyController:
         if not logical_path or not getattr(self.app, "db", None):
             return
 
-        status_text_tag = f"{prefix}ui_hierarchy_status"
-        if dpg.does_item_exist(status_text_tag):
-            dpg.set_value(status_text_tag, i18n("msg_stage_assembling"))
-            dpg.configure_item(status_text_tag, show=True)
+        def set_status(msg):
+            self._set_stage_progress(prefix, msg)
+
+        set_status(i18n("msg_stage_assembling"))
 
         def worker():
             return UnityLogic.export_assembled_stage_fbx(
-                logical_path, self.app.db, export_dir=target_dir
+                logical_path,
+                self.app.db,
+                export_dir=target_dir,
+                progress_callback=set_status,
             )
 
         def on_done(f):
             try:
                 exported_files = f.result()
             except Exception as e:
-                print(f"[HIERARCHY] Error exporting stage models: {e}")
+                print(f"[HIERARCHY] Error exporting stage models: {e}", flush=True)
                 exported_files = []
 
             def ui_update():
-                if dpg.does_item_exist(status_text_tag):
-                    dpg.set_value(
-                        status_text_tag,
-                        f"✓ {len(exported_files)} FBX",
-                    )
-                    dpg.configure_item(status_text_tag, show=True)
+                set_status(f"✓ {len(exported_files)} FBX")
                 export_status_tag = f"{prefix}ui_export_status"
                 if dpg.does_item_exist(export_status_tag):
                     dpg.set_value(
@@ -529,6 +552,12 @@ class HierarchyController:
                             dpg.add_button(
                                 label=i18n("btn_export_stage_fbx"),
                                 callback=lambda: self.on_export_stage_click(prefix),
+                            )
+                            dpg.add_text(
+                                "",
+                                tag=f"{self.detached_window_tag}_stage_status",
+                                color=[255, 200, 80],
+                                show=False,
                             )
                     dpg.add_separator()
                     with dpg.child_window(

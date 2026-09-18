@@ -264,7 +264,9 @@ def test_export_assembled_stage_fbx_cache(monkeypatch, tmp_path):
     def fake_find(logical_path, db):
         return "live99999", [(1, "live99999_main", "hash1")]
 
-    def fake_cli(paths, target_dir, mode="splitObjects", bundle_keys=None):
+    def fake_cli(
+        paths, target_dir, mode="splitObjects", bundle_keys=None, **kwargs
+    ):
         called.append(target_dir)
         # Create a dummy FBX in target_dir
         with open(os.path.join(target_dir, "test.fbx"), "w") as f:

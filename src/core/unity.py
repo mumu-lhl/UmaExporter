@@ -16,6 +16,7 @@ import UnityPy
 
 from src.core.decryptor import decrypt_bundle, DEFAULT_KEY
 from src.core.config import Config
+from src.core.i18n import i18n
 from src.core.utils import is_nuitka
 
 # Store original load_file to wrap it
@@ -597,16 +598,26 @@ class UnityLogic:
                     break
 
     @staticmethod
-    def export_assembled_stage_fbx(logical_path, db, export_dir=None):
+    def export_assembled_stage_fbx(
+        logical_path, db, export_dir=None, progress_callback=None
+    ):
         """Exports all companion prefabs of a stage to FBX files and returns their paths."""
-        # Use ALL bundles (prefabs + materials) so AssetStudioCatCLI can resolve
-        # cross-bundle texture references and embed textures into the FBX output.
+        def _report(msg):
+            print(f"[STAGE] {msg}", flush=True)
+            if progress_callback:
+                try:
+                    progress_callback(msg)
+                except Exception:
+                    pass
+
+        _report(i18n("msg_stage_scanning"))
         group_name, all_bundles = UnityLogic.find_stage_all_bundles(logical_path, db)
         if not all_bundles:
+            _report(f"No companion stage bundles found for '{logical_path}'.")
             return []
 
-        # If export_dir is None (preview mode), check persistent preview cache on disk
-        # (avoiding /tmp which is in RAM/tmpfs on Linux), so subsequent previews load instantly.
+        _report(f"Found {len(all_bundles)} companion bundle(s) for stage '{group_name}'")
+
         safe_group = re.sub(r"[^\w\-_\.]", "_", group_name or "stage")
         preview_cache_dir = os.path.join(
             Config.get_stage_cache_dir(), f"uma_stage_preview_{safe_group}"
@@ -625,6 +636,7 @@ class UnityLogic:
                     os.utime(preview_cache_dir, None)
                 except OSError:
                     pass
+                _report(i18n("msg_stage_cache_hit").format(len(cached_fbx)))
                 return cached_fbx
 
         data_root = Config.get_data_root()
@@ -637,6 +649,7 @@ class UnityLogic:
                 keys.append(db.get_key_by_hash(p_hash))
 
         if not paths:
+            _report("Warning: None of the physical bundle files exist on disk.")
             return []
 
         if export_dir is None:
@@ -644,7 +657,11 @@ class UnityLogic:
 
         os.makedirs(target_dir, exist_ok=True)
         UnityLogic._export_via_cli(
-            paths, target_dir, mode="splitObjects", bundle_keys=keys
+            paths,
+            target_dir,
+            mode="splitObjects",
+            bundle_keys=keys,
+            progress_callback=_report,
         )
 
         fbx_files = []
@@ -656,6 +673,7 @@ class UnityLogic:
         if export_dir is None:
             UnityLogic.enforce_stage_cache_limit()
 
+        _report(f"Assembled {len(fbx_files)} stage FBX model(s)")
         return fbx_files
 
     @staticmethod
@@ -1603,24 +1621,59 @@ class UnityLogic:
         return env
 
     @staticmethod
-    def _run_cli_process(command):
-        """Run AssetStudioCatCLI with encoding and frozen-app safeguards."""
+    def _run_cli_process(command, line_callback=None):
+        """Run AssetStudioCatCLI with encoding, optional streaming progress, and frozen-app safeguards."""
         creationflags = 0
         if os.name == "nt":
             creationflags = subprocess.CREATE_NO_WINDOW
 
         with UnityLogic._cli_process_context():
-            return subprocess.run(
+            if line_callback is None:
+                return subprocess.run(
+                    command,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    env=UnityLogic._get_cli_environment(),
+                    creationflags=creationflags,
+                    close_fds=True,
+                )
+
+            process = subprocess.Popen(
                 command,
-                check=True,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
                 env=UnityLogic._get_cli_environment(),
                 creationflags=creationflags,
                 close_fds=True,
+                bufsize=1,
             )
+
+            stdout_lines = []
+            for line in iter(process.stdout.readline, ""):
+                line_str = line.strip()
+                if line_str:
+                    stdout_lines.append(line_str)
+                    try:
+                        line_callback(line_str)
+                    except Exception:
+                        pass
+
+            stderr = process.stderr.read()
+            returncode = process.wait()
+            if returncode != 0:
+                raise subprocess.CalledProcessError(
+                    returncode, command, output="\n".join(stdout_lines), stderr=stderr
+                )
+
+            from types import SimpleNamespace
+
+            return SimpleNamespace(stdout="\n".join(stdout_lines), stderr=stderr)
 
     @staticmethod
     def _run_as_cli(input_path, output_dir, mode="animator"):
@@ -1664,7 +1717,13 @@ class UnityLogic:
             return False
 
     @staticmethod
-    def _export_via_cli(physical_paths, export_dir, mode="animator", bundle_keys=None):
+    def _export_via_cli(
+        physical_paths,
+        export_dir,
+        mode="animator",
+        bundle_keys=None,
+        progress_callback=None,
+    ):
         """Export assets using AssetStudioCatCLI through ASCII-only staging.
 
         The requested directory is intentionally never passed to the native
@@ -1707,33 +1766,48 @@ class UnityLogic:
             os.makedirs(input_dir, exist_ok=True)
             os.makedirs(cli_output_dir, exist_ok=True)
 
+            total_bundles = len(unique_paths)
+            completed_bundles = 0
+            bundle_lock = threading.Lock()
+
             # Decrypt and save all files to temporary directory in parallel
             def _prepare_bundle(p):
+                nonlocal completed_bundles
                 if not os.path.exists(p):
                     return
                 target = os.path.join(input_dir, os.path.basename(p))
-                if os.path.exists(target):
-                    return
-                try:
-                    success = False
-                    data = UnityLogic._load_bundle_data(p, bundle_key=key_map.get(p))
-                    if data:
-                        with open(target, "wb") as f:
-                            f.write(data)
-                        success = True
-
-                    if not success:
-                        if hasattr(os, "symlink"):
-                            os.symlink(p, target)
-                        else:
-                            os.link(p, target)
-                except Exception:
+                if not os.path.exists(target):
                     try:
-                        shutil.copy2(p, target)
-                    except shutil.SameFileError:
-                        pass
-                    except Exception as e2:
-                        print(f"Warning: Failed to prepare {p}: {e2}")
+                        success = False
+                        data = UnityLogic._load_bundle_data(p, bundle_key=key_map.get(p))
+                        if data:
+                            with open(target, "wb") as f:
+                                f.write(data)
+                            success = True
+
+                        if not success:
+                            if hasattr(os, "symlink"):
+                                os.symlink(p, target)
+                            else:
+                                os.link(p, target)
+                    except Exception:
+                        try:
+                            shutil.copy2(p, target)
+                        except shutil.SameFileError:
+                            pass
+                        except Exception as e2:
+                            print(f"Warning: Failed to prepare {p}: {e2}", flush=True)
+
+                with bundle_lock:
+                    completed_bundles += 1
+                    if progress_callback and (
+                        completed_bundles % 5 == 0 or completed_bundles == total_bundles
+                    ):
+                        progress_callback(
+                            i18n("msg_stage_decrypting").format(
+                                completed_bundles, total_bundles
+                            )
+                        )
 
             if len(unique_paths) > 1:
                 from concurrent.futures import ThreadPoolExecutor
@@ -1756,7 +1830,7 @@ class UnityLogic:
                 cli_path = os.path.abspath(os.path.join("as_cli", cli_name))
 
             if not os.path.exists(cli_path):
-                print(f"Error: AssetStudioCatCLI not found at {cli_path}")
+                print(f"Error: AssetStudioCatCLI not found at {cli_path}", flush=True)
                 return 0
 
             cli_command_path = UnityLogic._get_cli_path(cli_path)
@@ -1780,22 +1854,30 @@ class UnityLogic:
             ]
 
             try:
-                print(f"Running CLI command: {' '.join(cmd)}")
-                result = UnityLogic._run_cli_process(cmd)
+                line_cb = None
+                if progress_callback:
+                    def _cli_line(line):
+                        print(f"[CLI] {line}", flush=True)
+
+                    line_cb = _cli_line
+                    progress_callback(i18n("msg_stage_converting"))
+
+                print(f"[STAGE] Running CLI command: {' '.join(cmd)}", flush=True)
+                result = UnityLogic._run_cli_process(cmd, line_callback=line_cb)
                 exported_count = UnityLogic._flatten_directory(
                     cli_output_dir, export_dir
                 )
 
                 if exported_count == 0:
-                    print("CLI finished but no new files were created. Output:")
-                    print(result.stdout)
+                    print("CLI finished but no new files were created. Output:", flush=True)
+                    print(result.stdout, flush=True)
 
                 return exported_count
 
             except subprocess.CalledProcessError as e:
-                print(f"AssetStudioCatCLI failed with error: {e.stderr}")
+                print(f"AssetStudioCatCLI failed with error: {e.stderr}", flush=True)
             except Exception as e:
-                print(f"Failed to run AssetStudioCatCLI: {e}")
+                print(f"Failed to run AssetStudioCatCLI: {e}", flush=True)
 
         return 0
 
