@@ -1,3 +1,35 @@
+## [0.5.0] - 2026-09-19
+
+### 🚀 Features
+
+- *(ui)* 支持查看 Unity 场景层级与节点属性
+- *(stage)* 支持舞台大场景多Prefab聚合组装、F3D多模型FBX协同预览与批量导出
+- *(cache)* Move stage cache to disk, add LRU limit, remove close button and restrict exit keys to Esc/Q
+- *(stage)* Add live stage progress tracking in UI and terminal
+
+### 🐛 Bug Fixes
+
+- *(ui)* 修复缩略图模式向下滚动时下方空白无内容问题
+- *(stage)* 修复资源字典键名取值问题并将大场景按钮置顶横幅栏自动联动
+- *(f3d)* 修复数据库多线程连接忙锁问题与F3D预览进程30s超时退出
+- Include material bundles in stage export for textured FBX output
+- *(cli)* 修复 setup_as_cli 资源匹配与 CLI 二进制检查逻辑
+- *(f3d)* 修复舞台预览黑屏与窗口无法关闭问题
+- *(scene)* Add stage FBX preview cache, close 3D viewer button and universal camera framing
+- *(cache)* Locate stage preview cache in /tmp to prevent SSD wear while strictly enforcing size limit
+- *(scene)* Preserve active tab when switching items instead of auto-switching to hierarchy
+- *(app)* Delegate on_stage_cache_limit_changed and on_clear_stage_cache in UmaExporterApp
+- *(stage)* Normalize CLI percentage display and set completion status color to green
+- *(stage)* Remove CLI percentage stream and remove duplicate progress next to detach button
+- *(stage)* Wait for F3D actual load before showing completed and clear stage status on item switch
+
+### ⚡ Performance
+
+- *(f3d)* Optimize viewport interaction framerate by removing heavy grid and tone-mapping passes
+
+### ⚙️ Miscellaneous Tasks
+
+- Switch AssetStudio CLI from aelurum/AssetStudio to mumu-lhl/AssetStudioCat
 ## [0.4.8] - 2026-08-26
 
 ### 🐛 Bug Fixes
